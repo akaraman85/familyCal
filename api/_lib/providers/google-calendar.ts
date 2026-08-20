@@ -4,6 +4,7 @@ import {
   updateEncryptedCredentials,
   type StoredCredentials,
 } from '../db.js'
+import type { CalendarEvent } from '../events.js'
 
 const AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
 const TOKEN_URL = 'https://oauth2.googleapis.com/token'
@@ -41,6 +42,18 @@ type GoogleCalendarList = {
     primary?: boolean
     accessRole: string
     backgroundColor?: string
+  }>
+  nextPageToken?: string
+}
+
+type GoogleEventList = {
+  items?: Array<{
+    id: string
+    status?: string
+    summary?: string
+    location?: string
+    start?: { date?: string; dateTime?: string }
+    end?: { date?: string; dateTime?: string }
   }>
   nextPageToken?: string
 }
@@ -179,6 +192,73 @@ export async function listGoogleCalendars(accessToken: string) {
   } while (pageToken)
 
   return calendars
+}
+
+async function listGoogleCalendarEvents(
+  accessToken: string,
+  calendar: NonNullable<GoogleCalendarList['items']>[number],
+  timeMin: Date,
+  timeMax: Date,
+) {
+  const events: CalendarEvent[] = []
+  let pageToken: string | undefined
+
+  do {
+    const url = new URL(
+      `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendar.id)}/events`,
+    )
+    url.searchParams.set('timeMin', timeMin.toISOString())
+    url.searchParams.set('timeMax', timeMax.toISOString())
+    url.searchParams.set('singleEvents', 'true')
+    url.searchParams.set('orderBy', 'startTime')
+    url.searchParams.set('maxResults', '2500')
+    if (pageToken) url.searchParams.set('pageToken', pageToken)
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) {
+      throw new Error(`Unable to read events from ${calendar.summary}`)
+    }
+    const page = await response.json() as GoogleEventList
+    for (const event of page.items ?? []) {
+      const startAt = event.start?.dateTime ?? event.start?.date
+      if (!startAt || event.status === 'cancelled') continue
+      events.push({
+        id: `google:${calendar.id}:${event.id}`,
+        title: event.summary || 'Untitled event',
+        startAt,
+        endAt: event.end?.dateTime ?? event.end?.date ?? null,
+        allDay: Boolean(event.start?.date && !event.start?.dateTime),
+        calendar: calendar.summary,
+        location: event.location ?? null,
+        source: 'google',
+      })
+    }
+    pageToken = page.nextPageToken
+  } while (pageToken)
+
+  return events
+}
+
+export async function listAllGoogleEvents(
+  accessToken: string,
+  timeMin: Date,
+  timeMax: Date,
+) {
+  const calendars = await listGoogleCalendars(accessToken)
+  const events: CalendarEvent[] = []
+
+  // Keep requests sequential to avoid quota bursts for accounts with many calendars.
+  for (const calendar of calendars) {
+    events.push(...await listGoogleCalendarEvents(
+      accessToken,
+      calendar,
+      timeMin,
+      timeMax,
+    ))
+  }
+  return events.sort((a, b) => a.startAt.localeCompare(b.startAt))
 }
 
 export async function revokeGoogleToken(token: string) {

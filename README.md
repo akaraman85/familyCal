@@ -9,7 +9,8 @@ calendar views.
 - Manual event creation
 - Conversational AI planning flow
 - Server-side integration registry with Google Calendar as the first provider
-- Read-only Google Calendar discovery with encrypted OAuth token storage
+- Live read-only Google Calendar events with encrypted OAuth token storage
+- Postgres-backed events created directly in the family calendar
 - Family member and preference administration
 - Responsive desktop and mobile layouts
 
@@ -28,10 +29,10 @@ production build.
 
 ## Google Calendar integration
 
-The browser only receives connection metadata and calendar names. Google access
-and refresh tokens are encrypted with AES-256-GCM before being written to
-Postgres. Token exchange, refresh, API access, revocation, and OAuth state
-validation all run in server functions.
+The browser receives normalized calendar event data, never provider credentials.
+Google access and refresh tokens are encrypted with AES-256-GCM before being
+written to Postgres. Token exchange, refresh, live event reads, revocation, and
+OAuth state validation all run in server functions.
 
 Before deployment, provision:
 
@@ -56,6 +57,7 @@ access. Disconnecting revokes the Google grant before deleting its encrypted
 credentials. Do not expose any of the server-only variables with a `VITE_`
 prefix.
 
-The schema is versioned in `db/migrations/001_integrations.sql`. It stores one
-encrypted provider credential per owner and short-lived, single-use OAuth state
-records; it does not store calendar events or sync activity.
+The schema is versioned in `db/migrations`. It stores one encrypted provider
+credential per owner, short-lived single-use OAuth state records, and events
+created directly in Karaman Calendar. Google events are read live and are not
+copied into the database; no synthetic sync activity is stored or displayed.

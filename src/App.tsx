@@ -7,9 +7,15 @@ import {
 } from 'lucide-react'
 import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
-  format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths,
-  subYears,
+  format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek,
+  subMonths, subYears,
 } from 'date-fns'
+import {
+  loadCalendarEvents,
+  saveCalendarEvent,
+  type CalendarEventData,
+  type EventSources,
+} from './events'
 import {
   disconnectGoogleCalendar,
   loadGoogleCalendars,
@@ -20,28 +26,45 @@ import {
 type View = 'Day' | 'Week' | 'Month' | 'Year'
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
 type EventItem = {
-  id: number
+  id: string
   title: string
   date: Date
   start: string
   end?: string
-  calendar: 'Family' | 'Alex' | 'Maya'
+  calendar: string
   location?: string
   color: 'coral' | 'blue' | 'green' | 'gold'
+  source: 'saved' | 'google'
 }
 
-const initialEvents: EventItem[] = [
-  { id: 1, title: 'School drop-off', date: new Date(2026, 7, 20), start: '8:15 AM', end: '8:45 AM', calendar: 'Family', color: 'gold' },
-  { id: 2, title: 'Project review', date: new Date(2026, 7, 20), start: '10:00 AM', end: '11:00 AM', calendar: 'Alex', color: 'blue' },
-  { id: 3, title: 'Lunch with Emma', date: new Date(2026, 7, 20), start: '12:30 PM', calendar: 'Maya', location: 'Little Lemon', color: 'coral' },
-  { id: 4, title: 'Leo’s swimming', date: new Date(2026, 7, 21), start: '4:00 PM', end: '5:00 PM', calendar: 'Family', location: 'Community Pool', color: 'green' },
-  { id: 5, title: 'Date night', date: new Date(2026, 7, 22), start: '7:30 PM', calendar: 'Family', location: 'Bistro 43', color: 'coral' },
-  { id: 6, title: 'Dentist', date: new Date(2026, 7, 24), start: '9:00 AM', calendar: 'Alex', color: 'blue' },
-  { id: 7, title: 'Grocery delivery', date: new Date(2026, 7, 25), start: '6:00 PM', calendar: 'Family', color: 'green' },
-  { id: 8, title: 'Family brunch', date: new Date(2026, 7, 29), start: '11:00 AM', calendar: 'Family', color: 'gold' },
-]
+type NewEventInput = {
+  title: string
+  startAt: string
+  calendar: string
+  location?: string
+}
 
-const avatars: Record<string, string> = { Alex: 'AK', Maya: 'MK', Family: 'K' }
+function eventDate(event: CalendarEventData) {
+  if (!event.allDay) return new Date(event.startAt)
+  const [year, month, day] = event.startAt.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
+function toEventItem(event: CalendarEventData): EventItem {
+  const startDate = eventDate(event)
+  const endDate = event.endAt && !event.allDay ? new Date(event.endAt) : null
+  return {
+    id: event.id,
+    title: event.title,
+    date: startDate,
+    start: event.allDay ? 'All day' : format(startDate, 'h:mm a'),
+    end: endDate ? format(endDate, 'h:mm a') : undefined,
+    calendar: event.calendar,
+    location: event.location ?? undefined,
+    color: event.source === 'google' ? 'blue' : 'green',
+    source: event.source,
+  }
+}
 
 function App() {
   const [page, setPage] = useState<Page>(() => (
@@ -50,11 +73,65 @@ function App() {
       : 'Calendar'
   ))
   const [view, setView] = useState<View>('Month')
-  const [selectedDate, setSelectedDate] = useState(new Date(2026, 7, 20))
-  const [events, setEvents] = useState(initialEvents)
+  const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const [events, setEvents] = useState<EventItem[]>([])
+  const [eventSources, setEventSources] = useState<EventSources>({
+    saved: 'ok',
+    google: 'disconnected',
+  })
+  const [eventsLoading, setEventsLoading] = useState(true)
+  const [eventsError, setEventsError] = useState<string | null>(null)
+  const [eventRefresh, setEventRefresh] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+
+  const eventRange = useMemo(() => {
+    if (view === 'Year') {
+      return {
+        start: new Date(selectedDate.getFullYear(), 0, 1),
+        end: new Date(selectedDate.getFullYear() + 1, 0, 1),
+      }
+    }
+    if (view === 'Month') {
+      return {
+        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
+        end: addDays(endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 }), 1),
+      }
+    }
+    if (view === 'Week') {
+      const start = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      return { start, end: addDays(start, 7) }
+    }
+    const start = startOfDay(selectedDate)
+    return { start, end: addDays(start, 1) }
+  }, [selectedDate, view])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setEventsLoading(true)
+    setEventsError(null)
+    loadCalendarEvents(eventRange.start, eventRange.end, controller.signal)
+      .then((data) => {
+        setEvents(data.events.map(toEventItem))
+        setEventSources(data.sources)
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        setEvents([])
+        setEventsError(error instanceof Error ? error.message : 'Unable to load events')
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setEventsLoading(false)
+      })
+    return () => controller.abort()
+  }, [eventRange, eventRefresh])
+
+  const saveEvent = async (event: NewEventInput) => {
+    await saveCalendarEvent(event)
+    setModalOpen(false)
+    setEventRefresh((current) => current + 1)
+  }
 
   const moveDate = (direction: number) => {
     if (view === 'Year') setSelectedDate((d) => direction > 0 ? addYears(d, 1) : subYears(d, 1))
@@ -131,6 +208,9 @@ function App() {
             dateTitle={dateTitle}
             moveDate={moveDate}
             openChat={() => setChatOpen(true)}
+            loading={eventsLoading}
+            error={eventsError}
+            sources={eventSources}
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} />}
@@ -145,27 +225,32 @@ function App() {
         <EventModal
           selectedDate={selectedDate}
           close={() => setModalOpen(false)}
-          save={(event) => { setEvents((current) => [...current, { ...event, id: Date.now() }]); setModalOpen(false) }}
+          save={saveEvent}
         />
       )}
     </div>
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
+  loading: boolean; error: string | null; sources: EventSources
 }) {
+  const now = new Date()
+  const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
   return (
     <div className="page">
       <div className="page-heading">
-        <div><p className="eyebrow">Thursday, August 20</p><h1>Good afternoon, Alex</h1><p>Here’s what’s happening with your family.</p></div>
+        <div><p className="eyebrow">{format(now, 'EEEE, MMMM d')}</p><h1>Good {greeting}, Alex</h1><p>Here’s what’s happening with your family.</p></div>
         <button className="ai-plan-btn" onClick={openChat}><Sparkles size={17} />Plan with AI</button>
       </div>
+      {error && <div className="calendar-source-error" role="alert">{error}</div>}
+      {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">Saved events are shown, but Google Calendar could not be reached.</div>}
       <section className="calendar-card">
         <div className="calendar-toolbar">
           <div className="date-navigation">
-            <button className="today-btn" onClick={() => setSelectedDate(new Date(2026, 7, 20))}>Today</button>
+            <button className="today-btn" onClick={() => setSelectedDate(new Date())}>Today</button>
             <button className="square-btn" onClick={() => moveDate(-1)}><ChevronLeft size={18} /></button>
             <button className="square-btn" onClick={() => moveDate(1)}><ChevronRight size={18} /></button>
             <h2>{dateTitle}</h2>
@@ -184,8 +269,10 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
       </section>
       <div className="calendar-footer">
         <div className="calendar-legend">
-          <span><i className="dot family" />Family</span><span><i className="dot alex" />Alex</span><span><i className="dot maya" />Maya</span>
+          <span><i className="dot family" />Saved events</span>
+          {sources.google !== 'disconnected' && <span><i className="dot alex" />Google Calendar</span>}
         </div>
+        {loading && <span className="calendar-loading"><LoaderCircle size={12}/>Loading events</span>}
       </div>
     </div>
   )
@@ -203,7 +290,7 @@ function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; se
         {days.map((day) => {
           const dayEvents = events.filter((event) => isSameDay(event.date, day))
           return (
-            <button key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date(2026, 7, 20)) ? 'today' : ''}`} onClick={() => onSelect(day)}>
+            <button key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`} onClick={() => onSelect(day)}>
               <span className="day-number">{format(day, 'd')}</span>
               <div className="events">
                 {dayEvents.slice(0, 3).map((event) => <div className={`event-chip ${event.color}`} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</div>)}
@@ -221,7 +308,7 @@ function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate:
   const days = eachDayOfInterval({ start: startOfWeek(selectedDate, { weekStartsOn: 1 }), end: endOfWeek(selectedDate, { weekStartsOn: 1 }) })
   return (
     <div className="week-view">
-      <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date(2026, 7, 20)) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
+      <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
       <div className="week-body">
         <div className="times">{['8 AM', '10 AM', '12 PM', '2 PM', '4 PM', '6 PM', '8 PM'].map((t) => <span key={t}>{t}</span>)}</div>
         {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((e) => isSameDay(e.date, day)).map((e, i) => <div className={`week-event ${e.color}`} style={{ top: `${18 + i * 26}%` }} key={e.id}><b>{e.title}</b><span>{e.start}</span></div>)}</div>)}
@@ -250,23 +337,27 @@ function YearView({ events, selectedDate, onSelect }: { events: EventItem[]; sel
     const first = new Date(selectedDate.getFullYear(), month, 1)
     const offset = (first.getDay() + 6) % 7
     const days = new Date(selectedDate.getFullYear(), month + 1, 0).getDate()
-    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{['M','T','W','T','F','S','S'].map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date(2026,7,20)) ? 'today' : ''} ${events.some((e) => isSameDay(e.date, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
+    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{['M','T','W','T','F','S','S'].map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date()) ? 'today' : ''} ${events.some((e) => isSameDay(e.date, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
   })}</div>
 }
 
 function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: () => void }) {
+  const savedCount = events.filter((event) => event.source === 'saved').length
+  const googleCount = events.filter((event) => event.source === 'google').length
   return <div className="page overview-page">
     <div className="page-heading"><div><p className="eyebrow">Family command center</p><h1>Overview</h1><p>Everything important, all in one place.</p></div><button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button></div>
     <div className="stat-grid">
-      <div className="stat-card coral-stat"><div><span>This week</span><b>12</b><small>events scheduled</small></div><CalendarDays /></div>
-      <div className="stat-card blue-stat"><div><span>Time together</span><b>8.5h</b><small>family time planned</small></div><Users /></div>
-      <div className="stat-card green-stat"><div><span>On your calendar</span><b>{events.length}</b><small>upcoming plans</small></div><Check /></div>
+      <div className="stat-card coral-stat"><div><span>Current view</span><b>{events.length}</b><small>events scheduled</small></div><CalendarDays /></div>
+      <div className="stat-card blue-stat"><div><span>Google Calendar</span><b>{googleCount}</b><small>integrated events</small></div><Link2 /></div>
+      <div className="stat-card green-stat"><div><span>Saved here</span><b>{savedCount}</b><small>family events</small></div><Check /></div>
     </div>
     <div className="overview-grid">
       <section className="panel"><div className="panel-title"><div><h2>Coming up</h2><p>Your next family moments</p></div><button>View calendar <ChevronRight size={15} /></button></div>
-        <div className="agenda-list">{events.slice(0,5).map((e) => <div className="agenda-item" key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.calendar.toLowerCase()}`}>{avatars[e.calendar]}</div></div>)}</div>
+        <div className="agenda-list">{events.slice(0,5).map((e) => <div className="agenda-item" key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.source === 'google' ? 'alex' : 'family'}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></div>)}
+          {!events.length && <div className="agenda-empty">No events in the current calendar view.</div>}
+        </div>
       </section>
-      <section className="panel insight-panel"><div className="sparkle-orb"><Sparkles /></div><p className="eyebrow">Weekly insight</p><h2>Your weekend is filling up</h2><p>You have three family activities on Saturday. Sunday afternoon is still free — a good spot for some downtime.</p><button>Find open time <ChevronRight size={15} /></button><div className="insight-bars"><i/><i/><i/><i/><i/><i/><i/></div></section>
+      <section className="panel insight-panel"><div className="sparkle-orb"><Sparkles /></div><p className="eyebrow">Calendar snapshot</p><h2>{events.length ? `${events.length} event${events.length === 1 ? '' : 's'} in view` : 'Your calendar is open'}</h2><p>{googleCount ? `${googleCount} come from Google Calendar and ${savedCount} are saved directly in Karaman.` : savedCount ? 'These plans are saved directly in Karaman.' : 'Connect Google Calendar or add an event to get started.'}</p><div className="insight-bars"><i/><i/><i/><i/><i/><i/><i/></div></section>
     </div>
   </div>
 }
@@ -383,20 +474,38 @@ function AssistantPanel({ close, openModal }: { close: () => void; openModal: ()
   </aside></div>
 }
 
-function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (e: Omit<EventItem, 'id'>) => void }) {
+function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
   const [title, setTitle] = useState('')
-  const [calendar, setCalendar] = useState<EventItem['calendar']>('Family')
+  const [calendar, setCalendar] = useState('Family')
   const [date, setDate] = useState(format(selectedDate, 'yyyy-MM-dd'))
   const [time, setTime] = useState('09:00')
   const [location, setLocation] = useState('')
-  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={(e) => { e.preventDefault(); save({ title: title || 'Untitled event', date: new Date(`${date}T12:00:00`), start: format(new Date(`2026-01-01T${time}`), 'h:mm a'), calendar, location, color: calendar === 'Alex' ? 'blue' : calendar === 'Maya' ? 'coral' : 'green' }) }}>
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={async (e) => {
+    e.preventDefault()
+    setSaving(true)
+    setError(null)
+    try {
+      await save({
+        title: title.trim() || 'Untitled event',
+        startAt: new Date(`${date}T${time}:00`).toISOString(),
+        calendar,
+        location: location.trim() || undefined,
+      })
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save event')
+      setSaving(false)
+    }
+  }}>
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
     <label className="field"><span>Event title</span><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <div className="field-row"><label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)}/></label><label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)}/></label></div>
-    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value as EventItem['calendar'])}><option>Family</option><option>Alex</option><option>Maya</option></select></label>
+    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}><option>Family</option><option>Alex</option><option>Maya</option></select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" /></label>
+    {error && <div className="modal-error" role="alert">{error}</div>}
     <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
-    <div className="modal-actions"><button type="button" onClick={close}>Cancel</button><button className="save-event" type="submit">Add event</button></div>
+    <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>
   </form></div>
 }
 
