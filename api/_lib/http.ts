@@ -45,6 +45,27 @@ export function requireSameOrigin(
   return false
 }
 
+export function requireRequestOrigin(
+  request: ApiRequest,
+  response: ApiResponse,
+  appUrl?: string,
+) {
+  if (appUrl) return requireSameOrigin(request, response, appUrl)
+
+  const forwardedHost = request.headers['x-forwarded-host']
+  const forwardedProtocol = request.headers['x-forwarded-proto']
+  const host = Array.isArray(forwardedHost)
+    ? forwardedHost[0]
+    : forwardedHost || request.headers.host
+  const protocol = Array.isArray(forwardedProtocol)
+    ? forwardedProtocol[0]
+    : forwardedProtocol || 'https'
+  if (host && request.headers.origin === `${protocol}://${host}`) return true
+
+  sendJson(response, 403, { error: 'Invalid request origin' })
+  return false
+}
+
 export function getCookie(request: ApiRequest, name: string) {
   const cookies = request.headers.cookie?.split(';') ?? []
   for (const cookie of cookies) {

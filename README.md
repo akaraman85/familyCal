@@ -30,16 +30,18 @@ production build.
 ## Temporary access
 
 The app and every event/integration API require a server-validated session.
-For the requested temporary access, set `APP_USERNAME=alexK` and
-`APP_PASSWORD=cal`. The password is read only by the login function and is not
-included in the browser bundle. Sessions last 12 hours in an HMAC-signed,
-HTTP-only, SameSite cookie.
+Temporary access defaults to `alexK` / `cal` so a new deployment is usable
+before environment variables are provisioned. The password is read only by the
+login function and is not included in the browser bundle. Sessions last 12
+hours in an HMAC-signed, HTTP-only, SameSite cookie.
 
-Set `AUTH_SESSION_SECRET` to an independent `openssl rand -base64 32` value.
-Because `cal` is intentionally weak and known, replace it with a strong secret
-before exposing the deployment beyond its temporary intended audience. This
-access gate is single-user; migrate to a managed identity provider before
-supporting separate household accounts or user-level permissions.
+For any deployment beyond temporary evaluation, override `APP_USERNAME` and
+`APP_PASSWORD`, and set `AUTH_SESSION_SECRET` to an independent
+`openssl rand -base64 32` value. Without that variable, a deterministic
+temporary signing key is used. Because the fallback credentials and key are
+intentionally public, replace all three before broader exposure. This access
+gate is single-user; migrate to a managed identity provider before supporting
+separate household accounts or user-level permissions.
 
 ## Google Calendar integration
 
@@ -52,7 +54,7 @@ Before deployment, provision:
 
 | Requirement | Configuration |
 | --- | --- |
-| Temporary app access | Set server-only `APP_USERNAME`, `APP_PASSWORD`, and a unique `AUTH_SESSION_SECRET`. |
+| Temporary app access | Defaults to `alexK` / `cal`. Override server-only `APP_USERNAME`, `APP_PASSWORD`, and `AUTH_SESSION_SECRET` before broader exposure. |
 | Google Cloud project | Enable the Google Calendar API and configure the OAuth consent screen. |
 | OAuth web client | Set `GOOGLE_CLIENT_ID` and server-only `GOOGLE_CLIENT_SECRET`. Add `https://YOUR_DOMAIN/api/integrations/google/callback` as an exact authorized redirect URI. |
 | Postgres | Set server-only `DATABASE_URL` and run `npm run db:migrate` against the production database. Neon Postgres or another SSL-enabled Postgres service is supported. |

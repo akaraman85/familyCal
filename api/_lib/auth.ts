@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
+import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import {
   getCookie,
   sendJson,
@@ -8,9 +8,14 @@ import {
 
 const SESSION_COOKIE = 'familycal_session'
 const SESSION_DURATION_SECONDS = 12 * 60 * 60
+const TEMPORARY_USERNAME = 'alexK'
+const TEMPORARY_PASSWORD = 'cal'
+const TEMPORARY_SESSION_SECRET = createHash('sha256')
+  .update('familycal-temporary-access-v1')
+  .digest()
 
 type AuthConfig = {
-  appUrl: string
+  appUrl?: string
   password: string
   secret: Buffer
   username: string
@@ -25,21 +30,21 @@ type SessionPayload = {
   username: string
 }
 
-function required(name: string) {
-  const value = process.env[name]?.trim()
-  if (!value) throw new Error(`Missing required environment variable: ${name}`)
-  return value
-}
-
 export function authConfig(): AuthConfig {
-  const secret = Buffer.from(required('AUTH_SESSION_SECRET'), 'base64')
-  if (secret.length !== 32) {
+  const encodedSecret = process.env.AUTH_SESSION_SECRET?.trim()
+  const secret = encodedSecret
+    ? Buffer.from(encodedSecret, 'base64')
+    : TEMPORARY_SESSION_SECRET
+  if (encodedSecret && secret.length !== 32) {
     throw new Error('AUTH_SESSION_SECRET must be a base64-encoded 32-byte key')
   }
+  const appUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, '')
+  if (appUrl) new URL(appUrl)
+
   return {
-    appUrl: required('PUBLIC_APP_URL').replace(/\/$/, ''),
-    username: required('APP_USERNAME'),
-    password: required('APP_PASSWORD'),
+    appUrl,
+    username: process.env.APP_USERNAME?.trim() || TEMPORARY_USERNAME,
+    password: process.env.APP_PASSWORD || TEMPORARY_PASSWORD,
     secret,
   }
 }
@@ -105,7 +110,9 @@ export function readSession(
 }
 
 function secureCookie(config: AuthConfig) {
-  return new URL(config.appUrl).protocol === 'https:' ? '; Secure' : ''
+  return process.env.VERCEL || (config.appUrl && new URL(config.appUrl).protocol === 'https:')
+    ? '; Secure'
+    : ''
 }
 
 export function setSessionCookie(

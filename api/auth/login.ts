@@ -7,7 +7,7 @@ import {
 import {
   readJsonBody,
   requireMethod,
-  requireSameOrigin,
+  requireRequestOrigin,
   sendJson,
   type ApiRequest,
   type ApiResponse,
@@ -18,7 +18,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
   try {
     const config = authConfig()
-    if (!requireSameOrigin(request, response, config.appUrl)) return
+    if (!requireRequestOrigin(request, response, config.appUrl)) return
     const body = await readJsonBody(request) as Record<string, unknown>
     const username = typeof body.username === 'string' ? body.username : ''
     const password = typeof body.password === 'string' ? body.password : ''

@@ -1,7 +1,7 @@
 import { authConfig, clearSessionCookie } from '../_lib/auth.js'
 import {
   requireMethod,
-  requireSameOrigin,
+  requireRequestOrigin,
   sendJson,
   type ApiRequest,
   type ApiResponse,
@@ -12,7 +12,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
   try {
     const config = authConfig()
-    if (!requireSameOrigin(request, response, config.appUrl)) return
+    if (!requireRequestOrigin(request, response, config.appUrl)) return
     clearSessionCookie(response, config)
     sendJson(response, 200, { authenticated: false })
   } catch (error) {
