@@ -60,12 +60,11 @@ Before deployment, provision:
 | Canonical URL | Set `PUBLIC_APP_URL` to the exact public origin, without a trailing slash. |
 | Integration owner | Set `INTEGRATION_OWNER_ID` to a stable, non-secret identifier for this family deployment. |
 
-The current product is a single-family deployment and does not contain end-user
-authentication. Enable Vercel Deployment Protection (or equivalent upstream
-access control) before production so integration metadata and connect/disconnect
-actions are not public. A future multi-family version must replace
+The current product is a single-family deployment with one shared temporary
+login, not a multi-user identity system. Vercel Deployment Protection remains
+useful as defense in depth. A future multi-family version must replace
 `INTEGRATION_OWNER_ID` with the authenticated user's or household's server-side
-identity.
+identity and use individual accounts.
 
 Google consent requests `openid`, `email`, `profile`, and read-only Calendar
 access. Disconnecting revokes the Google grant before deleting its encrypted
