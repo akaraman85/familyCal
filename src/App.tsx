@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, CloudSun, LayoutDashboard, Link2, ListFilter,
+  CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle,
   MapPin, Menu, MessageCircleMore, MoreHorizontal, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
@@ -10,6 +10,12 @@ import {
   format, isSameDay, isSameMonth, startOfMonth, startOfWeek, subMonths,
   subYears,
 } from 'date-fns'
+import {
+  disconnectGoogleCalendar,
+  loadGoogleCalendars,
+  loadIntegrations,
+  type Integration,
+} from './integrations'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
@@ -38,7 +44,11 @@ const initialEvents: EventItem[] = [
 const avatars: Record<string, string> = { Alex: 'AK', Maya: 'MK', Family: 'K' }
 
 function App() {
-  const [page, setPage] = useState<Page>('Calendar')
+  const [page, setPage] = useState<Page>(() => (
+    new URLSearchParams(window.location.search).has('integration')
+      ? 'Integrations'
+      : 'Calendar'
+  ))
   const [view, setView] = useState<View>('Month')
   const [selectedDate, setSelectedDate] = useState(new Date(2026, 7, 20))
   const [events, setEvents] = useState(initialEvents)
@@ -80,7 +90,7 @@ function App() {
           <div className="nav-label">Workspace</div>
           {navItems.map(({ icon: Icon, label }) => (
             <button key={label} className={page === label ? 'active' : ''} onClick={() => { setPage(label); setMobileNav(false) }}>
-              <Icon size={18} /><span>{label}</span>{label === 'Integrations' && <span className="nav-count">3</span>}
+              <Icon size={18} /><span>{label}</span>
             </button>
           ))}
           <div className="nav-label second">Tools</div>
@@ -106,7 +116,6 @@ function App() {
           <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
           <div className="search"><Search size={17} /><input aria-label="Search" placeholder="Search events, people..." /><kbd>⌘ K</kbd></div>
           <div className="top-actions">
-            <div className="weather"><CloudSun size={20} /><div><b>74°</b><span>Sunny</span></div></div>
             <button className="icon-btn notification"><Bell size={19} /><i /></button>
             <button className="add-btn" onClick={() => setModalOpen(true)}><Plus size={18} />Add event</button>
           </div>
@@ -177,7 +186,6 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
         <div className="calendar-legend">
           <span><i className="dot family" />Family</span><span><i className="dot alex" />Alex</span><span><i className="dot maya" />Maya</span>
         </div>
-        <span>Synced 2 minutes ago</span>
       </div>
     </div>
   )
@@ -252,7 +260,7 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
     <div className="stat-grid">
       <div className="stat-card coral-stat"><div><span>This week</span><b>12</b><small>events scheduled</small></div><CalendarDays /></div>
       <div className="stat-card blue-stat"><div><span>Time together</span><b>8.5h</b><small>family time planned</small></div><Users /></div>
-      <div className="stat-card green-stat"><div><span>All synced</span><b>3</b><small>connected calendars</small></div><Check /></div>
+      <div className="stat-card green-stat"><div><span>On your calendar</span><b>{events.length}</b><small>upcoming plans</small></div><Check /></div>
     </div>
     <div className="overview-grid">
       <section className="panel"><div className="panel-title"><div><h2>Coming up</h2><p>Your next family moments</p></div><button>View calendar <ChevronRight size={15} /></button></div>
@@ -264,24 +272,79 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
 }
 
 function IntegrationsPage() {
-  const [connected, setConnected] = useState(['Google Calendar', 'Weather'])
-  const integrations = [
-    { name: 'Google Calendar', copy: 'Sync personal and shared calendars in real time.', icon: 'G', className: 'google' },
-    { name: 'Apple Calendar', copy: 'Bring your iCloud calendars into one view.', icon: '●', className: 'apple' },
-    { name: 'Weather', copy: 'See the forecast alongside outdoor plans.', icon: '☀', className: 'weather-icon' },
-    { name: 'School Calendar', copy: 'Import term dates, holidays, and school events.', icon: 'S', className: 'school' },
-  ]
+  const [integration, setIntegration] = useState<Integration | null>(null)
+  const [calendarCount, setCalendarCount] = useState<number | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [working, setWorking] = useState(false)
+  const [error, setError] = useState<string | null>(() => (
+    new URLSearchParams(window.location.search).get('status') === 'error'
+      ? 'Google Calendar could not be connected. Please try again.'
+      : null
+  ))
+
+  const refresh = async () => {
+    setLoading(true)
+    try {
+      const data = await loadIntegrations()
+      const google = data.integrations.find((item) => item.id === 'google-calendar') ?? null
+      setIntegration(google)
+      if (google?.status === 'connected') {
+        const calendarData = await loadGoogleCalendars()
+        setCalendarCount(calendarData.calendars.length)
+      } else {
+        setCalendarCount(null)
+      }
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to load integrations')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    void refresh()
+  }, [])
+
+  const disconnect = async () => {
+    if (!window.confirm('Disconnect Google Calendar and revoke access?')) return
+    setWorking(true)
+    setError(null)
+    try {
+      await disconnectGoogleCalendar()
+      await refresh()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to disconnect')
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  const connected = integration?.status === 'connected'
   return <div className="page">
     <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Connect the services your family already uses.</p></div></div>
-    <div className="integration-notice"><div><Sparkles size={19}/><span><b>Everything in one place</b> Connected calendars update automatically every few minutes.</span></div><button>Learn more</button></div>
-    <div className="integration-grid">{integrations.map((item) => {
-      const isConnected = connected.includes(item.name)
-      return <div className="integration-card" key={item.name}><div className={`integration-icon ${item.className}`}>{item.icon}</div><div className="integration-copy"><h3>{item.name}</h3><p>{item.copy}</p></div><div className="integration-action">{isConnected ? <><span className="connected"><Check size={13}/>Connected</span><button className="square-btn"><Settings size={16}/></button></> : <button className="connect-btn" onClick={() => setConnected([...connected, item.name])}>Connect</button>}</div></div>
-    })}</div>
-    <section className="panel sync-panel"><div className="panel-title"><div><h2>Sync activity</h2><p>Recent updates from connected services</p></div><button className="filter-btn">Manage sync</button></div>
-      <div className="sync-row"><div className="integration-icon google">G</div><div><b>Google Calendar</b><span>6 events updated</span></div><small>2 minutes ago</small><span className="connected"><Check size={13}/>Successful</span></div>
-      <div className="sync-row"><div className="integration-icon weather-icon">☀</div><div><b>Weather</b><span>7-day forecast refreshed</span></div><small>18 minutes ago</small><span className="connected"><Check size={13}/>Successful</span></div>
-    </section>
+    <div className="integration-notice"><div><Sparkles size={19}/><span><b>Secure by design</b> Provider credentials and OAuth tokens stay on the server and are never sent to this browser.</span></div></div>
+    {error && <div className="integration-error" role="alert">{error}<button onClick={() => { setError(null); void refresh() }}>Retry</button></div>}
+    <div className="integration-grid single">
+      <div className="integration-card">
+        <div className="integration-icon google">G</div>
+        <div className="integration-copy">
+          <h3>{integration?.name ?? 'Google Calendar'}</h3>
+          <p>{integration?.description ?? 'Read personal and shared calendars from Google.'}</p>
+          {connected && <div className="integration-account">
+            <b>{integration.account?.email || integration.account?.displayName || 'Google account'}</b>
+            <span>{calendarCount === null ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
+          </div>}
+        </div>
+        <div className="integration-action">
+          {loading
+            ? <span className="integration-loading"><LoaderCircle size={16}/>Loading</span>
+            : connected
+              ? <><span className="connected"><Check size={13}/>Connected</span><button className="disconnect-btn" disabled={working} onClick={() => void disconnect()}>{working ? 'Disconnecting…' : 'Disconnect'}</button></>
+              : <a className="connect-btn" href="/api/integrations/google/authorize">Connect Google Calendar</a>}
+        </div>
+      </div>
+    </div>
+    <p className="integration-footnote">Google access is read-only. Disconnecting revokes the grant and deletes the stored token.</p>
   </div>
 }
 
