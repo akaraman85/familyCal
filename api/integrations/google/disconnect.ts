@@ -1,3 +1,4 @@
+import { requireAuthentication } from '../../_lib/auth.js'
 import { decryptJson } from '../../_lib/crypto.js'
 import {
   deleteIntegrationAccount,
@@ -19,6 +20,7 @@ import {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['POST'])) return
+  if (!requireAuthentication(request, response)) return
 
   try {
     const env = integrationEnv()

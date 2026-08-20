@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle,
-  MapPin, Menu, MessageCircleMore, MoreHorizontal, Plus, Search,
+  CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
+  LogOut, MapPin, Menu, MessageCircleMore, MoreHorizontal, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -22,6 +22,7 @@ import {
   loadIntegrations,
   type Integration,
 } from './integrations'
+import { loadSession, login, logout, type SessionUser } from './auth'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
@@ -67,6 +68,86 @@ function toEventItem(event: CalendarEventData): EventItem {
 }
 
 function App() {
+  const [user, setUser] = useState<SessionUser | null>()
+  const [sessionError, setSessionError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadSession()
+      .then(setUser)
+      .catch((error: unknown) => {
+        setSessionError(error instanceof Error ? error.message : 'Authentication is unavailable')
+        setUser(null)
+      })
+  }, [])
+
+  if (user === undefined) {
+    return <div className="auth-loading"><LoaderCircle size={24}/><span>Checking access…</span></div>
+  }
+  if (!user) {
+    return <LoginScreen
+      error={sessionError}
+      onAuthenticated={(authenticatedUser) => {
+        setSessionError(null)
+        setUser(authenticatedUser)
+      }}
+    />
+  }
+  return <AuthenticatedApp
+    user={user}
+    onLogout={async () => {
+      await logout()
+      setUser(null)
+    }}
+  />
+}
+
+function LoginScreen({ error: initialError, onAuthenticated }: {
+  error: string | null
+  onAuthenticated: (user: SessionUser) => void
+}) {
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState(initialError)
+  const [submitting, setSubmitting] = useState(false)
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setSubmitting(true)
+    setError(null)
+    try {
+      onAuthenticated(await login(username, password))
+    } catch (loginError) {
+      setError(loginError instanceof Error ? loginError.message : 'Unable to sign in')
+      setSubmitting(false)
+    }
+  }
+
+  return <main className="login-page">
+    <form className="login-card" onSubmit={submit}>
+      <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
+      <p className="eyebrow">Private family calendar</p>
+      <h1>Welcome back</h1>
+      <p>Sign in to view calendars, integrations, and saved events.</p>
+      <label className="field">
+        <span>Username</span>
+        <input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required/>
+      </label>
+      <label className="field">
+        <span>Password</span>
+        <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
+      </label>
+      {error && <div className="login-error" role="alert">{error}</div>}
+      <button className="login-submit" type="submit" disabled={submitting}>
+        {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
+      </button>
+    </form>
+  </main>
+}
+
+function AuthenticatedApp({ user, onLogout }: {
+  user: SessionUser
+  onLogout: () => Promise<void>
+}) {
   const [page, setPage] = useState<Page>(() => (
     new URLSearchParams(window.location.search).has('integration')
       ? 'Integrations'
@@ -180,9 +261,9 @@ function App() {
           <button onClick={() => setPage('Settings')} className={page === 'Settings' ? 'active' : ''}><Settings size={18} />Settings</button>
           <button><CircleHelp size={18} />Help & support</button>
           <div className="profile">
-            <div className="avatar">AK</div>
-            <div><strong>Alex Karaman</strong><span>Administrator</span></div>
-            <MoreHorizontal size={18} />
+            <div className="avatar">{user.username.slice(0, 2).toUpperCase()}</div>
+            <div><strong>{user.username}</strong><span>Authenticated session</span></div>
+            <button className="profile-logout" title="Sign out" aria-label="Sign out" onClick={() => void onLogout()}><LogOut size={17}/></button>
           </div>
         </div>
       </aside>
