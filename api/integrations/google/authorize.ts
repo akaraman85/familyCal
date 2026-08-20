@@ -1,3 +1,4 @@
+import { requireAuthentication } from '../../_lib/auth.js'
 import { hashState, randomState } from '../../_lib/crypto.js'
 import { createOAuthState } from '../../_lib/db.js'
 import { integrationEnv } from '../../_lib/env.js'
@@ -12,6 +13,7 @@ import { buildGoogleAuthorizationUrl } from '../../_lib/providers/google-calenda
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
+  if (!requireAuthentication(request, response)) return
 
   try {
     const env = integrationEnv()

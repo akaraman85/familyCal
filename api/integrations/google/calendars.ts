@@ -1,3 +1,4 @@
+import { requireAuthentication } from '../../_lib/auth.js'
 import { integrationEnv } from '../../_lib/env.js'
 import {
   errorMessage,
@@ -13,6 +14,7 @@ import {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
+  if (!requireAuthentication(request, response)) return
 
   try {
     const env = integrationEnv()

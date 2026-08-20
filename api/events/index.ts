@@ -3,6 +3,7 @@ import {
   listSavedEvents,
   type CalendarEvent,
 } from '../_lib/events.js'
+import { requireAuthentication } from '../_lib/auth.js'
 import { getIntegrationAccount } from '../_lib/db.js'
 import { integrationEnv } from '../_lib/env.js'
 import {
@@ -145,6 +146,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET', 'POST'])) return
+  if (!requireAuthentication(request, response)) return
   if (request.method === 'POST') return postEvent(request, response)
   return getEvents(request, response)
 }
