@@ -1,0 +1,193 @@
+import { decryptJson, encryptJson } from '../crypto.js'
+import {
+  getIntegrationAccount,
+  updateEncryptedCredentials,
+  type StoredCredentials,
+} from '../db.js'
+
+const AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+const TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const USER_INFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo'
+const CALENDAR_LIST_URL = 'https://www.googleapis.com/calendar/v3/users/me/calendarList'
+
+export const GOOGLE_CALENDAR_PROVIDER_ID = 'google-calendar'
+export const GOOGLE_CALENDAR_SCOPES = [
+  'openid',
+  'email',
+  'profile',
+  'https://www.googleapis.com/auth/calendar.readonly',
+]
+
+type GoogleTokenResponse = {
+  access_token?: string
+  expires_in?: number
+  refresh_token?: string
+  scope?: string
+  token_type?: string
+  error?: string
+  error_description?: string
+}
+
+export type GoogleUserInfo = {
+  sub: string
+  email?: string
+  name?: string
+}
+
+type GoogleCalendarList = {
+  items?: Array<{
+    id: string
+    summary: string
+    primary?: boolean
+    accessRole: string
+    backgroundColor?: string
+  }>
+  nextPageToken?: string
+}
+
+type GoogleProviderConfig = {
+  appUrl: string
+  clientId: string
+  clientSecret: string
+}
+
+export function googleRedirectUri(appUrl: string) {
+  return `${appUrl}/api/integrations/google/callback`
+}
+
+export function buildGoogleAuthorizationUrl(config: GoogleProviderConfig, state: string) {
+  const url = new URL(AUTHORIZATION_URL)
+  url.search = new URLSearchParams({
+    client_id: config.clientId,
+    redirect_uri: googleRedirectUri(config.appUrl),
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
+    include_granted_scopes: 'true',
+    scope: GOOGLE_CALENDAR_SCOPES.join(' '),
+    state,
+  }).toString()
+  return url.toString()
+}
+
+async function tokenRequest(body: URLSearchParams) {
+  const response = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body,
+  })
+  const token = await response.json() as GoogleTokenResponse
+  if (
+    !response.ok
+    || token.error
+    || !token.access_token
+    || !token.expires_in
+  ) {
+    throw new Error(token.error_description || token.error || 'Google token exchange failed')
+  }
+  return token
+}
+
+export async function exchangeGoogleCode(config: GoogleProviderConfig, code: string) {
+  return tokenRequest(new URLSearchParams({
+    code,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    redirect_uri: googleRedirectUri(config.appUrl),
+    grant_type: 'authorization_code',
+  }))
+}
+
+export function credentialsFromGoogleToken(
+  token: GoogleTokenResponse,
+  existingRefreshToken?: string,
+): StoredCredentials {
+  const refreshToken = token.refresh_token || existingRefreshToken
+  if (!refreshToken) {
+    throw new Error('Google did not return a refresh token; reconnect and grant offline access')
+  }
+  return {
+    accessToken: token.access_token!,
+    refreshToken,
+    expiresAt: Date.now() + token.expires_in! * 1000,
+    tokenType: token.token_type || 'Bearer',
+  }
+}
+
+export async function getGoogleUserInfo(accessToken: string) {
+  const response = await fetch(USER_INFO_URL, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!response.ok) throw new Error('Unable to read the connected Google account')
+  return response.json() as Promise<GoogleUserInfo>
+}
+
+export async function getGoogleAccessToken(config: {
+  databaseUrl: string
+  encryptionKey: string
+  ownerId: string
+  clientId: string
+  clientSecret: string
+}) {
+  const account = await getIntegrationAccount(
+    config.databaseUrl,
+    config.ownerId,
+    GOOGLE_CALENDAR_PROVIDER_ID,
+  )
+  if (!account) throw new Error('Google Calendar is not connected')
+
+  const credentials = decryptJson<StoredCredentials>(
+    account.encrypted_credentials,
+    config.encryptionKey,
+  )
+  if (credentials.expiresAt > Date.now() + 60_000) return credentials.accessToken
+  if (!credentials.refreshToken) throw new Error('Google refresh token is unavailable')
+
+  const token = await tokenRequest(new URLSearchParams({
+    refresh_token: credentials.refreshToken,
+    client_id: config.clientId,
+    client_secret: config.clientSecret,
+    grant_type: 'refresh_token',
+  }))
+  const refreshed = credentialsFromGoogleToken(token, credentials.refreshToken)
+  await updateEncryptedCredentials(
+    config.databaseUrl,
+    config.ownerId,
+    GOOGLE_CALENDAR_PROVIDER_ID,
+    encryptJson(refreshed, config.encryptionKey),
+  )
+  return refreshed.accessToken
+}
+
+export async function listGoogleCalendars(accessToken: string) {
+  const calendars: GoogleCalendarList['items'] = []
+  let pageToken: string | undefined
+
+  do {
+    const url = new URL(CALENDAR_LIST_URL)
+    url.searchParams.set('maxResults', '250')
+    url.searchParams.set('minAccessRole', 'reader')
+    if (pageToken) url.searchParams.set('pageToken', pageToken)
+
+    const response = await fetch(url, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
+    if (!response.ok) throw new Error('Unable to read Google calendars')
+    const page = await response.json() as GoogleCalendarList
+    calendars.push(...(page.items ?? []))
+    pageToken = page.nextPageToken
+  } while (pageToken)
+
+  return calendars
+}
+
+export async function revokeGoogleToken(token: string) {
+  const response = await fetch('https://oauth2.googleapis.com/revoke', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token }),
+  })
+  if (!response.ok && response.status !== 400) {
+    throw new Error('Google token revocation failed')
+  }
+}
