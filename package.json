@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:full": "vercel dev",
+    "dev:full": "npx --yes vercel@latest dev",
     "build": "tsc -b && vite build",
     "db:migrate": "node scripts/migrate.mjs",
     "preview": "vite preview",

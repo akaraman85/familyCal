@@ -26,14 +26,15 @@ function database(databaseUrl: string) {
 
 export async function listIntegrationAccounts(databaseUrl: string, ownerId: string) {
   const sql = database(databaseUrl)
-  return sql.query(
+  const rows = await sql.query(
     `SELECT owner_id, provider, status, external_account_id, display_name,
             account_email, scopes, connected_at, updated_at
        FROM integration_accounts
       WHERE owner_id = $1
       ORDER BY provider`,
     [ownerId],
-  ) as Promise<Omit<IntegrationAccountRow, 'encrypted_credentials'>[]>
+  )
+  return rows as Omit<IntegrationAccountRow, 'encrypted_credentials'>[]
 }
 
 export async function getIntegrationAccount(

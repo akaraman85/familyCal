@@ -34,7 +34,7 @@ function queryValue(request: ApiRequest, name: string) {
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
 
-  let appUrl = '/'
+  let appUrl = ''
   let secureCookie = false
   try {
     const env = integrationEnv()
