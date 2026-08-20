@@ -22,6 +22,8 @@ import {
 
 const MAX_RANGE_MS = 370 * 24 * 60 * 60 * 1000
 
+class ValidationError extends Error {}
+
 function queryValue(request: ApiRequest, name: string) {
   const value = request.query?.[name]
   if (Array.isArray(value)) return value[0]
@@ -38,7 +40,7 @@ function parseRange(request: ApiRequest) {
     || timeMax <= timeMin
     || timeMax.getTime() - timeMin.getTime() > MAX_RANGE_MS
   ) {
-    throw new Error('timeMin and timeMax must define a valid range of 370 days or less')
+    throw new ValidationError('timeMin and timeMax must define a valid range of 370 days or less')
   }
   return { timeMin, timeMax }
 }
@@ -46,7 +48,7 @@ function parseRange(request: ApiRequest) {
 function optionalString(value: unknown, maxLength: number) {
   if (value === undefined || value === null || value === '') return null
   if (typeof value !== 'string' || value.trim().length > maxLength) {
-    throw new Error('Invalid event field')
+    throw new ValidationError('Invalid event field')
   }
   return value.trim()
 }
@@ -94,7 +96,11 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
     })
   } catch (error) {
     console.error('Unable to load calendar events', error)
-    sendJson(response, 400, { error: errorMessage(error) })
+    sendJson(response, error instanceof ValidationError ? 400 : 500, {
+      error: error instanceof ValidationError
+        ? error.message
+        : 'Calendar events are unavailable',
+    })
   }
 }
 
@@ -108,7 +114,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     const calendar = optionalString(body.calendar, 100)
     const location = optionalString(body.location, 500)
     if (!title || !calendar || typeof body.startAt !== 'string') {
-      throw new Error('Title, calendar, and start time are required')
+      throw new ValidationError('Title, calendar, and start time are required')
     }
 
     const startAt = new Date(body.startAt)
@@ -117,7 +123,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
       Number.isNaN(startAt.getTime())
       || (endAt && (Number.isNaN(endAt.getTime()) || endAt <= startAt))
     ) {
-      throw new Error('Event dates are invalid')
+      throw new ValidationError('Event dates are invalid')
     }
 
     const event = await createSavedEvent(env.databaseUrl, env.ownerId, {
@@ -130,7 +136,10 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     sendJson(response, 201, { event })
   } catch (error) {
     console.error('Unable to save calendar event', error)
-    sendJson(response, 400, { error: errorMessage(error) })
+    const validationError = error instanceof ValidationError || error instanceof SyntaxError
+    sendJson(response, validationError ? 400 : 500, {
+      error: validationError ? errorMessage(error) : 'The event could not be saved',
+    })
   }
 }
 
