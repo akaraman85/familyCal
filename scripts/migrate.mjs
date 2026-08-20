@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises'
+import { readdir, readFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { neon } from '@neondatabase/serverless'
 
@@ -8,9 +8,15 @@ if (!databaseUrl) {
   process.exit(1)
 }
 
-const migrationUrl = new URL('../db/migrations/001_integrations.sql', import.meta.url)
-const migration = await readFile(fileURLToPath(migrationUrl), 'utf8')
+const migrationsUrl = new URL('../db/migrations/', import.meta.url)
+const migrationDirectory = fileURLToPath(migrationsUrl)
+const migrationFiles = (await readdir(migrationDirectory))
+  .filter((file) => file.endsWith('.sql'))
+  .sort()
 const sql = neon(databaseUrl)
 
-await sql.query(migration)
-console.log('Integration database migration completed')
+for (const file of migrationFiles) {
+  const migration = await readFile(new URL(file, migrationsUrl), 'utf8')
+  await sql.query(migration)
+  console.log(`Applied ${file}`)
+}

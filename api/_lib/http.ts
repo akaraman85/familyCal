@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 
 export type ApiRequest = IncomingMessage & {
+  body?: unknown
   query?: Record<string, string | string[]>
 }
 
@@ -69,4 +70,17 @@ export function clearOAuthCookie(response: ApiResponse, secure: boolean) {
 
 export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected error'
+}
+
+export async function readJsonBody(request: ApiRequest) {
+  if (request.body !== undefined) {
+    if (typeof request.body === 'string') return JSON.parse(request.body) as unknown
+    return request.body
+  }
+
+  const chunks: Buffer[] = []
+  for await (const chunk of request) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
 }
