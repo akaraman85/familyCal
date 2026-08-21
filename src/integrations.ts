@@ -5,7 +5,7 @@ export type GoogleCalendar = {
   id: string
   name: string
   primary: boolean
-  type: 'primary' | 'owned' | 'shared' | 'subscribed'
+  type: 'primary' | 'owner' | 'editable' | 'read-only'
   accessRole: string
   color: string | null
   included: boolean

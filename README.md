@@ -11,7 +11,7 @@ calendar views.
 - Structured event proposals through Vercel AI Gateway
 - Server-side integration registry with Google Calendar as the first provider
 - Live read-only Google Calendar events with encrypted OAuth token storage
-- Per-account primary, owned, shared, and subscribed calendar controls
+- Per-account primary, owner, editable, and read-only calendar controls
 - Postgres-backed events created directly in the family calendar
 - Family member and preference administration
 - Responsive desktop and mobile layouts
@@ -110,8 +110,9 @@ credentials. Do not expose any of the server-only variables with a `VITE_`
 prefix.
 
 Every readable calendar returned by Google is included by default. The
-Integrations view identifies primary, owned, shared, and subscribed calendars
-and lets an administrator exclude individual calendars per connected account.
+Integrations view identifies primary calendars and each non-primary calendar's
+effective permission level (owner, editable, or read-only), then lets an
+administrator exclude individual calendars per connected account.
 Only exclusions are persisted, so newly discovered calendars remain included.
 Google events retain their source calendar and connected-account provenance;
 events from the same shared calendar are deduplicated while preserving every

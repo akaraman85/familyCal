@@ -686,7 +686,7 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
                         type="button"
                         role="switch"
                         aria-checked={calendar.included}
-                        aria-label={`${calendar.included ? 'Exclude' : 'Include'} ${calendar.name}`}
+                        aria-label={`Include ${calendar.name} events`}
                         className={`toggle ${calendar.included ? 'on' : ''}`}
                         disabled={workingCalendar !== null}
                         onClick={() => void setCalendarIncluded(calendar, !calendar.included)}

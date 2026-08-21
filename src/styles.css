@@ -221,8 +221,9 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
 .account-calendar-row > div b { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:600; }
 .account-calendar-row > span { color:#999;text-transform:capitalize;font-size:7px; }
 .calendar-type { flex:none;border-radius:5px;padding:3px 5px;text-transform:capitalize;font-size:7px;font-weight:700; }
-.calendar-type.primary { background:var(--green-soft);color:#39795e; }.calendar-type.owned { background:var(--blue-soft);color:#45649e; }.calendar-type.shared { background:var(--orange-soft);color:#9b4d3b; }.calendar-type.subscribed { background:#efefec;color:#6f7370; }
-.account-calendar-row .toggle { transform:scale(.82);transform-origin:right center; }
+.calendar-type.primary { background:var(--green-soft);color:#39795e; }.calendar-type.owner { background:var(--blue-soft);color:#45649e; }.calendar-type.editable { background:var(--orange-soft);color:#9b4d3b; }.calendar-type.read-only { background:#efefec;color:#6f7370; }
+.account-calendar-row .toggle { width:44px;height:28px;padding:4px; }
+.account-calendar-row .toggle i { width:20px;height:20px; }
 .account-calendar-row .toggle:disabled { opacity:.55;cursor:wait; }
 .member-integration-empty { color:#999;font-size:9px;padding:17px 0; }
 .integration-empty { min-height:150px;border:1px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#999;text-align:center;padding:20px; }

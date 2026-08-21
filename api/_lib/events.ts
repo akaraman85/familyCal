@@ -15,7 +15,7 @@ export type CalendarEvent = {
       id: string
       name: string
       primary: boolean
-      type: 'primary' | 'owned' | 'shared' | 'subscribed'
+      type: 'primary' | 'owner' | 'editable' | 'read-only'
       accessRole: string
       color: string | null
     }
@@ -24,6 +24,8 @@ export type CalendarEvent = {
       memberId: string | null
       email: string | null
       displayName: string | null
+      calendarType: 'primary' | 'owner' | 'editable' | 'read-only'
+      accessRole: string
     }>
   }
 }

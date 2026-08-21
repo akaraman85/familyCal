@@ -197,9 +197,14 @@ export async function listGoogleCalendars(accessToken: string) {
 
 export function googleCalendarType(calendar: GoogleCalendarListItem) {
   if (calendar.primary) return 'primary' as const
-  if (calendar.accessRole === 'owner') return 'owned' as const
-  if (calendar.accessRole === 'writer') return 'shared' as const
-  return 'subscribed' as const
+  if (calendar.accessRole === 'owner') return 'owner' as const
+  if (
+    calendar.accessRole === 'writer'
+    || calendar.accessRole === 'writerWithoutPrivateAccess'
+  ) {
+    return 'editable' as const
+  }
+  return 'read-only' as const
 }
 
 async function listGoogleCalendarEvents(
@@ -256,6 +261,8 @@ async function listGoogleCalendarEvents(
             memberId: account.member_id,
             email: account.account_email,
             displayName: account.display_name,
+            calendarType: googleCalendarType(calendar),
+            accessRole: calendar.accessRole,
           }],
         },
       })

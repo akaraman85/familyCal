@@ -30,6 +30,13 @@ const MAX_RANGE_MS = 370 * 24 * 60 * 60 * 1000
 
 class ValidationError extends Error {}
 
+const CALENDAR_TYPE_RANK = {
+  'read-only': 0,
+  editable: 1,
+  owner: 2,
+  primary: 3,
+} as const
+
 function queryValue(request: ApiRequest, name: string) {
   const value = request.query?.[name]
   if (Array.isArray(value)) return value[0]
@@ -165,6 +172,13 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
           for (const event of accountEvents) {
             const existing = eventsById.get(event.id)
             if (existing?.google && event.google) {
+              if (
+                CALENDAR_TYPE_RANK[event.google.calendar.type]
+                > CALENDAR_TYPE_RANK[existing.google.calendar.type]
+              ) {
+                existing.google.calendar = event.google.calendar
+                existing.calendar = event.calendar
+              }
               for (const sourceAccount of event.google.accounts) {
                 if (!existing.google.accounts.some(({ id }) => id === sourceAccount.id)) {
                   existing.google.accounts.push(sourceAccount)
