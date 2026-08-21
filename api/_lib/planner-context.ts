@@ -7,6 +7,8 @@ const MAX_TURNS = 8
 export type PlannerContextState = {
   version: 1
   ownerId: string
+  sessionId: string
+  revision: number
   expiresAt: number
   turnCount: number
   status: 'proposal' | 'needs_clarification'
@@ -51,6 +53,11 @@ export function readPlannerContext(token: string, ownerId: string) {
     if (
       state.version !== 1
       || state.ownerId !== ownerId
+      || typeof state.sessionId !== 'string'
+      || !state.sessionId
+      || state.sessionId.length > 100
+      || !Number.isInteger(state.revision)
+      || state.revision < 1
       || !Number.isFinite(state.expiresAt)
       || state.expiresAt < Date.now()
       || !Number.isInteger(state.turnCount)

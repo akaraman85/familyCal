@@ -211,8 +211,25 @@ export async function proposeEvents(
     proposalId: string
     proposalToken: string
     contextToken: string
+    sessionId: string
+    revision: number
     turnsRemaining: number
     model: string
     timezone: string
   }>(response)
+}
+
+export async function resetPlannerSession(sessionId: string) {
+  const response = await fetch('/api/planner/session', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ sessionId }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: 'Request failed' })) as {
+      error?: string
+    }
+    throw new Error(body.error || 'Unable to reset planner session')
+  }
 }

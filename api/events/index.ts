@@ -2,6 +2,7 @@ import {
   createSavedEvent,
   createSavedEvents,
   listSavedEvents,
+  PlannerSessionConflictError,
   type CalendarEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
@@ -240,10 +241,14 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
       const proposalToken = typeof body.proposalToken === 'string'
         ? body.proposalToken
         : ''
+      const sessionId = typeof body.sessionId === 'string' ? body.sessionId : ''
+      const revision = typeof body.revision === 'number' ? body.revision : NaN
       if (!proposalToken || !verifyPlannerProposal({
         token: proposalToken,
         requestId,
         ownerId: env.ownerId,
+        sessionId,
+        revision,
         events,
       })) {
         sendJson(response, 403, {
@@ -256,6 +261,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
         env.ownerId,
         events,
         requestId,
+        { sessionId, revision },
       )
       sendJson(response, 201, { events: created })
       return
@@ -269,6 +275,10 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     sendJson(response, 201, { event })
   } catch (error) {
     console.error('Unable to save calendar event', error)
+    if (error instanceof PlannerSessionConflictError) {
+      sendJson(response, 409, { error: error.message })
+      return
+    }
     const validationError = error instanceof ValidationError || error instanceof SyntaxError
     sendJson(response, validationError ? 400 : 500, {
       error: validationError ? errorMessage(error) : 'The event could not be saved',

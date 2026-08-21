@@ -19,6 +19,11 @@ import {
   signPlannerContext,
 } from '../_lib/planner-context.js'
 import {
+  advancePlannerSession,
+  createPlannerSession,
+  plannerSessionIsCurrent,
+} from '../_lib/planner-sessions.js'
+import {
   consumePlannerRequest,
   getPlannerSettings,
 } from '../_lib/planner-settings.js'
@@ -153,6 +158,17 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       })
       return
     }
+    if (context && !await plannerSessionIsCurrent(
+      env.databaseUrl,
+      env.ownerId,
+      context.sessionId,
+      context.revision,
+    )) {
+      sendJson(response, 409, {
+        error: 'This plan is no longer current. Start a new plan.',
+      })
+      return
+    }
 
     const settings = await getPlannerSettings(env.databaseUrl, env.ownerId)
     if (!settings.enabled) {
@@ -182,8 +198,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       now: new Date(),
     })
     const proposalId = randomUUID()
+    const sessionId = context?.sessionId ?? randomUUID()
+    const revision = context
+      ? await advancePlannerSession(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        context.revision,
+      )
+      : 1
+    if (revision === null) {
+      sendJson(response, 409, {
+        error: 'This plan changed in another request. Retry from the latest response.',
+      })
+      return
+    }
+    if (!context) {
+      await createPlannerSession(env.databaseUrl, env.ownerId, sessionId)
+    }
     const turnCount = (context?.turnCount ?? 0) + 1
-    const workingEvents = result.proposal.result === 'proposal'
+    const workingEvents = result.proposal.events.length
       ? result.proposal.events
       : (context?.events ?? [])
     sendJson(response, 200, {
@@ -192,16 +226,22 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       proposalToken: signPlannerProposal({
         requestId: proposalId,
         ownerId: env.ownerId,
+        sessionId,
+        revision,
         events: result.proposal.events,
       }),
       contextToken: signPlannerContext({
         ownerId: env.ownerId,
+        sessionId,
+        revision,
         turnCount,
         status: result.proposal.result,
         assistantMessage: result.proposal.message,
         events: workingEvents,
         warnings: result.proposal.warnings,
       }),
+      sessionId,
+      revision,
       turnsRemaining: PLANNER_CONTEXT_MAX_TURNS - turnCount,
       timezone: settings.timezone,
     })

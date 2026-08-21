@@ -14,6 +14,8 @@ export type PlannerConfirmationEvent = {
 type ConfirmationPayload = {
   requestId: string
   ownerId: string
+  sessionId: string
+  revision: number
   eventsHash: string
   expiresAt: number
 }
@@ -49,11 +51,15 @@ function signature(encoded: string) {
 export function signPlannerProposal(input: {
   requestId: string
   ownerId: string
+  sessionId: string
+  revision: number
   events: PlannerConfirmationEvent[]
 }) {
   const payload: ConfirmationPayload = {
     requestId: input.requestId,
     ownerId: input.ownerId,
+    sessionId: input.sessionId,
+    revision: input.revision,
     eventsHash: eventsHash(input.events),
     expiresAt: Date.now() + 30 * 60 * 1000,
   }
@@ -65,6 +71,8 @@ export function verifyPlannerProposal(input: {
   token: string
   requestId: string
   ownerId: string
+  sessionId: string
+  revision: number
   events: PlannerConfirmationEvent[]
 }) {
   const [encoded, suppliedSignature, extra] = input.token.split('.')
@@ -84,6 +92,8 @@ export function verifyPlannerProposal(input: {
     ) as ConfirmationPayload
     return payload.requestId === input.requestId
       && payload.ownerId === input.ownerId
+      && payload.sessionId === input.sessionId
+      && payload.revision === input.revision
       && payload.eventsHash === eventsHash(input.events)
       && Number.isFinite(payload.expiresAt)
       && payload.expiresAt >= Date.now()
