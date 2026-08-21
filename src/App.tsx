@@ -115,8 +115,12 @@ function toEventItem(event: CalendarEventData): EventItem {
 
 const TIMELINE_START_MINUTES = 7 * 60
 const TIMELINE_END_MINUTES = 23 * 60
-const TIMELINE_HEIGHT = 504
+const TIMELINE_RANGE_MINUTES = TIMELINE_END_MINUTES - TIMELINE_START_MINUTES
 const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
+
+function timelinePercent(minutes: number) {
+  return `${((minutes - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES) * 100}%`
+}
 
 function timelinePosition(event: EventItem) {
   if (event.allDay) return null
@@ -133,15 +137,15 @@ function timelinePosition(event: EventItem) {
   }
   const visibleStart = Math.max(startMinutes, TIMELINE_START_MINUTES)
   const visibleEnd = Math.min(endMinutes, TIMELINE_END_MINUTES)
-  const pixelsPerMinute = TIMELINE_HEIGHT
-    / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES)
-  const top = (visibleStart - TIMELINE_START_MINUTES) * pixelsPerMinute
-  const availableHeight = TIMELINE_HEIGHT - top
+  const top = (visibleStart - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES * 100
   const height = Math.min(
-    Math.max(28, (visibleEnd - visibleStart) * pixelsPerMinute),
-    availableHeight,
+    (visibleEnd - visibleStart) / TIMELINE_RANGE_MINUTES * 100,
+    100 - top,
   )
-  return { top, height }
+  return {
+    top: `${top}%`,
+    height: `${height}%`,
+  }
 }
 
 function timelineLabel(hour: number) {
@@ -436,7 +440,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   const now = new Date()
   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
   return (
-    <div className="page">
+    <div className="page calendar-page">
       <div className="page-heading">
         <div><p className="eyebrow">{format(now, 'EEEE, MMMM d')}</p><h1>Good {greeting}, Alex</h1><p>Here’s what’s happening with your family.</p></div>
         <button className="ai-plan-btn" onClick={openChat}><Sparkles size={17} />Plan with AI</button>
@@ -510,7 +514,7 @@ function WeekView({ events, selectedDate, selectEvent }: { events: EventItem[]; 
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
       {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div>)}</div>}
       <div className="week-body">
-        <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}>{timelineLabel(hour)}</span>)}</div>
+        <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: timelinePercent(hour * 60) }}>{timelineLabel(hour)}</span>)}</div>
         {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
           const position = timelinePosition(event)
           if (!position) return null
@@ -530,7 +534,7 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
       {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div></div>}
       <div className="day-timed">
         <div className="day-timeline">
-          {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}><span>{timelineLabel(hour)}</span><i /></div>)}
+          {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: timelinePercent(hour * 60) }}><span>{timelineLabel(hour)}</span><i /></div>)}
         </div>
         <div className="day-events">
           {timedEvents.map((event) => {
