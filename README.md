@@ -27,6 +27,19 @@ npm run dev:full
 Vite app and `/api` functions. Run `npm run build` to type-check and create a
 production build.
 
+## Database migrations
+
+`npm run db:migrate` applies each SQL file in `db/migrations` once. Applied
+filenames and SHA-256 checksums are recorded in `schema_migrations`. The runner
+holds a Postgres advisory lock and applies all pending files in one transaction,
+so concurrent production builds cannot race. Never edit an applied migration;
+add a new numbered SQL file instead.
+
+Vercel uses `npm run vercel-build`. It builds the application first, then runs
+pending migrations only when `VERCEL_ENV=production`. A failed build never
+touches the database, and a failed migration prevents the deployment from being
+published. Preview and local builds skip production migrations.
+
 ## Temporary access
 
 The app and every event/integration API require a server-validated session.
