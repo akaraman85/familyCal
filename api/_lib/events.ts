@@ -69,8 +69,14 @@ export async function listSavedEvents(
             all_day_end_date, calendar_name, location
        FROM saved_events
       WHERE owner_id = $1
-        AND start_at < $3
-        AND COALESCE(end_at, start_at) >= $2
+        AND CASE
+              WHEN all_day THEN COALESCE(all_day_date::timestamptz, start_at)
+              ELSE start_at
+            END < $3
+        AND CASE
+              WHEN all_day THEN COALESCE(all_day_end_date::timestamptz, start_at)
+              ELSE COALESCE(end_at, start_at)
+            END >= $2
       ORDER BY start_at`,
     [ownerId, timeMin.toISOString(), timeMax.toISOString()],
   ) as SavedEventRow[]
