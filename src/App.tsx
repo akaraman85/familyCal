@@ -1079,6 +1079,7 @@ function AssistantPanel({ close, save }: {
 
   return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
     <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>Powered by Vercel AI Gateway</span></div><button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div>
+    <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar proposal' : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
       <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
       {submittedText && <div className="user-message">{submittedImage && <img src={submittedImage} alt="Submitted calendar screenshot"/>}<span>{submittedText}</span></div>}
@@ -1093,7 +1094,7 @@ function AssistantPanel({ close, save }: {
     </div>
     <div className="assistant-input">
       {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => setImage(null)} aria-label="Remove screenshot"><X size={14}/></button></div>}
-      <textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
+      <textarea aria-label="AI planner request" maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={(event) => {
         void attachScreenshot(event.target.files?.[0])
         event.target.value = ''

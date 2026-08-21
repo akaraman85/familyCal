@@ -94,7 +94,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }
     const body = rawBody as Record<string, unknown>
     const message = typeof body.message === 'string' ? body.message.trim() : ''
-    let image: { data: Uint8Array; mediaType: string } | undefined
+    let pendingImage: { data: Uint8Array; mediaType: string } | undefined
     if (body.image !== undefined) {
       if (!body.image || typeof body.image !== 'object' || Array.isArray(body.image)) {
         throw new ValidationError('Screenshot attachment is invalid')
@@ -113,12 +113,9 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       ) {
         throw new ValidationError('Screenshot data is invalid or larger than 2.5 MB')
       }
-      image = {
-        data: await canonicalizeImage(bytes, mediaType),
-        mediaType: 'image/jpeg',
-      }
+      pendingImage = { data: bytes, mediaType }
     }
-    if ((!message && !image) || message.length > MAX_MESSAGE_LENGTH) {
+    if ((!message && !pendingImage) || message.length > MAX_MESSAGE_LENGTH) {
       throw new ValidationError(
         `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
       )
@@ -137,6 +134,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       })
       return
     }
+    const image = pendingImage ? {
+      data: await canonicalizeImage(pendingImage.data, pendingImage.mediaType),
+      mediaType: 'image/jpeg',
+    } : undefined
 
     const result = await proposeCalendarEvents({
       databaseUrl: env.databaseUrl,
