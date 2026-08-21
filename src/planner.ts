@@ -194,6 +194,9 @@ export async function updatePlannerSettings(settings: PlannerSettings) {
 export async function proposeEvents(
   message: string,
   image?: PlannerImageAttachment,
+  contextToken?: string,
+  sessionId?: string,
+  turnId?: string,
 ) {
   const response = await fetch('/api/planner/propose', {
     method: 'POST',
@@ -202,13 +205,35 @@ export async function proposeEvents(
     body: JSON.stringify({
       message,
       image: image ? { data: image.data, mediaType: image.mediaType } : undefined,
+      contextToken,
+      sessionId,
+      turnId,
     }),
   })
   return responseJson<{
     proposal: PlannerProposal
     proposalId: string
     proposalToken: string
+    contextToken: string
+    sessionId: string
+    revision: number
+    turnsRemaining: number
     model: string
     timezone: string
   }>(response)
+}
+
+export async function resetPlannerSession(sessionId: string) {
+  const response = await fetch('/api/planner/session', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ sessionId }),
+  })
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({ error: 'Request failed' })) as {
+      error?: string
+    }
+    throw new Error(body.error || 'Unable to reset planner session')
+  }
 }

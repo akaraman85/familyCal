@@ -60,6 +60,8 @@ type NewSavedEvent = {
   location?: string | null
 }
 
+export class PlannerSessionConflictError extends Error {}
+
 function dateOnly(value: string | Date | null) {
   if (!value) return null
   return (typeof value === 'string' ? value : value.toISOString()).slice(0, 10)
@@ -146,6 +148,7 @@ export async function createSavedEvents(
   ownerId: string,
   events: NewSavedEvent[],
   requestId: string,
+  session: { sessionId: string; revision: number },
 ) {
   const pool = new Pool({ connectionString: databaseUrl, max: 1 })
   const client = await pool.connect()
@@ -165,6 +168,34 @@ export async function createSavedEvents(
       }
       await client.query('COMMIT')
       return existing.rows.map((row) => serialize(row as SavedEventRow))
+    }
+    const plannerSession = await client.query(
+      `SELECT revision
+         FROM ai_planner_sessions
+        WHERE owner_id = $1
+          AND id = $2
+          AND revision = $3
+          AND status = 'active'
+          AND expires_at > NOW()
+        FOR UPDATE`,
+      [ownerId, session.sessionId, session.revision],
+    )
+    if (!plannerSession.rows.length) {
+      const committed = await client.query(
+        `SELECT id, title, start_at, end_at, all_day, all_day_date,
+                all_day_end_date, calendar_name, location
+           FROM saved_events
+          WHERE owner_id = $1 AND planner_request_id = $2
+          ORDER BY planner_item_index`,
+        [ownerId, requestId],
+      )
+      if (committed.rows.length === events.length) {
+        await client.query('COMMIT')
+        return committed.rows.map((row) => serialize(row as SavedEventRow))
+      }
+      throw new PlannerSessionConflictError(
+        'This planner proposal is no longer current',
+      )
     }
 
     const created: CalendarEvent[] = []
@@ -194,6 +225,14 @@ export async function createSavedEvents(
       )
       created.push(serialize(rows.rows[0] as SavedEventRow))
     }
+    await client.query(
+      `UPDATE ai_planner_sessions
+          SET status = 'confirmed',
+              encrypted_last_response = NULL,
+              updated_at = NOW()
+        WHERE owner_id = $1 AND id = $2`,
+      [ownerId, session.sessionId],
+    )
     await client.query('COMMIT')
     return created
   } catch (error) {

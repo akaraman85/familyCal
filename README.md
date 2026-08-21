@@ -57,6 +57,18 @@ payload exceeds 2.5 MB. The server accepts only JPEG and PNG image data, applies
 an independent pixel limit, fully decodes it, and canonicalizes it to a fresh
 JPEG before forwarding it to the model.
 
+Planner follow-ups use a bounded rolling state rather than replaying the full
+chat transcript. A signed, one-hour context token carries at most the current
+20 event facts, the latest assistant message, and up to 10 warnings. Each new
+turn replaces that state; screenshots and earlier prompts are never resent.
+Sessions allow eight AI turns, follow-ups are capped at 4,000 characters, and
+the in-memory UI history is discarded on refresh or when **New plan** is used.
+Postgres tracks session revision, status, and expiry plus one encrypted canonical
+response for idempotent network retries—never raw prompts or screenshots. The
+encrypted retry payload is replaced each turn and cleared on reset or
+confirmation, while revisions invalidate superseded proposals and prevent
+confirmation from racing a newer turn.
+
 ## Database migrations
 
 `npm run db:migrate` applies each SQL file in `db/migrations` once. Applied

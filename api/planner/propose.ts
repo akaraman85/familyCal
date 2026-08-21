@@ -14,11 +14,23 @@ import {
 import { proposeCalendarEvents } from '../_lib/planner.js'
 import { signPlannerProposal } from '../_lib/planner-confirmation.js'
 import {
+  PLANNER_CONTEXT_MAX_TURNS,
+  readPlannerContext,
+  signPlannerContext,
+} from '../_lib/planner-context.js'
+import {
+  advancePlannerSession,
+  createPlannerSession,
+  getPlannerTurnResponse,
+  plannerSessionIsCurrent,
+} from '../_lib/planner-sessions.js'
+import {
   consumePlannerRequest,
   getPlannerSettings,
 } from '../_lib/planner-settings.js'
 
 const MAX_MESSAGE_LENGTH = 12_000
+const MAX_FOLLOW_UP_LENGTH = 4_000
 const MAX_IMAGE_BYTES = 2_500_000
 const MAX_REQUEST_BYTES = 3_600_000
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
@@ -93,6 +105,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new ValidationError('Planner request is invalid')
     }
     const body = rawBody as Record<string, unknown>
+    const requestedSessionId = typeof body.sessionId === 'string'
+      ? body.sessionId
+      : ''
+    const turnId = typeof body.turnId === 'string' ? body.turnId : ''
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedSessionId)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(turnId)
+    ) {
+      throw new ValidationError('Planner session identifiers are invalid')
+    }
+    const cachedResponse = await getPlannerTurnResponse<unknown>(
+      env.databaseUrl,
+      env.ownerId,
+      requestedSessionId,
+      turnId,
+    )
+    if (cachedResponse) {
+      sendJson(response, 200, cachedResponse)
+      return
+    }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     let pendingImage: { data: Uint8Array; mediaType: string } | undefined
     if (body.image !== undefined) {
@@ -120,6 +152,47 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
       )
     }
+    const contextToken = typeof body.contextToken === 'string'
+      ? body.contextToken
+      : ''
+    const context = contextToken
+      ? readPlannerContext(contextToken, env.ownerId)
+      : undefined
+    if (contextToken && !context) {
+      sendJson(response, 409, {
+        error: 'This planner session expired. Start a new plan.',
+      })
+      return
+    }
+    if (context && context.sessionId !== requestedSessionId) {
+      throw new ValidationError('Planner session does not match its context')
+    }
+    if (context && pendingImage) {
+      throw new ValidationError('Start a new plan before attaching another screenshot')
+    }
+    if (context && !message) {
+      throw new ValidationError('Add a follow-up message for this planner session')
+    }
+    if (context && message.length > MAX_FOLLOW_UP_LENGTH) {
+      throw new ValidationError(`Follow-up messages can be up to ${MAX_FOLLOW_UP_LENGTH} characters`)
+    }
+    if (context && context.turnCount >= PLANNER_CONTEXT_MAX_TURNS) {
+      sendJson(response, 409, {
+        error: 'This plan reached its eight-turn limit. Start a new plan to continue.',
+      })
+      return
+    }
+    if (context && !await plannerSessionIsCurrent(
+      env.databaseUrl,
+      env.ownerId,
+      context.sessionId,
+      context.revision,
+    )) {
+      sendJson(response, 409, {
+        error: 'This plan is no longer current. Start a new plan.',
+      })
+      return
+    }
 
     const settings = await getPlannerSettings(env.databaseUrl, env.ownerId)
     if (!settings.enabled) {
@@ -144,20 +217,75 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       ownerId: env.ownerId,
       message,
       image,
+      context: context ?? undefined,
       settings,
       now: new Date(),
     })
     const proposalId = randomUUID()
-    sendJson(response, 200, {
+    const sessionId = requestedSessionId
+    const revision = context ? context.revision + 1 : 1
+    const turnCount = (context?.turnCount ?? 0) + 1
+    const workingEvents = result.proposal.events.length
+      ? result.proposal.events
+      : (context?.events ?? [])
+    const responseBody = {
       ...result,
       proposalId,
       proposalToken: signPlannerProposal({
         requestId: proposalId,
         ownerId: env.ownerId,
+        sessionId,
+        revision,
         events: result.proposal.events,
       }),
+      contextToken: signPlannerContext({
+        ownerId: env.ownerId,
+        sessionId,
+        revision,
+        turnCount,
+        status: result.proposal.result,
+        assistantMessage: result.proposal.message,
+        events: workingEvents,
+        warnings: result.proposal.warnings,
+      }),
+      sessionId,
+      revision,
+      turnsRemaining: PLANNER_CONTEXT_MAX_TURNS - turnCount,
       timezone: settings.timezone,
-    })
+    }
+    const storedRevision = context
+      ? await advancePlannerSession(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        context.revision,
+        turnId,
+        responseBody,
+      )
+      : (await createPlannerSession(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        turnId,
+        responseBody,
+      ))
+    if (storedRevision === null) {
+      const concurrentResponse = await getPlannerTurnResponse<unknown>(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        turnId,
+      )
+      if (concurrentResponse) {
+        sendJson(response, 200, concurrentResponse)
+        return
+      }
+      sendJson(response, 409, {
+        error: 'This plan changed in another request. Retry from the latest response.',
+      })
+      return
+    }
+    sendJson(response, 200, responseBody)
   } catch (error) {
     console.error('Unable to create AI calendar proposal', error)
     const tooLarge = error instanceof RequestBodyTooLargeError
