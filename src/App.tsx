@@ -1035,7 +1035,7 @@ function EventDetailModal({ event, close }: { event: EventItem; close: () => voi
   const organizer = event.organizer?.displayName || event.organizer?.email
   const safeDescription = useMemo(() => DOMPurify.sanitize(event.description ?? '', {
     ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
-    ALLOWED_ATTR: [],
+    ALLOWED_ATTR: ['href'],
   }), [event.description])
 
   useEffect(() => {
@@ -1095,7 +1095,17 @@ function EventDetailModal({ event, close }: { event: EventItem; close: () => voi
         {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
         {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
       </dl>
-      {safeDescription && <section className="event-description"><b>Description</b><div dangerouslySetInnerHTML={{ __html: safeDescription }}/></section>}
+      {safeDescription && <section className="event-description"><b>Description</b><div
+        onClick={(mouseEvent) => {
+          const target = mouseEvent.target instanceof Element
+            ? mouseEvent.target.closest<HTMLAnchorElement>('a[href]')
+            : null
+          if (!target) return
+          mouseEvent.preventDefault()
+          window.open(target.href, '_blank', 'noopener,noreferrer')
+        }}
+        dangerouslySetInnerHTML={{ __html: safeDescription }}
+      /></section>}
       <div className="event-detail-actions">
         <button type="button" onClick={close}>Close</button>
         {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
