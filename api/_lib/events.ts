@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { neon } from '@neondatabase/serverless'
+import { neon, Pool } from '@neondatabase/serverless'
 
 export type CalendarEvent = {
   id: string
@@ -84,4 +84,43 @@ export async function createSavedEvent(
     ],
   ) as SavedEventRow[]
   return serialize(rows[0])
+}
+
+export async function createSavedEvents(
+  databaseUrl: string,
+  ownerId: string,
+  events: NewSavedEvent[],
+) {
+  const pool = new Pool({ connectionString: databaseUrl, max: 1 })
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const created: CalendarEvent[] = []
+    for (const event of events) {
+      const rows = await client.query(
+        `INSERT INTO saved_events (
+           id, owner_id, title, start_at, end_at, calendar_name, location
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, title, start_at, end_at, calendar_name, location`,
+        [
+          randomUUID(),
+          ownerId,
+          event.title,
+          event.startAt,
+          event.endAt ?? null,
+          event.calendar,
+          event.location ?? null,
+        ],
+      )
+      created.push(serialize(rows.rows[0] as SavedEventRow))
+    }
+    await client.query('COMMIT')
+    return created
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
+    await pool.end()
+  }
 }

@@ -1,5 +1,6 @@
 import {
   createSavedEvent,
+  createSavedEvents,
   listSavedEvents,
   type CalendarEvent,
 } from '../_lib/events.js'
@@ -53,6 +54,31 @@ function optionalString(value: unknown, maxLength: number) {
     throw new ValidationError('Invalid event field')
   }
   return value.trim()
+}
+
+function parseEvent(body: Record<string, unknown>) {
+  const title = optionalString(body.title, 200)
+  const calendar = optionalString(body.calendar, 100)
+  const location = optionalString(body.location, 500)
+  if (!title || !calendar || typeof body.startAt !== 'string') {
+    throw new ValidationError('Title, calendar, and start time are required')
+  }
+
+  const startAt = new Date(body.startAt)
+  const endAt = body.endAt ? new Date(String(body.endAt)) : null
+  if (
+    Number.isNaN(startAt.getTime())
+    || (endAt && (Number.isNaN(endAt.getTime()) || endAt <= startAt))
+  ) {
+    throw new ValidationError('Event dates are invalid')
+  }
+  return {
+    title,
+    startAt: startAt.toISOString(),
+    endAt: endAt?.toISOString() ?? null,
+    calendar,
+    location,
+  }
 }
 
 async function getEvents(request: ApiRequest, response: ApiResponse) {
@@ -119,29 +145,26 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     if (!requireSameOrigin(request, response, env.appUrl)) return
 
     const body = await readJsonBody(request) as Record<string, unknown>
-    const title = optionalString(body.title, 200)
-    const calendar = optionalString(body.calendar, 100)
-    const location = optionalString(body.location, 500)
-    if (!title || !calendar || typeof body.startAt !== 'string') {
-      throw new ValidationError('Title, calendar, and start time are required')
+    if (Array.isArray(body.events)) {
+      if (!body.events.length || body.events.length > 20) {
+        throw new ValidationError('Create between 1 and 20 events at a time')
+      }
+      const events = body.events.map((item) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          throw new ValidationError('Event details are invalid')
+        }
+        return parseEvent(item as Record<string, unknown>)
+      })
+      const created = await createSavedEvents(env.databaseUrl, env.ownerId, events)
+      sendJson(response, 201, { events: created })
+      return
     }
 
-    const startAt = new Date(body.startAt)
-    const endAt = body.endAt ? new Date(String(body.endAt)) : null
-    if (
-      Number.isNaN(startAt.getTime())
-      || (endAt && (Number.isNaN(endAt.getTime()) || endAt <= startAt))
-    ) {
-      throw new ValidationError('Event dates are invalid')
-    }
-
-    const event = await createSavedEvent(env.databaseUrl, env.ownerId, {
-      title,
-      startAt: startAt.toISOString(),
-      endAt: endAt?.toISOString() ?? null,
-      calendar,
-      location,
-    })
+    const event = await createSavedEvent(
+      env.databaseUrl,
+      env.ownerId,
+      parseEvent(body),
+    )
     sendJson(response, 201, { event })
   } catch (error) {
     console.error('Unable to save calendar event', error)

@@ -8,6 +8,7 @@ calendar views.
 - Shared family calendar with multiple member calendars
 - Manual event creation
 - Conversational AI planning flow
+- Structured event proposals through Vercel AI Gateway
 - Server-side integration registry with Google Calendar as the first provider
 - Live read-only Google Calendar events with encrypted OAuth token storage
 - Postgres-backed events created directly in the family calendar
@@ -26,6 +27,26 @@ npm run dev:full
 `npm run dev` starts the frontend only. Use `npm run dev:full` to run both the
 Vite app and `/api` functions. Run `npm run build` to type-check and create a
 production build.
+
+## AI Planner
+
+The AI Planner uses the Vercel AI SDK and AI Gateway to turn natural-language
+requests into validated event proposals. It never writes during generation.
+The browser displays every proposed event, and only an explicit confirmation
+uses the authenticated events API to save the batch transactionally.
+
+Production deployments authenticate to AI Gateway with the short-lived
+`VERCEL_OIDC_TOKEN` injected by Vercel, so no model credential is stored in the
+browser or Postgres. Enable AI Gateway and fund it with credits in the Vercel
+dashboard, then set a project budget before enabling the planner. For local
+development, link the project and run `vercel env pull`, or set a server-only
+`AI_GATEWAY_API_KEY`.
+
+Settings → AI Planner persists only non-secret preferences: enabled state,
+model profile, household timezone, and default calendar. The available profiles
+route to OpenAI GPT-5.6 Luna, Terra, and Sol through AI Gateway. Planner prompts
+may contain private household scheduling details; they are sent to the selected
+model provider only when an authenticated user submits a request.
 
 ## Database migrations
 
