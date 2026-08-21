@@ -194,6 +194,7 @@ export async function updatePlannerSettings(settings: PlannerSettings) {
 export async function proposeEvents(
   message: string,
   image?: PlannerImageAttachment,
+  contextToken?: string,
 ) {
   const response = await fetch('/api/planner/propose', {
     method: 'POST',
@@ -202,12 +203,15 @@ export async function proposeEvents(
     body: JSON.stringify({
       message,
       image: image ? { data: image.data, mediaType: image.mediaType } : undefined,
+      contextToken,
     }),
   })
   return responseJson<{
     proposal: PlannerProposal
     proposalId: string
     proposalToken: string
+    contextToken: string
+    turnsRemaining: number
     model: string
     timezone: string
   }>(response)

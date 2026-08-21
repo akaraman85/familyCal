@@ -14,11 +14,17 @@ import {
 import { proposeCalendarEvents } from '../_lib/planner.js'
 import { signPlannerProposal } from '../_lib/planner-confirmation.js'
 import {
+  PLANNER_CONTEXT_MAX_TURNS,
+  readPlannerContext,
+  signPlannerContext,
+} from '../_lib/planner-context.js'
+import {
   consumePlannerRequest,
   getPlannerSettings,
 } from '../_lib/planner-settings.js'
 
 const MAX_MESSAGE_LENGTH = 12_000
+const MAX_FOLLOW_UP_LENGTH = 4_000
 const MAX_IMAGE_BYTES = 2_500_000
 const MAX_REQUEST_BYTES = 3_600_000
 const IMAGE_TYPES = new Set(['image/jpeg', 'image/png'])
@@ -120,6 +126,33 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
       )
     }
+    const contextToken = typeof body.contextToken === 'string'
+      ? body.contextToken
+      : ''
+    const context = contextToken
+      ? readPlannerContext(contextToken, env.ownerId)
+      : undefined
+    if (contextToken && !context) {
+      sendJson(response, 409, {
+        error: 'This planner session expired. Start a new plan.',
+      })
+      return
+    }
+    if (context && pendingImage) {
+      throw new ValidationError('Start a new plan before attaching another screenshot')
+    }
+    if (context && !message) {
+      throw new ValidationError('Add a follow-up message for this planner session')
+    }
+    if (context && message.length > MAX_FOLLOW_UP_LENGTH) {
+      throw new ValidationError(`Follow-up messages can be up to ${MAX_FOLLOW_UP_LENGTH} characters`)
+    }
+    if (context && context.turnCount >= PLANNER_CONTEXT_MAX_TURNS) {
+      sendJson(response, 409, {
+        error: 'This plan reached its eight-turn limit. Start a new plan to continue.',
+      })
+      return
+    }
 
     const settings = await getPlannerSettings(env.databaseUrl, env.ownerId)
     if (!settings.enabled) {
@@ -144,10 +177,15 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       ownerId: env.ownerId,
       message,
       image,
+      context,
       settings,
       now: new Date(),
     })
     const proposalId = randomUUID()
+    const turnCount = (context?.turnCount ?? 0) + 1
+    const workingEvents = result.proposal.result === 'proposal'
+      ? result.proposal.events
+      : (context?.events ?? [])
     sendJson(response, 200, {
       ...result,
       proposalId,
@@ -156,6 +194,15 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         ownerId: env.ownerId,
         events: result.proposal.events,
       }),
+      contextToken: signPlannerContext({
+        ownerId: env.ownerId,
+        turnCount,
+        status: result.proposal.result,
+        assistantMessage: result.proposal.message,
+        events: workingEvents,
+        warnings: result.proposal.warnings,
+      }),
+      turnsRemaining: PLANNER_CONTEXT_MAX_TURNS - turnCount,
       timezone: settings.timezone,
     })
   } catch (error) {

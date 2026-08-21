@@ -406,7 +406,7 @@ function AuthenticatedApp({ user, onLogout }: {
       </main>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
-      {chatOpen && <AssistantPanel close={() => setChatOpen(false)} save={savePlannedEvents} />}
+      <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />
       {selectedEvent && <EventDetailModal event={selectedEvent} close={() => setSelectedEvent(null)} />}
       {modalOpen && (
         <EventModal
@@ -954,10 +954,12 @@ function proposalDatePart(
 function useDialogAccessibility(
   dialogRef: { current: HTMLElement | null },
   close: () => void,
+  active = true,
 ) {
   const closeRef = useRef(close)
   closeRef.current = close
   useEffect(() => {
+    if (!active) return
     const previouslyFocused = document.activeElement instanceof HTMLElement
       ? document.activeElement
       : null
@@ -1001,53 +1003,101 @@ function useDialogAccessibility(
       document.body.style.overflow = previousOverflow
       previouslyFocused?.focus()
     }
-  }, [dialogRef])
+  }, [active, dialogRef])
 }
 
-function AssistantPanel({ close, save }: {
+type PlannerChatTurn = {
+  id: string
+  userText: string
+  hadImage: boolean
+  proposal: PlannerProposal
+  model: string
+  timezone: string
+}
+
+function AssistantPanel({ open, close, save }: {
+  open: boolean
   close: () => void
   save: (events: PlannedEvent[], requestId: string, proposalToken: string) => Promise<void>
 }) {
   const panelRef = useRef<HTMLElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  useDialogAccessibility(panelRef, close)
+  const conversationEndRef = useRef<HTMLDivElement>(null)
+  useDialogAccessibility(panelRef, close, open)
   const [text, setText] = useState('')
-  const [submittedText, setSubmittedText] = useState('')
   const [image, setImage] = useState<PlannerImageAttachment | null>(null)
-  const [submittedImage, setSubmittedImage] = useState<string | null>(null)
+  const [turns, setTurns] = useState<PlannerChatTurn[]>([])
+  const [pendingText, setPendingText] = useState('')
+  const [pendingHadImage, setPendingHadImage] = useState(false)
+  const [contextToken, setContextToken] = useState<string | null>(null)
+  const [turnsRemaining, setTurnsRemaining] = useState(8)
   const [proposal, setProposal] = useState<PlannerProposal | null>(null)
   const [proposalId, setProposalId] = useState<string | null>(null)
   const [proposalToken, setProposalToken] = useState<string | null>(null)
-  const [model, setModel] = useState<string | null>(null)
-  const [timezone, setTimezone] = useState('UTC')
   const [loading, setLoading] = useState(false)
   const [processingImage, setProcessingImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const submit = async () => {
-    const message = text.trim()
-    if ((!message && !image) || loading || processingImage) return
-    setSubmittedText(message || 'Extract events from this screenshot')
-    setSubmittedImage(image?.previewUrl ?? null)
+  useEffect(() => {
+    if (!open) return
+    conversationEndRef.current?.scrollIntoView({
+      behavior: turns.length ? 'smooth' : 'auto',
+      block: 'end',
+    })
+  }, [loading, open, turns.length])
+
+  const resetSession = () => {
+    setText('')
+    setImage(null)
+    setTurns([])
+    setPendingText('')
+    setPendingHadImage(false)
+    setContextToken(null)
+    setTurnsRemaining(8)
     setProposal(null)
     setProposalId(null)
     setProposalToken(null)
+    setSaving(false)
+    setError(null)
+  }
+
+  const submit = async () => {
+    const message = text.trim()
+    if ((!message && !image) || loading || processingImage) return
+    const userText = message || 'Extract events from this screenshot'
+    const hadImage = Boolean(image)
+    setPendingText(userText)
+    setPendingHadImage(hadImage)
     setError(null)
     setLoading(true)
     try {
-      const result = await proposeEvents(message, image ?? undefined)
+      const result = await proposeEvents(
+        message,
+        image ?? undefined,
+        contextToken ?? undefined,
+      )
       setProposal(result.proposal)
       setProposalId(result.proposalId)
       setProposalToken(result.proposalToken)
-      setModel(result.model)
-      setTimezone(result.timezone)
+      setContextToken(result.contextToken)
+      setTurnsRemaining(result.turnsRemaining)
+      setTurns((current) => [...current, {
+        id: crypto.randomUUID(),
+        userText,
+        hadImage,
+        proposal: result.proposal,
+        model: result.model,
+        timezone: result.timezone,
+      }].slice(-8))
       setImage(null)
       setText('')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to prepare this event')
     } finally {
       setLoading(false)
+      setPendingText('')
+      setPendingHadImage(false)
     }
   }
 
@@ -1071,37 +1121,44 @@ function AssistantPanel({ close, save }: {
     setError(null)
     try {
       await save(proposal.events, proposalId, proposalToken)
+      resetSession()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save proposed events')
       setSaving(false)
     }
   }
 
+  if (!open) return null
+
   return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
-    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>Powered by Vercel AI Gateway</span></div><button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div>
+    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>{contextToken ? `${turnsRemaining} turns remaining` : 'Powered by Vercel AI Gateway'}</span></div><div className="assistant-header-actions">{contextToken && <button type="button" className="new-plan-button" disabled={loading || saving || processingImage} onClick={resetSession}>New plan</button>}<button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div></div>
     <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar proposal' : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
-      <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
-      {submittedText && <div className="user-message">{submittedImage && <img src={submittedImage} alt="Submitted calendar screenshot"/>}<span>{submittedText}</span></div>}
+      {!turns.length && !pendingText && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>}
+      {turns.map((turn, index) => <div className="planner-turn" key={turn.id}>
+        <div className="user-message">{turn.hadImage && <span className="processed-screenshot"><ImagePlus size={14}/>Screenshot processed</span>}<span>{turn.userText}</span></div>
+        <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
+          <p>{turn.proposal.message}</p>
+          {turn.proposal.events.length > 0 && <div className="proposal-events">{turn.proposal.events.map((event, eventIndex) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${eventIndex}`}><div className="parsed-date"><b>{proposalDatePart(event, turn.timezone, 'day')}</b><span>{proposalDatePart(event, turn.timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, turn.timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
+          {turn.proposal.warnings.length > 0 && <ul className="proposal-warnings">{turn.proposal.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+          {turn.proposal.result === 'proposal' && <div className="chat-actions"><span>{index === turns.length - 1 && !loading ? turn.model.replace('openai/', '') : 'Superseded'}</span>{index === turns.length - 1 && !loading && <button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={15}/>{saving ? 'Adding…' : `Add ${turn.proposal.events.length} event${turn.proposal.events.length === 1 ? '' : 's'}`}</button>}</div>}
+        </div></div>
+      </div>)}
+      {pendingText && <div className="user-message">{pendingHadImage && <span className="processed-screenshot"><ImagePlus size={14}/>Processing screenshot</span>}<span>{pendingText}</span></div>}
       {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={14}/></div><div><p>Preparing a structured calendar proposal…</p></div></div>}
-      {proposal && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
-        <p>{proposal.message}</p>
-        {proposal.events.length > 0 && <div className="proposal-events">{proposal.events.map((event, index) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${index}`}><div className="parsed-date"><b>{proposalDatePart(event, timezone, 'day')}</b><span>{proposalDatePart(event, timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
-        {proposal.warnings.length > 0 && <ul className="proposal-warnings">{proposal.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-        {proposal.result === 'proposal' && <div className="chat-actions"><span>{model?.replace('openai/', '')}</span><button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={15}/>{saving ? 'Adding…' : `Add ${proposal.events.length} event${proposal.events.length === 1 ? '' : 's'}`}</button></div>}
-      </div></div>}
       {error && <div className="assistant-error" role="alert">{error}</div>}
+      <div ref={conversationEndRef}/>
     </div>
     <div className="assistant-input">
       {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => setImage(null)} aria-label="Remove screenshot"><X size={14}/></button></div>}
-      <textarea aria-label="AI planner request" maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
+      <textarea aria-label="AI planner request" maxLength={contextToken ? 4000 : 12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={contextToken ? 'Refine this plan or answer the clarification…' : image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={(event) => {
         void attachScreenshot(event.target.files?.[0])
         event.target.value = ''
       }}/>
       <div className="assistant-input-actions">
-        <button type="button" className="attach-screenshot" disabled={loading || processingImage} onClick={() => fileInputRef.current?.click()} aria-label="Attach calendar screenshot">{processingImage ? <LoaderCircle size={17}/> : <ImagePlus size={17}/>}</button>
-        <span>Images are processed before upload. Review every detail before saving.</span>
+        <button type="button" className="attach-screenshot" disabled={Boolean(contextToken) || loading || processingImage} onClick={() => fileInputRef.current?.click()} aria-label={contextToken ? 'Start a new plan to attach another screenshot' : 'Attach calendar screenshot'} title={contextToken ? 'Start a new plan to attach another screenshot' : undefined}>{processingImage ? <LoaderCircle size={17}/> : <ImagePlus size={17}/>}</button>
+        <span>{contextToken ? 'Follow-ups use the latest event state, not the original image.' : 'Images are processed once and discarded after extraction.'}</span>
         <button type="button" className="send-planner-request" disabled={(!text.trim() && !image) || loading || processingImage} onClick={() => void submit()} aria-label="Prepare calendar proposal"><ChevronRight size={19}/></button>
       </div>
     </div>
