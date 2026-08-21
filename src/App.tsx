@@ -19,9 +19,8 @@ import {
 import {
   disconnectGoogleCalendar,
   loadGoogleCalendars,
-  loadIntegrations,
-  type Integration,
 } from './integrations'
+import { loadFamilyMembers, type FamilyMember } from './family'
 import { loadSession, login, logout, type SessionUser } from './auth'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
@@ -444,7 +443,7 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
 }
 
 function IntegrationsPage() {
-  const [integration, setIntegration] = useState<Integration | null>(null)
+  const [members, setMembers] = useState<FamilyMember[]>([])
   const [calendarCounts, setCalendarCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [workingAccountId, setWorkingAccountId] = useState<string | null>(null)
@@ -457,10 +456,9 @@ function IntegrationsPage() {
   const refresh = async () => {
     setLoading(true)
     try {
-      const data = await loadIntegrations()
-      const google = data.integrations.find((item) => item.id === 'google-calendar') ?? null
-      setIntegration(google)
-      if (google?.status === 'connected') {
+      const data = await loadFamilyMembers()
+      setMembers(data.members)
+      if (data.members.some((member) => member.integrations.length > 0)) {
         const calendarData = await loadGoogleCalendars()
         setCalendarCounts(calendarData.calendars.reduce<Record<string, number>>((counts, calendar) => {
           counts[calendar.accountId] = (counts[calendar.accountId] ?? 0) + 1
@@ -494,27 +492,35 @@ function IntegrationsPage() {
     }
   }
 
-  const connected = integration?.status === 'connected'
-  const accounts = integration?.accounts ?? []
   return <div className="page">
-    <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Connect the services your family already uses.</p></div></div>
+    <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Manage calendar accounts under each family member.</p></div></div>
     <div className="integration-notice"><div><Sparkles size={19}/><span><b>Secure by design</b> Provider credentials and OAuth tokens stay on the server and are never sent to this browser.</span></div></div>
     {error && <div className="integration-error" role="alert">{error}<button onClick={() => { setError(null); void refresh() }}>Retry</button></div>}
-    <div className="integration-grid single">
-      <div className="integration-card">
-        <div className="integration-icon google">G</div>
-        <div className="integration-copy">
-          <h3>{integration?.name ?? 'Google Calendar'}</h3>
-          <p>{integration?.description ?? 'Read personal and shared calendars from Google.'}</p>
-          {connected && <div className="integration-accounts">
+    {loading && !members.length
+      ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family calendars</div>
+      : <div className="member-integration-list">
+      {members.map((member) => {
+        const accounts = member.integrations.filter((item) => item.provider === 'google-calendar')
+        const initials = member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+        return <section className="member-integration-card" key={member.id}>
+          <div className={`member-avatar ${member.color}`}>{initials}</div>
+          <div className="member-integration-heading">
+            <h2>{member.name}</h2>
+            <p>{member.email || member.role}</p>
+          </div>
+          <a className="connect-btn" href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}><Plus size={13}/>Add Google account</a>
+          <div className="member-integration-accounts">
+            {!accounts.length && <div className="member-integration-empty">No calendar integrations connected.</div>}
             {accounts.map((account) => {
               const accountName = account.email || account.displayName || 'Google account'
               const calendarCount = calendarCounts[account.id]
-              return <div className="integration-account" key={account.id}>
+              return <div className="member-integration-account" key={account.id}>
+                <div className="integration-icon google">G</div>
                 <div>
                   <b>{accountName}</b>
                   <span>{calendarCount === undefined ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
                 </div>
+                <span className="connected"><Check size={13}/>Connected</span>
                 <button
                   className="disconnect-btn"
                   disabled={workingAccountId !== null}
@@ -522,27 +528,50 @@ function IntegrationsPage() {
                 >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
               </div>
             })}
-          </div>}
-        </div>
-        <div className="integration-action">
-          {loading
-            ? <span className="integration-loading"><LoaderCircle size={16}/>Loading</span>
-            : connected
-              ? <><span className="connected"><Check size={13}/>{accounts.length} connected</span><a className="connect-btn" href="/api/integrations/google/authorize"><Plus size={13}/>Add account</a></>
-              : <a className="connect-btn" href="/api/integrations/google/authorize">Connect Google Calendar</a>}
-        </div>
-      </div>
-    </div>
-    <p className="integration-footnote">Google access is read-only. Disconnecting revokes the grant and deletes the stored token.</p>
+          </div>
+        </section>
+      })}
+    </div>}
+    <p className="integration-footnote">Google access is read-only. Disconnecting revokes that account’s grant and deletes its stored token.</p>
   </div>
 }
 
 function FamilyPage() {
-  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Manage people, calendars, and access.</p></div><button className="add-btn"><Plus size={18}/>Invite member</button></div>
-    <div className="family-grid">
-      {[['AK','Alex Karaman','alex@karaman.family','Administrator','blue'],['MK','Maya Karaman','maya@karaman.family','Parent','coral'],['LK','Leo Karaman','Child profile','View only','green']].map(([initials,name,email,role,color]) => <div className="member-card" key={name}><div className={`member-avatar ${color}`}>{initials}</div><h3>{name}</h3><p>{email}</p><span>{role}</span><div className="member-divider"/><div className="member-meta"><span><i className={`dot ${color}`}/>Calendar visible</span><button><MoreHorizontal size={18}/></button></div></div>)}
+  const [members, setMembers] = useState<FamilyMember[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    loadFamilyMembers()
+      .then((data) => setMembers(data.members))
+      .catch((requestError: unknown) => {
+        setError(requestError instanceof Error ? requestError.message : 'Unable to load family members')
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
+  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><button className="add-btn"><Plus size={18}/>Invite member</button></div>
+    {error && <div className="integration-error" role="alert">{error}</div>}
+    {loading
+      ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family members</div>
+      : <div className="family-grid">
+      {members.map((member) => {
+        const initials = member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
+        return <div className="member-card" key={member.id}>
+          <div className={`member-avatar ${member.color}`}>{initials}</div>
+          <h3>{member.name}</h3>
+          <p>{member.email || 'Child profile'}</p>
+          <span>{member.role}</span>
+          <div className="member-calendar-integrations">
+            {member.integrations.map((integration) => <div key={integration.id}><i className="integration-icon google">G</i><span>{integration.email || integration.displayName || integration.providerName}</span></div>)}
+            <a href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}><Plus size={12}/>Add calendar account</a>
+          </div>
+          <div className="member-divider"/>
+          <div className="member-meta"><span><i className={`dot ${member.color}`}/>{member.integrations.length} calendar integration{member.integrations.length === 1 ? '' : 's'}</span><button><MoreHorizontal size={18}/></button></div>
+        </div>
+      })}
       <button className="invite-card"><div><Plus size={23}/></div><b>Add family member</b><span>Invite someone to your shared calendar</span></button>
-    </div>
+    </div>}
   </div>
 }
 

@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless'
 
 export type IntegrationAccountRow = {
   owner_id: string
+  member_id: string
   provider: string
   status: 'connected' | 'error'
   external_account_id: string
@@ -11,6 +12,16 @@ export type IntegrationAccountRow = {
   encrypted_credentials: string
   connected_at: string
   updated_at: string
+}
+
+export type FamilyMemberRow = {
+  owner_id: string
+  id: string
+  display_name: string
+  email: string | null
+  role: string
+  color: string
+  sort_order: number
 }
 
 export type StoredCredentials = {
@@ -27,7 +38,7 @@ function database(databaseUrl: string) {
 export async function listIntegrationAccounts(databaseUrl: string, ownerId: string) {
   const sql = database(databaseUrl)
   const rows = await sql.query(
-    `SELECT owner_id, provider, status, external_account_id, display_name,
+    `SELECT owner_id, member_id, provider, status, external_account_id, display_name,
             account_email, scopes, connected_at, updated_at
        FROM integration_accounts
       WHERE owner_id = $1
@@ -45,7 +56,7 @@ export async function getIntegrationAccount(
 ) {
   const sql = database(databaseUrl)
   const rows = await sql.query(
-    `SELECT owner_id, provider, status, external_account_id, display_name,
+    `SELECT owner_id, member_id, provider, status, external_account_id, display_name,
             account_email, scopes, encrypted_credentials, connected_at, updated_at
        FROM integration_accounts
       WHERE owner_id = $1
@@ -65,7 +76,7 @@ export async function listIntegrationAccountsWithCredentials(
 ) {
   const sql = database(databaseUrl)
   const rows = await sql.query(
-    `SELECT owner_id, provider, status, external_account_id, display_name,
+    `SELECT owner_id, member_id, provider, status, external_account_id, display_name,
             account_email, scopes, encrypted_credentials, connected_at, updated_at
        FROM integration_accounts
       WHERE owner_id = $1 AND provider = $2
@@ -82,10 +93,11 @@ export async function upsertIntegrationAccount(
   const sql = database(databaseUrl)
   await sql.query(
     `INSERT INTO integration_accounts (
-       owner_id, provider, status, external_account_id, display_name,
+       owner_id, member_id, provider, status, external_account_id, display_name,
        account_email, scopes, encrypted_credentials
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9)
      ON CONFLICT (owner_id, provider, external_account_id) DO UPDATE SET
+       member_id = EXCLUDED.member_id,
        status = EXCLUDED.status,
        display_name = EXCLUDED.display_name,
        account_email = EXCLUDED.account_email,
@@ -94,6 +106,7 @@ export async function upsertIntegrationAccount(
        updated_at = NOW()`,
     [
       account.owner_id,
+      account.member_id,
       account.provider,
       account.status,
       account.external_account_id,
@@ -139,13 +152,14 @@ export async function createOAuthState(
   databaseUrl: string,
   stateHash: string,
   ownerId: string,
+  memberId: string,
 ) {
   const sql = database(databaseUrl)
   await sql.query('DELETE FROM oauth_states WHERE expires_at < NOW()')
   await sql.query(
-    `INSERT INTO oauth_states (state_hash, owner_id, provider, expires_at)
-     VALUES ($1, $2, 'google-calendar', NOW() + INTERVAL '10 minutes')`,
-    [stateHash, ownerId],
+    `INSERT INTO oauth_states (state_hash, owner_id, provider, member_id, expires_at)
+     VALUES ($1, $2, 'google-calendar', $3, NOW() + INTERVAL '10 minutes')`,
+    [stateHash, ownerId, memberId],
   )
 }
 
@@ -161,8 +175,50 @@ export async function consumeOAuthState(
         AND owner_id = $2
         AND provider = 'google-calendar'
         AND expires_at > NOW()
-    RETURNING state_hash`,
+    RETURNING member_id`,
     [stateHash, ownerId],
   )
-  return rows.length === 1
+  return rows[0]?.member_id as string | undefined
+}
+
+export async function ensureDefaultFamilyMembers(databaseUrl: string, ownerId: string) {
+  const sql = database(databaseUrl)
+  await sql.query(
+    `INSERT INTO family_members (
+       owner_id, id, display_name, email, role, color, sort_order
+     ) VALUES
+       ($1, 'alex', 'Alex Karaman', 'alex@karaman.family', 'Administrator', 'blue', 1),
+       ($1, 'maya', 'Maya Karaman', 'maya@karaman.family', 'Parent', 'coral', 2),
+       ($1, 'leo', 'Leo Karaman', NULL, 'View only', 'green', 3)
+     ON CONFLICT (owner_id, id) DO NOTHING`,
+    [ownerId],
+  )
+}
+
+export async function getFamilyMember(
+  databaseUrl: string,
+  ownerId: string,
+  memberId: string,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `SELECT owner_id, id, display_name, email, role, color, sort_order
+       FROM family_members
+      WHERE owner_id = $1 AND id = $2
+      LIMIT 1`,
+    [ownerId, memberId],
+  ) as FamilyMemberRow[]
+  return rows[0]
+}
+
+export async function listFamilyMembers(databaseUrl: string, ownerId: string) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `SELECT owner_id, id, display_name, email, role, color, sort_order
+       FROM family_members
+      WHERE owner_id = $1
+      ORDER BY sort_order, display_name`,
+    [ownerId],
+  )
+  return rows as FamilyMemberRow[]
 }

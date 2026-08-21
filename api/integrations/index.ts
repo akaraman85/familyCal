@@ -22,6 +22,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
             : 'disconnected',
           accounts: providerAccounts.map((account) => ({
             id: account.external_account_id,
+            memberId: account.member_id,
             displayName: account.display_name,
             email: account.account_email,
             scopes: account.scopes,

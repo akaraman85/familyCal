@@ -52,12 +52,12 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new Error('Invalid Google OAuth callback state')
     }
 
-    const validState = await consumeOAuthState(
+    const memberId = await consumeOAuthState(
       env.databaseUrl,
       hashState(state),
       env.ownerId,
     )
-    if (!validState) throw new Error('Google OAuth state is invalid or expired')
+    if (!memberId) throw new Error('Google OAuth state is invalid or expired')
 
     const token = await exchangeGoogleCode({
       appUrl: env.appUrl,
@@ -81,6 +81,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
     await upsertIntegrationAccount(env.databaseUrl, {
       owner_id: env.ownerId,
+      member_id: memberId,
       provider: GOOGLE_CALENDAR_PROVIDER_ID,
       status: 'connected',
       external_account_id: user.sub,
