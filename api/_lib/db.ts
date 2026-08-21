@@ -41,6 +41,27 @@ export async function getIntegrationAccount(
   databaseUrl: string,
   ownerId: string,
   provider: string,
+  externalAccountId?: string,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `SELECT owner_id, provider, status, external_account_id, display_name,
+            account_email, scopes, encrypted_credentials, connected_at, updated_at
+       FROM integration_accounts
+      WHERE owner_id = $1
+        AND provider = $2
+        AND ($3::text IS NULL OR external_account_id = $3)
+      ORDER BY connected_at
+      LIMIT 1`,
+    [ownerId, provider, externalAccountId ?? null],
+  ) as IntegrationAccountRow[]
+  return rows[0]
+}
+
+export async function listIntegrationAccountsWithCredentials(
+  databaseUrl: string,
+  ownerId: string,
+  provider: string,
 ) {
   const sql = database(databaseUrl)
   const rows = await sql.query(
@@ -48,10 +69,10 @@ export async function getIntegrationAccount(
             account_email, scopes, encrypted_credentials, connected_at, updated_at
        FROM integration_accounts
       WHERE owner_id = $1 AND provider = $2
-      LIMIT 1`,
+      ORDER BY connected_at`,
     [ownerId, provider],
-  ) as IntegrationAccountRow[]
-  return rows[0]
+  )
+  return rows as IntegrationAccountRow[]
 }
 
 export async function upsertIntegrationAccount(
@@ -64,9 +85,8 @@ export async function upsertIntegrationAccount(
        owner_id, provider, status, external_account_id, display_name,
        account_email, scopes, encrypted_credentials
      ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8)
-     ON CONFLICT (owner_id, provider) DO UPDATE SET
+     ON CONFLICT (owner_id, provider, external_account_id) DO UPDATE SET
        status = EXCLUDED.status,
-       external_account_id = EXCLUDED.external_account_id,
        display_name = EXCLUDED.display_name,
        account_email = EXCLUDED.account_email,
        scopes = EXCLUDED.scopes,
@@ -89,14 +109,15 @@ export async function updateEncryptedCredentials(
   databaseUrl: string,
   ownerId: string,
   provider: string,
+  externalAccountId: string,
   encryptedCredentials: string,
 ) {
   const sql = database(databaseUrl)
   await sql.query(
     `UPDATE integration_accounts
-        SET encrypted_credentials = $3, status = 'connected', updated_at = NOW()
-      WHERE owner_id = $1 AND provider = $2`,
-    [ownerId, provider, encryptedCredentials],
+        SET encrypted_credentials = $4, status = 'connected', updated_at = NOW()
+      WHERE owner_id = $1 AND provider = $2 AND external_account_id = $3`,
+    [ownerId, provider, externalAccountId, encryptedCredentials],
   )
 }
 
@@ -104,11 +125,13 @@ export async function deleteIntegrationAccount(
   databaseUrl: string,
   ownerId: string,
   provider: string,
+  externalAccountId: string,
 ) {
   const sql = database(databaseUrl)
   await sql.query(
-    'DELETE FROM integration_accounts WHERE owner_id = $1 AND provider = $2',
-    [ownerId, provider],
+    `DELETE FROM integration_accounts
+      WHERE owner_id = $1 AND provider = $2 AND external_account_id = $3`,
+    [ownerId, provider, externalAccountId],
   )
 }
 

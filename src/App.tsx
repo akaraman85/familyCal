@@ -445,9 +445,9 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
 
 function IntegrationsPage() {
   const [integration, setIntegration] = useState<Integration | null>(null)
-  const [calendarCount, setCalendarCount] = useState<number | null>(null)
+  const [calendarCounts, setCalendarCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
-  const [working, setWorking] = useState(false)
+  const [workingAccountId, setWorkingAccountId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(() => (
     new URLSearchParams(window.location.search).get('status') === 'error'
       ? 'Google Calendar could not be connected. Please try again.'
@@ -462,9 +462,12 @@ function IntegrationsPage() {
       setIntegration(google)
       if (google?.status === 'connected') {
         const calendarData = await loadGoogleCalendars()
-        setCalendarCount(calendarData.calendars.length)
+        setCalendarCounts(calendarData.calendars.reduce<Record<string, number>>((counts, calendar) => {
+          counts[calendar.accountId] = (counts[calendar.accountId] ?? 0) + 1
+          return counts
+        }, {}))
       } else {
-        setCalendarCount(null)
+        setCalendarCounts({})
       }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to load integrations')
@@ -477,21 +480,22 @@ function IntegrationsPage() {
     void refresh()
   }, [])
 
-  const disconnect = async () => {
-    if (!window.confirm('Disconnect Google Calendar and revoke access?')) return
-    setWorking(true)
+  const disconnect = async (accountId: string, accountName: string) => {
+    if (!window.confirm(`Disconnect ${accountName} and revoke its Google Calendar access?`)) return
+    setWorkingAccountId(accountId)
     setError(null)
     try {
-      await disconnectGoogleCalendar()
+      await disconnectGoogleCalendar(accountId)
       await refresh()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to disconnect')
     } finally {
-      setWorking(false)
+      setWorkingAccountId(null)
     }
   }
 
   const connected = integration?.status === 'connected'
+  const accounts = integration?.accounts ?? []
   return <div className="page">
     <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Connect the services your family already uses.</p></div></div>
     <div className="integration-notice"><div><Sparkles size={19}/><span><b>Secure by design</b> Provider credentials and OAuth tokens stay on the server and are never sent to this browser.</span></div></div>
@@ -502,16 +506,29 @@ function IntegrationsPage() {
         <div className="integration-copy">
           <h3>{integration?.name ?? 'Google Calendar'}</h3>
           <p>{integration?.description ?? 'Read personal and shared calendars from Google.'}</p>
-          {connected && <div className="integration-account">
-            <b>{integration.account?.email || integration.account?.displayName || 'Google account'}</b>
-            <span>{calendarCount === null ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
+          {connected && <div className="integration-accounts">
+            {accounts.map((account) => {
+              const accountName = account.email || account.displayName || 'Google account'
+              const calendarCount = calendarCounts[account.id]
+              return <div className="integration-account" key={account.id}>
+                <div>
+                  <b>{accountName}</b>
+                  <span>{calendarCount === undefined ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
+                </div>
+                <button
+                  className="disconnect-btn"
+                  disabled={workingAccountId !== null}
+                  onClick={() => void disconnect(account.id, accountName)}
+                >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
+              </div>
+            })}
           </div>}
         </div>
         <div className="integration-action">
           {loading
             ? <span className="integration-loading"><LoaderCircle size={16}/>Loading</span>
             : connected
-              ? <><span className="connected"><Check size={13}/>Connected</span><button className="disconnect-btn" disabled={working} onClick={() => void disconnect()}>{working ? 'Disconnecting…' : 'Disconnect'}</button></>
+              ? <><span className="connected"><Check size={13}/>{accounts.length} connected</span><a className="connect-btn" href="/api/integrations/google/authorize"><Plus size={13}/>Add account</a></>
               : <a className="connect-btn" href="/api/integrations/google/authorize">Connect Google Calendar</a>}
         </div>
       </div>

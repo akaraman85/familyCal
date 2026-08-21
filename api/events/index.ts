@@ -4,7 +4,7 @@ import {
   type CalendarEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
-import { getIntegrationAccount } from '../_lib/db.js'
+import { listIntegrationAccountsWithCredentials } from '../_lib/db.js'
 import { integrationEnv } from '../_lib/env.js'
 import {
   errorMessage,
@@ -66,27 +66,31 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
     )
     let googleEvents: CalendarEvent[] = []
     let googleStatus: 'ok' | 'disconnected' | 'error' = 'disconnected'
-    const googleAccount = await getIntegrationAccount(
+    const googleAccounts = await listIntegrationAccountsWithCredentials(
       env.databaseUrl,
       env.ownerId,
       GOOGLE_CALENDAR_PROVIDER_ID,
     )
 
-    if (googleAccount) {
-      try {
-        const accessToken = await getGoogleAccessToken({
-          databaseUrl: env.databaseUrl,
-          encryptionKey: env.encryptionKey,
-          ownerId: env.ownerId,
-          clientId: env.googleClientId,
-          clientSecret: env.googleClientSecret,
-        })
-        googleEvents = await listAllGoogleEvents(accessToken, timeMin, timeMax)
-        googleStatus = 'ok'
-      } catch (error) {
-        googleStatus = 'error'
-        console.error('Unable to load Google Calendar events', error)
+    if (googleAccounts.length) {
+      googleStatus = 'ok'
+      const eventsById = new Map<string, CalendarEvent>()
+      for (const account of googleAccounts) {
+        try {
+          const accessToken = await getGoogleAccessToken({
+            databaseUrl: env.databaseUrl,
+            encryptionKey: env.encryptionKey,
+            clientId: env.googleClientId,
+            clientSecret: env.googleClientSecret,
+          }, account)
+          const accountEvents = await listAllGoogleEvents(accessToken, timeMin, timeMax)
+          for (const event of accountEvents) eventsById.set(event.id, event)
+        } catch (error) {
+          googleStatus = 'error'
+          console.error(`Unable to load Google Calendar events for ${account.external_account_id}`, error)
+        }
       }
+      googleEvents = [...eventsById.values()]
     }
 
     const events = [...savedEvents, ...googleEvents]

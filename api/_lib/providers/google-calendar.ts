@@ -1,7 +1,7 @@
 import { decryptJson, encryptJson } from '../crypto.js'
 import {
-  getIntegrationAccount,
   updateEncryptedCredentials,
+  type IntegrationAccountRow,
   type StoredCredentials,
 } from '../db.js'
 import type { CalendarEvent } from '../events.js'
@@ -75,7 +75,7 @@ export function buildGoogleAuthorizationUrl(config: GoogleProviderConfig, state:
     redirect_uri: googleRedirectUri(config.appUrl),
     response_type: 'code',
     access_type: 'offline',
-    prompt: 'consent',
+    prompt: 'select_account consent',
     include_granted_scopes: 'true',
     scope: GOOGLE_CALENDAR_SCOPES.join(' '),
     state,
@@ -138,17 +138,9 @@ export async function getGoogleUserInfo(accessToken: string) {
 export async function getGoogleAccessToken(config: {
   databaseUrl: string
   encryptionKey: string
-  ownerId: string
   clientId: string
   clientSecret: string
-}) {
-  const account = await getIntegrationAccount(
-    config.databaseUrl,
-    config.ownerId,
-    GOOGLE_CALENDAR_PROVIDER_ID,
-  )
-  if (!account) throw new Error('Google Calendar is not connected')
-
+}, account: IntegrationAccountRow) {
   const credentials = decryptJson<StoredCredentials>(
     account.encrypted_credentials,
     config.encryptionKey,
@@ -165,8 +157,9 @@ export async function getGoogleAccessToken(config: {
   const refreshed = credentialsFromGoogleToken(token, credentials.refreshToken)
   await updateEncryptedCredentials(
     config.databaseUrl,
-    config.ownerId,
+    account.owner_id,
     GOOGLE_CALENDAR_PROVIDER_ID,
+    account.external_account_id,
     encryptJson(refreshed, config.encryptionKey),
   )
   return refreshed.accessToken
