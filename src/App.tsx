@@ -92,10 +92,10 @@ function toEventItem(event: CalendarEventData): EventItem {
   }
 }
 
-const TIMELINE_START_MINUTES = 8 * 60
-const TIMELINE_END_MINUTES = 22 * 60
+const TIMELINE_START_MINUTES = 7 * 60
+const TIMELINE_END_MINUTES = 23 * 60
 const TIMELINE_HEIGHT = 504
-const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20]
+const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
 
 function timelinePosition(event: EventItem) {
   if (event.allDay) return null

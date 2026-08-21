@@ -114,11 +114,11 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
 .week-head span { text-transform:uppercase; font-size:8px; color:#999; font-weight:700; }
 .week-head b { font-size:14px; width:25px; height:25px; display:grid; place-items:center; border-radius:50%; }
 .week-head .current b { background:var(--orange); color:white; }
-.week-all-day { min-height:38px;display:grid;grid-template-columns:56px repeat(7,1fr);border-bottom:1px solid var(--line);font-size:8px;color:#999; }
+.week-all-day { min-height:42px;display:grid;grid-template-columns:56px repeat(7,1fr);border-bottom:1px solid var(--line);background:#fdfcf9;font-size:8px;color:#999; }
 .week-all-day > span { display:flex;align-items:center;justify-content:center;text-transform:uppercase;font-size:7px; }
 .week-all-day > div { border-left:1px solid #efede9;padding:4px;min-width:0; }
 .all-day-event { min-height:26px;border-left:3px solid;border-radius:5px;padding:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:8px;font-weight:600; }
-.week-body { height:504px; display:grid; grid-template-columns:56px repeat(7,1fr); position:relative; background:repeating-linear-gradient(to bottom, transparent 0, transparent 71px, #efede9 72px); }
+.week-body { height:504px; display:grid; grid-template-columns:56px repeat(7,1fr); position:relative; background:repeating-linear-gradient(to bottom, transparent 0, transparent 62px, #efede9 63px);background-position-y:31.5px; }
 .times { position:relative;font-size:8px;color:#a1a4a1; }
 .times span { position:absolute;left:0;right:0;text-align:center;transform:translateY(-5px); }
 .week-column { position:relative; border-left:1px solid #efede9; }
@@ -127,7 +127,7 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
 .week-event span { opacity:.7; margin-top:3px; }
 
 .day-view { max-height:550px;overflow:auto; }
-.day-all-day { min-height:42px;display:grid;grid-template-columns:75px 1fr;border-bottom:1px solid var(--line); }
+.day-all-day { min-height:42px;display:grid;grid-template-columns:75px 1fr;border-bottom:1px solid var(--line);background:#fdfcf9; }
 .day-all-day > span { display:flex;align-items:center;justify-content:flex-end;padding-right:10px;text-transform:uppercase;color:#999;font-size:7px; }
 .day-all-day > div { border-left:1px solid #efede9;padding:6px;display:flex;flex-wrap:wrap;gap:5px; }
 .day-timed { height:504px;position:relative;padding-left:75px; }
