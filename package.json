@@ -8,6 +8,7 @@
     "dev": "vite",
     "dev:full": "npx --yes vercel@latest dev",
     "build": "tsc -b && vite build",
+    "vercel-build": "node scripts/vercel-build.mjs",
     "db:migrate": "node scripts/migrate.mjs",
     "preview": "vite preview",
     "lint": "tsc -b --pretty false"
