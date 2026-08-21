@@ -7,6 +7,7 @@ import {
 } from '../../_lib/db.js'
 import { integrationEnv } from '../../_lib/env.js'
 import {
+  readJsonBody,
   requireMethod,
   requireSameOrigin,
   sendJson,
@@ -25,11 +26,17 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   try {
     const env = integrationEnv()
     if (!requireSameOrigin(request, response, env.appUrl)) return
+    const body = await readJsonBody(request) as { accountId?: unknown }
+    if (typeof body.accountId !== 'string' || !body.accountId) {
+      sendJson(response, 400, { error: 'Google account is required' })
+      return
+    }
 
     const account = await getIntegrationAccount(
       env.databaseUrl,
       env.ownerId,
       GOOGLE_CALENDAR_PROVIDER_ID,
+      body.accountId,
     )
     if (account) {
       const credentials = decryptJson<StoredCredentials>(
@@ -41,6 +48,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         env.databaseUrl,
         env.ownerId,
         GOOGLE_CALENDAR_PROVIDER_ID,
+        account.external_account_id,
       )
     }
 

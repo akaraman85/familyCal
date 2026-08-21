@@ -11,21 +11,24 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   try {
     const env = integrationEnv()
     const accounts = await listIntegrationAccounts(env.databaseUrl, env.ownerId)
-    const accountByProvider = new Map(accounts.map((account) => [account.provider, account]))
 
     sendJson(response, 200, {
       integrations: Object.values(integrationProviders).map((provider) => {
-        const account = accountByProvider.get(provider.id)
+        const providerAccounts = accounts.filter((account) => account.provider === provider.id)
         return {
           ...provider,
-          status: account?.status ?? 'disconnected',
-          account: account ? {
+          status: providerAccounts.some((account) => account.status === 'connected')
+            ? 'connected'
+            : 'disconnected',
+          accounts: providerAccounts.map((account) => ({
+            id: account.external_account_id,
+            memberId: account.member_id,
             displayName: account.display_name,
             email: account.account_email,
             scopes: account.scopes,
             connectedAt: account.connected_at,
             updatedAt: account.updated_at,
-          } : null,
+          })),
         }
       }),
     })

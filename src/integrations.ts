@@ -6,13 +6,15 @@ export type Integration = {
   description: string
   capabilities: string[]
   status: IntegrationStatus
-  account: {
+  accounts: Array<{
+    id: string
+    memberId: string | null
     displayName: string | null
     email: string | null
     scopes: string[]
     connectedAt: string
     updatedAt: string
-  } | null
+  }>
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -36,6 +38,7 @@ export async function loadGoogleCalendars() {
   })
   return responseJson<{
     calendars: Array<{
+      accountId: string
       id: string
       name: string
       primary: boolean
@@ -45,10 +48,12 @@ export async function loadGoogleCalendars() {
   }>(response)
 }
 
-export async function disconnectGoogleCalendar() {
+export async function disconnectGoogleCalendar(accountId: string) {
   const response = await fetch('/api/integrations/google/disconnect', {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     credentials: 'same-origin',
+    body: JSON.stringify({ accountId }),
   })
   if (!response.ok) {
     const body = await response.json().catch(() => ({ error: 'Disconnect failed' })) as { error?: string }

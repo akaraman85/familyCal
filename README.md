@@ -71,7 +71,11 @@ access. Disconnecting revokes the Google grant before deleting its encrypted
 credentials. Do not expose any of the server-only variables with a `VITE_`
 prefix.
 
-The schema is versioned in `db/migrations`. It stores one encrypted provider
-credential per owner, short-lived single-use OAuth state records, and events
-created directly in Karaman Calendar. Google events are read live and are not
-copied into the database; no synthetic sync activity is stored or displayed.
+The schema is versioned in `db/migrations`. Family members are user-managed
+parent records for calendar integrations; no sample household members are
+created automatically. Each member can own multiple encrypted Google account
+credentials. The selected member is captured in the OAuth state and attached
+to the account only after the callback validates that state. Accounts can be
+connected and disconnected independently. Google events are read live and are
+not copied into the database; no synthetic sync activity is stored or
+displayed.
