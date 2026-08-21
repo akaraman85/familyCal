@@ -123,6 +123,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
               status: account.status,
               displayName: account.display_name,
               email: account.account_email,
+              scopes: account.scopes,
               connectedAt: account.connected_at,
             }
           }),

@@ -18,6 +18,12 @@ export const GOOGLE_CALENDAR_SCOPES = [
   'profile',
   'https://www.googleapis.com/auth/calendar.readonly',
 ]
+export const GOOGLE_CALENDAR_READ_SCOPE =
+  'https://www.googleapis.com/auth/calendar.readonly'
+
+export function hasGoogleCalendarReadScope(scopes: string[]) {
+  return scopes.includes(GOOGLE_CALENDAR_READ_SCOPE)
+}
 
 type GoogleTokenResponse = {
   access_token?: string

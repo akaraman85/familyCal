@@ -11,6 +11,7 @@ import {
 import {
   getGoogleAccessToken,
   GOOGLE_CALENDAR_PROVIDER_ID,
+  hasGoogleCalendarReadScope,
   listGoogleCalendars,
 } from '../../_lib/providers/google-calendar.js'
 
@@ -27,6 +28,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     )
     const calendars = []
     for (const account of accounts) {
+      // A user can grant profile access while declining Calendar access. The
+      // account remains visible in the UI so they can repair the grant, but it
+      // must not prevent authorized accounts from loading.
+      if (!hasGoogleCalendarReadScope(account.scopes)) continue
       const accessToken = await getGoogleAccessToken({
         databaseUrl: env.databaseUrl,
         encryptionKey: env.encryptionKey,
