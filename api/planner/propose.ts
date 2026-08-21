@@ -177,7 +177,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       ownerId: env.ownerId,
       message,
       image,
-      context,
+      context: context ?? undefined,
       settings,
       now: new Date(),
     })
