@@ -76,6 +76,7 @@ function parseEvent(body: Record<string, unknown>) {
     title,
     startAt: startAt.toISOString(),
     endAt: endAt?.toISOString() ?? null,
+    allDay: body.allDay === true,
     calendar,
     location,
   }
@@ -144,7 +145,11 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     const env = integrationEnv()
     if (!requireSameOrigin(request, response, env.appUrl)) return
 
-    const body = await readJsonBody(request) as Record<string, unknown>
+    const rawBody = await readJsonBody(request)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new ValidationError('Event details are invalid')
+    }
+    const body = rawBody as Record<string, unknown>
     if (Array.isArray(body.events)) {
       if (!body.events.length || body.events.length > 20) {
         throw new ValidationError('Create between 1 and 20 events at a time')
@@ -155,7 +160,16 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
         }
         return parseEvent(item as Record<string, unknown>)
       })
-      const created = await createSavedEvents(env.databaseUrl, env.ownerId, events)
+      const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : ''
+      if (!requestId || requestId.length > 100) {
+        throw new ValidationError('Planner request ID is required')
+      }
+      const created = await createSavedEvents(
+        env.databaseUrl,
+        env.ownerId,
+        events,
+        requestId,
+      )
       sendJson(response, 201, { events: created })
       return
     }

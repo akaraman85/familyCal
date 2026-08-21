@@ -30,7 +30,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }
 
     if (!requireSameOrigin(request, response, env.appUrl)) return
-    const body = await readJsonBody(request) as Record<string, unknown>
+    const rawBody = await readJsonBody(request)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new ValidationError('Planner settings are invalid')
+    }
+    const body = rawBody as Record<string, unknown>
     const timezone = typeof body.timezone === 'string' ? body.timezone.trim() : ''
     const defaultCalendar = typeof body.defaultCalendar === 'string'
       ? body.defaultCalendar.trim()
@@ -55,9 +59,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     sendJson(response, 200, { settings })
   } catch (error) {
     console.error('Unable to manage AI planner settings', error)
-    sendJson(response, error instanceof ValidationError ? 400 : 500, {
-      error: error instanceof ValidationError
-        ? error.message
+    const invalid = error instanceof ValidationError || error instanceof SyntaxError
+    sendJson(response, invalid ? 400 : 500, {
+      error: invalid
+        ? (error instanceof Error ? error.message : 'Planner settings are invalid')
         : 'AI planner settings are unavailable',
     })
   }

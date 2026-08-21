@@ -61,12 +61,13 @@ export async function saveCalendarEvents(events: Array<{
   endAt?: string | null
   calendar: string
   location?: string | null
-}>) {
+  allDay?: boolean
+}>, requestId: string) {
   const response = await fetch('/api/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ events }),
+    body: JSON.stringify({ events, requestId }),
   })
   return readResponse<{ events: CalendarEventData[] }>(response)
 }

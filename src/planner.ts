@@ -58,6 +58,8 @@ export async function proposeEvents(message: string) {
   })
   return responseJson<{
     proposal: PlannerProposal
+    proposalId: string
     model: string
+    timezone: string
   }>(response)
 }

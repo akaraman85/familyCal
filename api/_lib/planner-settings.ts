@@ -23,10 +23,37 @@ type PlannerSettingsRow = {
 }
 
 export const DEFAULT_PLANNER_SETTINGS: PlannerSettings = {
-  enabled: true,
+  enabled: false,
   modelProfile: 'balanced',
   timezone: 'America/New_York',
   defaultCalendar: 'Family',
+}
+
+export async function consumePlannerRequest(
+  databaseUrl: string,
+  ownerId: string,
+  limit = 10,
+) {
+  const sql = neon(databaseUrl)
+  const rows = await sql.query(
+    `INSERT INTO ai_planner_rate_limits (
+       owner_id, window_started_at, request_count
+     ) VALUES ($1, NOW(), 1)
+     ON CONFLICT (owner_id) DO UPDATE SET
+       window_started_at = CASE
+         WHEN ai_planner_rate_limits.window_started_at < NOW() - INTERVAL '1 minute'
+           THEN NOW()
+         ELSE ai_planner_rate_limits.window_started_at
+       END,
+       request_count = CASE
+         WHEN ai_planner_rate_limits.window_started_at < NOW() - INTERVAL '1 minute'
+           THEN 1
+         ELSE ai_planner_rate_limits.request_count + 1
+       END
+     RETURNING request_count`,
+    [ownerId],
+  ) as Array<{ request_count: number }>
+  return rows[0].request_count <= limit
 }
 
 function serialize(row: PlannerSettingsRow | undefined): PlannerSettings {
