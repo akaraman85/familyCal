@@ -44,6 +44,8 @@ type EventItem = {
   id: string
   title: string
   date: Date
+  endDate?: Date
+  allDay: boolean
   start: string
   end?: string
   calendar: string
@@ -79,6 +81,8 @@ function toEventItem(event: CalendarEventData): EventItem {
     id: event.id,
     title: event.title,
     date: startDate,
+    endDate: endDate ?? undefined,
+    allDay: event.allDay,
     start: event.allDay ? 'All day' : format(startDate, 'h:mm a'),
     end: endDate ? format(endDate, 'h:mm a') : undefined,
     calendar: event.calendar,
@@ -86,6 +90,41 @@ function toEventItem(event: CalendarEventData): EventItem {
     color: event.source === 'google' ? 'blue' : 'green',
     source: event.source,
   }
+}
+
+const TIMELINE_START_MINUTES = 8 * 60
+const TIMELINE_END_MINUTES = 22 * 60
+const TIMELINE_HEIGHT = 504
+const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20]
+
+function timelinePosition(event: EventItem) {
+  if (event.allDay) return null
+  const startMinutes = event.date.getHours() * 60 + event.date.getMinutes()
+  const duration = event.endDate
+    ? Math.max(1, (event.endDate.getTime() - event.date.getTime()) / 60_000)
+    : 60
+  const endMinutes = startMinutes + duration
+  if (
+    startMinutes >= TIMELINE_END_MINUTES
+    || endMinutes <= TIMELINE_START_MINUTES
+  ) {
+    return null
+  }
+  const visibleStart = Math.max(startMinutes, TIMELINE_START_MINUTES)
+  const visibleEnd = Math.min(endMinutes, TIMELINE_END_MINUTES)
+  const pixelsPerMinute = TIMELINE_HEIGHT
+    / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES)
+  const top = (visibleStart - TIMELINE_START_MINUTES) * pixelsPerMinute
+  const availableHeight = TIMELINE_HEIGHT - top
+  const height = Math.min(
+    Math.max(28, (visibleEnd - visibleStart) * pixelsPerMinute),
+    availableHeight,
+  )
+  return { top, height }
+}
+
+function timelineLabel(hour: number) {
+  return format(new Date(2026, 0, 1, hour), 'h a')
 }
 
 function App() {
@@ -414,12 +453,20 @@ function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; se
 
 function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate: Date }) {
   const days = eachDayOfInterval({ start: startOfWeek(selectedDate, { weekStartsOn: 1 }), end: endOfWeek(selectedDate, { weekStartsOn: 1 }) })
+  const hasAllDayEvents = events.some((event) => (
+    event.allDay && days.some((day) => isSameDay(event.date, day))
+  ))
   return (
     <div className="week-view">
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
+      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <div className={`all-day-event ${event.color}`} key={event.id}>{event.title}</div>)}</div>)}</div>}
       <div className="week-body">
-        <div className="times">{['8 AM', '10 AM', '12 PM', '2 PM', '4 PM', '6 PM', '8 PM'].map((t) => <span key={t}>{t}</span>)}</div>
-        {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((e) => isSameDay(e.date, day)).map((e, i) => <div className={`week-event ${e.color}`} style={{ top: `${18 + i * 26}%` }} key={e.id}><b>{e.title}</b><span>{e.start}</span></div>)}</div>)}
+        <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}>{timelineLabel(hour)}</span>)}</div>
+        {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
+          const position = timelinePosition(event)
+          if (!position) return null
+          return <div className={`week-event ${event.color}`} style={position} key={event.id}><b>{event.title}</b><span>{event.start}</span></div>
+        })}</div>)}
       </div>
     </div>
   )
@@ -427,14 +474,23 @@ function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate:
 
 function DayView({ events, selectedDate }: { events: EventItem[]; selectedDate: Date }) {
   const dayEvents = events.filter((e) => isSameDay(e.date, selectedDate))
+  const allDayEvents = dayEvents.filter((event) => event.allDay)
+  const timedEvents = dayEvents.filter((event) => !event.allDay)
   return (
     <div className="day-view">
-      <div className="day-timeline">
-        {['8:00 AM', '10:00 AM', '12:00 PM', '2:00 PM', '4:00 PM', '6:00 PM', '8:00 PM'].map((time) => <div className="time-row" key={time}><span>{time}</span><i /></div>)}
-      </div>
-      <div className="day-events">
-        {dayEvents.map((event, i) => <div className={`large-event ${event.color}`} key={event.id} style={{ top: `${24 + i * 115}px` }}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{event.calendar}{event.location ? ` · ${event.location}` : ''}</small></div>)}
-        {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
+      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <div className={`all-day-event ${event.color}`} key={event.id}>{event.title}</div>)}</div></div>}
+      <div className="day-timed">
+        <div className="day-timeline">
+          {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}><span>{timelineLabel(hour)}</span><i /></div>)}
+        </div>
+        <div className="day-events">
+          {timedEvents.map((event) => {
+            const position = timelinePosition(event)
+            if (!position) return null
+            return <div className={`large-event ${event.color}`} key={event.id} style={position}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{event.calendar}{event.location ? ` · ${event.location}` : ''}</small></div>
+          })}
+          {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
+        </div>
       </div>
     </div>
   )
