@@ -40,6 +40,9 @@ pending migrations only when `VERCEL_ENV=production`. A failed build never
 touches the database, and a failed migration prevents the deployment from being
 published. Preview and local builds skip production migrations.
 
+See [ADR 0001](docs/adr/0001-production-database-migrations.md) for the decision,
+tradeoffs, rollback constraints, and alternatives considered.
+
 ## Temporary access
 
 The app and every event/integration API require a server-validated session.
