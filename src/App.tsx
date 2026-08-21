@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, ExternalLink, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
@@ -1029,12 +1030,62 @@ function eventTimeSummary(event: EventItem) {
 }
 
 function EventDetailModal({ event, close }: { event: EventItem; close: () => void }) {
+  const modalRef = useRef<HTMLElement>(null)
   const accounts = event.google?.accounts ?? []
   const organizer = event.organizer?.displayName || event.organizer?.email
+  const safeDescription = useMemo(() => DOMPurify.sanitize(event.description ?? '', {
+    ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
+    ALLOWED_ATTR: [],
+  }), [event.description])
+
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const background = [...document.querySelectorAll<HTMLElement>(
+      '.app-shell > .sidebar, .app-shell > main, .app-shell > .chat-fab',
+    )]
+    const previousOverflow = document.body.style.overflow
+    background.forEach((element) => { element.inert = true })
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape') {
+        keyboardEvent.preventDefault()
+        close()
+        return
+      }
+      if (keyboardEvent.key !== 'Tab' || !modalRef.current) return
+      const focusable = [...modalRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      )]
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (keyboardEvent.shiftKey && document.activeElement === first) {
+        keyboardEvent.preventDefault()
+        last.focus()
+      } else if (!keyboardEvent.shiftKey && document.activeElement === last) {
+        keyboardEvent.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    requestAnimationFrame(() => {
+      modalRef.current?.querySelector<HTMLElement>('button')?.focus()
+    })
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      background.forEach((element) => { element.inert = false })
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus()
+    }
+  }, [close])
+
   return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) close() }}>
-    <article className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title">
+    <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby="event-detail-summary">
       <div className="modal-heading"><div><p className="eyebrow">{event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{event.title}</h2></div><button type="button" autoFocus onClick={close} aria-label="Close event details"><X size={20}/></button></div>
-      <div className="event-detail-summary">
+      <div className="event-detail-summary" id="event-detail-summary">
         <div className={`event-detail-date ${event.color}`}><b>{format(event.date, 'd')}</b><span>{format(event.date, 'MMM')}</span></div>
         <div><b>{eventTimeSummary(event)}</b><span>{eventSourceLabel(event)}</span></div>
       </div>
@@ -1044,7 +1095,7 @@ function EventDetailModal({ event, close }: { event: EventItem; close: () => voi
         {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
         {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
       </dl>
-      {event.description && <section className="event-description"><b>Description</b><p>{event.description}</p></section>}
+      {safeDescription && <section className="event-description"><b>Description</b><div dangerouslySetInnerHTML={{ __html: safeDescription }}/></section>}
       <div className="event-detail-actions">
         <button type="button" onClick={close}>Close</button>
         {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
