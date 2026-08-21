@@ -19,6 +19,7 @@ type SavedEventRow = {
   end_at: string | Date | null
   all_day: boolean
   all_day_date: string | Date | null
+  all_day_end_date: string | Date | null
   calendar_name: string
   location: string | null
 }
@@ -29,23 +30,26 @@ type NewSavedEvent = {
   endAt?: string | null
   allDay?: boolean
   allDayDate?: string | null
+  allDayEndDate?: string | null
   calendar: string
   location?: string | null
+}
+
+function dateOnly(value: string | Date | null) {
+  if (!value) return null
+  return (typeof value === 'string' ? value : value.toISOString()).slice(0, 10)
 }
 
 function serialize(row: SavedEventRow): CalendarEvent {
   const startAt = new Date(row.start_at).toISOString()
   const endAt = row.end_at ? new Date(row.end_at).toISOString() : null
-  const allDayDate = row.all_day_date
-    ? (typeof row.all_day_date === 'string'
-      ? row.all_day_date.slice(0, 10)
-      : row.all_day_date.toISOString().slice(0, 10))
-    : null
+  const allDayDate = dateOnly(row.all_day_date)
+  const allDayEndDate = dateOnly(row.all_day_end_date)
   return {
     id: `saved:${row.id}`,
     title: row.title,
     startAt: row.all_day && allDayDate ? allDayDate : startAt,
-    endAt: row.all_day && endAt ? endAt.slice(0, 10) : endAt,
+    endAt: row.all_day ? allDayEndDate : endAt,
     allDay: row.all_day,
     calendar: row.calendar_name,
     location: row.location,
@@ -61,7 +65,8 @@ export async function listSavedEvents(
 ) {
   const sql = neon(databaseUrl)
   const rows = await sql.query(
-    `SELECT id, title, start_at, end_at, all_day, all_day_date, calendar_name, location
+    `SELECT id, title, start_at, end_at, all_day, all_day_date,
+            all_day_end_date, calendar_name, location
        FROM saved_events
       WHERE owner_id = $1
         AND start_at < $3
@@ -82,9 +87,9 @@ export async function createSavedEvent(
   const rows = await sql.query(
     `INSERT INTO saved_events (
        id, owner_id, title, start_at, end_at, all_day, all_day_date,
-       calendar_name, location
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     RETURNING id, title, start_at, end_at, all_day, all_day_date,
+       all_day_end_date, calendar_name, location
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+     RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
        calendar_name, location`,
     [
       id,
@@ -94,6 +99,7 @@ export async function createSavedEvent(
       event.endAt ?? null,
       event.allDay ?? false,
       event.allDayDate ?? null,
+      event.allDayEndDate ?? null,
       event.calendar,
       event.location ?? null,
     ],
@@ -112,7 +118,7 @@ export async function createSavedEvents(
   try {
     await client.query('BEGIN')
     const existing = await client.query(
-      `SELECT id, title, start_at, end_at, all_day, all_day_date,
+      `SELECT id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
               calendar_name, location
          FROM saved_events
         WHERE owner_id = $1 AND planner_request_id = $2
@@ -132,9 +138,10 @@ export async function createSavedEvents(
       const rows = await client.query(
         `INSERT INTO saved_events (
            id, owner_id, title, start_at, end_at, all_day, all_day_date,
-           calendar_name, location, planner_request_id, planner_item_index
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-         RETURNING id, title, start_at, end_at, all_day, all_day_date,
+           all_day_end_date, calendar_name, location, planner_request_id,
+           planner_item_index
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+         RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
            calendar_name, location`,
         [
           randomUUID(),
@@ -144,6 +151,7 @@ export async function createSavedEvents(
           event.endAt ?? null,
           event.allDay ?? false,
           event.allDayDate ?? null,
+          event.allDayEndDate ?? null,
           event.calendar,
           event.location ?? null,
           requestId,

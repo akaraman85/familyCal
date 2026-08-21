@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS ai_planner_rate_limits (
 ALTER TABLE saved_events
   ADD COLUMN IF NOT EXISTS all_day BOOLEAN NOT NULL DEFAULT FALSE,
   ADD COLUMN IF NOT EXISTS all_day_date DATE,
+  ADD COLUMN IF NOT EXISTS all_day_end_date DATE,
   ADD COLUMN IF NOT EXISTS planner_request_id TEXT,
   ADD COLUMN IF NOT EXISTS planner_item_index INTEGER;
 

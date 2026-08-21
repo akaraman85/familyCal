@@ -82,7 +82,19 @@ function parseEvent(body: Record<string, unknown>) {
   const allDayDate = typeof body.allDayDate === 'string'
     ? body.allDayDate
     : null
-  if (allDay && !isIsoDate(allDayDate)) {
+  const allDayEndDate = typeof body.allDayEndDate === 'string'
+    ? body.allDayEndDate
+    : null
+  if (
+    allDay
+    && (
+      !isIsoDate(allDayDate)
+      || (
+        allDayEndDate !== null
+        && (!isIsoDate(allDayEndDate) || allDayEndDate <= allDayDate!)
+      )
+    )
+  ) {
     throw new ValidationError('All-day event date is invalid')
   }
   return {
@@ -91,6 +103,7 @@ function parseEvent(body: Record<string, unknown>) {
     endAt: endAt?.toISOString() ?? null,
     allDay,
     allDayDate: allDay ? allDayDate : null,
+    allDayEndDate: allDay ? allDayEndDate : null,
     calendar,
     location,
   }

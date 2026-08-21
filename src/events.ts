@@ -63,6 +63,7 @@ export async function saveCalendarEvents(events: Array<{
   location?: string | null
   allDay?: boolean
   allDayDate?: string | null
+  allDayEndDate?: string | null
 }>, requestId: string) {
   const response = await fetch('/api/events', {
     method: 'POST',

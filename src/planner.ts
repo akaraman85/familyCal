@@ -13,6 +13,7 @@ export type PlannedEvent = {
   endAt: string | null
   allDay: boolean
   allDayDate: string | null
+  allDayEndDate: string | null
   calendar: string
   location: string | null
 }

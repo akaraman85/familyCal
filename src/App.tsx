@@ -767,7 +767,14 @@ function proposalTime(event: PlannedEvent, timezone: string) {
       month: 'short',
       day: 'numeric',
     })
-    return `${date} · All day`
+    if (!event.allDayEndDate) return `${date} · All day`
+    const inclusiveEnd = new Date(`${event.allDayEndDate}T12:00:00Z`)
+    inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1)
+    const endDate = formatProposalDate(inclusiveEnd.toISOString(), 'UTC', {
+      month: 'short',
+      day: 'numeric',
+    })
+    return `${date}–${endDate} · All day`
   }
   const date = formatProposalDate(start.toISOString(), timezone, {
     month: 'short',
