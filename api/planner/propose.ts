@@ -21,6 +21,7 @@ import {
 import {
   advancePlannerSession,
   createPlannerSession,
+  getPlannerTurnResponse,
   plannerSessionIsCurrent,
 } from '../_lib/planner-sessions.js'
 import {
@@ -131,6 +132,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
       )
     }
+    const requestedSessionId = typeof body.sessionId === 'string'
+      ? body.sessionId
+      : ''
+    const turnId = typeof body.turnId === 'string' ? body.turnId : ''
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedSessionId)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(turnId)
+    ) {
+      throw new ValidationError('Planner session identifiers are invalid')
+    }
+    const cachedResponse = await getPlannerTurnResponse<unknown>(
+      env.databaseUrl,
+      env.ownerId,
+      requestedSessionId,
+      turnId,
+    )
+    if (cachedResponse) {
+      sendJson(response, 200, cachedResponse)
+      return
+    }
     const contextToken = typeof body.contextToken === 'string'
       ? body.contextToken
       : ''
@@ -142,6 +163,9 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         error: 'This planner session expired. Start a new plan.',
       })
       return
+    }
+    if (context && context.sessionId !== requestedSessionId) {
+      throw new ValidationError('Planner session does not match its context')
     }
     if (context && pendingImage) {
       throw new ValidationError('Start a new plan before attaching another screenshot')
@@ -198,29 +222,13 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       now: new Date(),
     })
     const proposalId = randomUUID()
-    const sessionId = context?.sessionId ?? randomUUID()
-    const revision = context
-      ? await advancePlannerSession(
-        env.databaseUrl,
-        env.ownerId,
-        sessionId,
-        context.revision,
-      )
-      : 1
-    if (revision === null) {
-      sendJson(response, 409, {
-        error: 'This plan changed in another request. Retry from the latest response.',
-      })
-      return
-    }
-    if (!context) {
-      await createPlannerSession(env.databaseUrl, env.ownerId, sessionId)
-    }
+    const sessionId = requestedSessionId
+    const revision = context ? context.revision + 1 : 1
     const turnCount = (context?.turnCount ?? 0) + 1
     const workingEvents = result.proposal.events.length
       ? result.proposal.events
       : (context?.events ?? [])
-    sendJson(response, 200, {
+    const responseBody = {
       ...result,
       proposalId,
       proposalToken: signPlannerProposal({
@@ -244,7 +252,40 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       revision,
       turnsRemaining: PLANNER_CONTEXT_MAX_TURNS - turnCount,
       timezone: settings.timezone,
-    })
+    }
+    const storedRevision = context
+      ? await advancePlannerSession(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        context.revision,
+        turnId,
+        responseBody,
+      )
+      : (await createPlannerSession(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        turnId,
+        responseBody,
+      ))
+    if (storedRevision === null) {
+      const concurrentResponse = await getPlannerTurnResponse<unknown>(
+        env.databaseUrl,
+        env.ownerId,
+        sessionId,
+        turnId,
+      )
+      if (concurrentResponse) {
+        sendJson(response, 200, concurrentResponse)
+        return
+      }
+      sendJson(response, 409, {
+        error: 'This plan changed in another request. Retry from the latest response.',
+      })
+      return
+    }
+    sendJson(response, 200, responseBody)
   } catch (error) {
     console.error('Unable to create AI calendar proposal', error)
     const tooLarge = error instanceof RequestBodyTooLargeError

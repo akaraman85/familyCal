@@ -63,9 +63,11 @@ chat transcript. A signed, one-hour context token carries at most the current
 turn replaces that state; screenshots and earlier prompts are never resent.
 Sessions allow eight AI turns, follow-ups are capped at 4,000 characters, and
 the in-memory UI history is discarded on refresh or when **New plan** is used.
-Postgres tracks only the session ID, revision, status, and expiry—never prompts
-or screenshots—so follow-ups invalidate superseded confirmation tokens and
-confirmation cannot race a newer revision.
+Postgres tracks session revision, status, and expiry plus one encrypted canonical
+response for idempotent network retries—never raw prompts or screenshots. The
+encrypted retry payload is replaced each turn and cleared on reset or
+confirmation, while revisions invalidate superseded proposals and prevent
+confirmation from racing a newer turn.
 
 ## Database migrations
 

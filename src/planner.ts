@@ -195,6 +195,8 @@ export async function proposeEvents(
   message: string,
   image?: PlannerImageAttachment,
   contextToken?: string,
+  sessionId?: string,
+  turnId?: string,
 ) {
   const response = await fetch('/api/planner/propose', {
     method: 'POST',
@@ -204,6 +206,8 @@ export async function proposeEvents(
       message,
       image: image ? { data: image.data, mediaType: image.mediaType } : undefined,
       contextToken,
+      sessionId,
+      turnId,
     }),
   })
   return responseJson<{

@@ -181,6 +181,18 @@ export async function createSavedEvents(
       [ownerId, session.sessionId, session.revision],
     )
     if (!plannerSession.rows.length) {
+      const committed = await client.query(
+        `SELECT id, title, start_at, end_at, all_day, all_day_date,
+                all_day_end_date, calendar_name, location
+           FROM saved_events
+          WHERE owner_id = $1 AND planner_request_id = $2
+          ORDER BY planner_item_index`,
+        [ownerId, requestId],
+      )
+      if (committed.rows.length === events.length) {
+        await client.query('COMMIT')
+        return committed.rows.map((row) => serialize(row as SavedEventRow))
+      }
       throw new PlannerSessionConflictError(
         'This planner proposal is no longer current',
       )
@@ -215,7 +227,9 @@ export async function createSavedEvents(
     }
     await client.query(
       `UPDATE ai_planner_sessions
-          SET status = 'confirmed', updated_at = NOW()
+          SET status = 'confirmed',
+              encrypted_last_response = NULL,
+              updated_at = NOW()
         WHERE owner_id = $1 AND id = $2`,
       [ownerId, session.sessionId],
     )

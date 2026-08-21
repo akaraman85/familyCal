@@ -1038,6 +1038,7 @@ function AssistantPanel({ open, close, save }: {
   const panelRef = useRef<HTMLElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const conversationEndRef = useRef<HTMLDivElement>(null)
+  const imageProcessingIdRef = useRef(0)
   useDialogAccessibility(panelRef, close, open)
   const [text, setText] = useState('')
   const [image, setImage] = useState<PlannerImageAttachment | null>(null)
@@ -1047,6 +1048,7 @@ function AssistantPanel({ open, close, save }: {
   const [contextToken, setContextToken] = useState<string | null>(null)
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [revision, setRevision] = useState<number | null>(null)
+  const [pendingTurnId, setPendingTurnId] = useState<string | null>(null)
   const [turnsRemaining, setTurnsRemaining] = useState(8)
   const [proposal, setProposal] = useState<PlannerProposal | null>(null)
   const [proposalId, setProposalId] = useState<string | null>(null)
@@ -1066,7 +1068,11 @@ function AssistantPanel({ open, close, save }: {
   }, [loading, open, turns.length])
 
   useEffect(() => {
-    if (!open) setImage(null)
+    if (!open) {
+      imageProcessingIdRef.current += 1
+      setImage(null)
+      setProcessingImage(false)
+    }
   }, [open])
 
   const clearSession = () => {
@@ -1078,6 +1084,7 @@ function AssistantPanel({ open, close, save }: {
     setContextToken(null)
     setSessionId(null)
     setRevision(null)
+    setPendingTurnId(null)
     setTurnsRemaining(8)
     setProposal(null)
     setProposalId(null)
@@ -1108,6 +1115,10 @@ function AssistantPanel({ open, close, save }: {
     if ((!message && !image) || loading || processingImage || saving) return
     const userText = message || 'Extract events from this screenshot'
     const hadImage = Boolean(image)
+    const requestSessionId = sessionId ?? crypto.randomUUID()
+    const requestTurnId = pendingTurnId ?? crypto.randomUUID()
+    setSessionId(requestSessionId)
+    setPendingTurnId(requestTurnId)
     setPendingText(userText)
     setPendingHadImage(hadImage)
     setError(null)
@@ -1117,6 +1128,8 @@ function AssistantPanel({ open, close, save }: {
         message,
         image ?? undefined,
         contextToken ?? undefined,
+        requestSessionId,
+        requestTurnId,
       )
       setProposal(result.proposal)
       setProposalId(result.proposalId)
@@ -1124,6 +1137,7 @@ function AssistantPanel({ open, close, save }: {
       setContextToken(result.contextToken)
       setSessionId(result.sessionId)
       setRevision(result.revision)
+      setPendingTurnId(null)
       setTurnsRemaining(result.turnsRemaining)
       setTurns((current) => [...current, {
         id: crypto.randomUUID(),
@@ -1146,15 +1160,24 @@ function AssistantPanel({ open, close, save }: {
 
   const attachScreenshot = async (file: File | undefined) => {
     if (!file) return
+    const processingId = imageProcessingIdRef.current + 1
+    imageProcessingIdRef.current = processingId
+    setPendingTurnId(null)
+    if (!contextToken) setSessionId(null)
     setProcessingImage(true)
     setError(null)
     try {
-      setImage(await preparePlannerScreenshot(file))
+      const prepared = await preparePlannerScreenshot(file)
+      if (imageProcessingIdRef.current === processingId) setImage(prepared)
     } catch (imageError) {
-      setImage(null)
-      setError(imageError instanceof Error ? imageError.message : 'Unable to attach screenshot')
+      if (imageProcessingIdRef.current === processingId) {
+        setImage(null)
+        setError(imageError instanceof Error ? imageError.message : 'Unable to attach screenshot')
+      }
     } finally {
-      setProcessingImage(false)
+      if (imageProcessingIdRef.current === processingId) {
+        setProcessingImage(false)
+      }
     }
   }
 
@@ -1206,8 +1229,8 @@ function AssistantPanel({ open, close, save }: {
       <div ref={conversationEndRef}/>
     </div>
     <div className="assistant-input">
-      {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => setImage(null)} aria-label="Remove screenshot"><X size={14}/></button></div>}
-      <textarea aria-label="AI planner request" disabled={saving} maxLength={contextToken ? 4000 : 12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={contextToken ? 'Refine this plan or answer the clarification…' : image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
+      {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => { setImage(null); setPendingTurnId(null); if (!contextToken) setSessionId(null) }} aria-label="Remove screenshot"><X size={14}/></button></div>}
+      <textarea aria-label="AI planner request" disabled={saving} maxLength={contextToken ? 4000 : 12000} value={text} onChange={(event) => { setText(event.target.value); setPendingTurnId(null); if (!contextToken) setSessionId(null) }} placeholder={contextToken ? 'Refine this plan or answer the clarification…' : image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={(event) => {
         void attachScreenshot(event.target.files?.[0])
         event.target.value = ''
