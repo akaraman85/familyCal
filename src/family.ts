@@ -5,6 +5,7 @@ export type FamilyIntegration = {
   status: 'connected' | 'error'
   displayName: string | null
   email: string | null
+  scopes: string[]
   connectedAt: string
 }
 

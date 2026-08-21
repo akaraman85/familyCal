@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
-  Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
   LogOut, MapPin, Menu, MessageCircleMore, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
@@ -48,6 +48,13 @@ type NewEventInput = {
   startAt: string
   calendar: string
   location?: string
+}
+
+const GOOGLE_CALENDAR_READ_SCOPE =
+  'https://www.googleapis.com/auth/calendar.readonly'
+
+function hasGoogleCalendarPermission(scopes: string[]) {
+  return scopes.includes(GOOGLE_CALENDAR_READ_SCOPE)
 }
 
 function eventDate(event: CalendarEventData) {
@@ -464,7 +471,13 @@ function IntegrationsPage() {
     try {
       const data = await loadFamilyMembers()
       setMembers(data.members)
-      if (data.members.some((member) => member.integrations.length > 0)) {
+      const hasReadableGoogleAccount = data.members.some((member) => (
+        member.integrations.some((account) => (
+          account.provider === 'google-calendar'
+          && hasGoogleCalendarPermission(account.scopes)
+        ))
+      ))
+      if (hasReadableGoogleAccount) {
         const calendarData = await loadGoogleCalendars()
         setCalendarCounts(calendarData.calendars.reduce<Record<string, number>>((counts, calendar) => {
           counts[calendar.accountId] = (counts[calendar.accountId] ?? 0) + 1
@@ -521,18 +534,29 @@ function IntegrationsPage() {
             {accounts.map((account) => {
               const accountName = account.email || account.displayName || 'Google account'
               const calendarCount = calendarCounts[account.id]
+              const hasCalendarPermission = hasGoogleCalendarPermission(account.scopes)
               return <div className="member-integration-account" key={account.id}>
                 <div className="integration-icon google">G</div>
                 <div>
                   <b>{accountName}</b>
-                  <span>{calendarCount === undefined ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
+                  {hasCalendarPermission
+                    ? <span>{calendarCount === undefined ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
+                    : <span className="permission-help">Your Google profile is connected, but Calendar permission is missing. Reconnect and approve “See all your calendars.” A work account may require approval from its Google Workspace administrator.</span>}
                 </div>
-                <span className="connected"><Check size={13}/>Connected</span>
-                <button
-                  className="disconnect-btn"
-                  disabled={workingAccountId !== null}
-                  onClick={() => void disconnect(account.id, accountName)}
-                >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
+                {hasCalendarPermission
+                  ? <span className="connected"><Check size={13}/>Connected</span>
+                  : <span className="permission-missing"><AlertTriangle size={13}/>Permission missing</span>}
+                <div className="integration-account-actions">
+                  {!hasCalendarPermission && <a
+                    className="reconnect-btn"
+                    href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}
+                  >Grant access</a>}
+                  <button
+                    className="disconnect-btn"
+                    disabled={workingAccountId !== null}
+                    onClick={() => void disconnect(account.id, accountName)}
+                  >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
+                </div>
               </div>
             })}
           </div>

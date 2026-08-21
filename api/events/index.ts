@@ -18,6 +18,7 @@ import {
 import {
   getGoogleAccessToken,
   GOOGLE_CALENDAR_PROVIDER_ID,
+  hasGoogleCalendarReadScope,
   listAllGoogleEvents,
 } from '../_lib/providers/google-calendar.js'
 
@@ -73,9 +74,12 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
     )
 
     if (googleAccounts.length) {
-      googleStatus = 'ok'
+      const readableAccounts = googleAccounts.filter((account) => (
+        hasGoogleCalendarReadScope(account.scopes)
+      ))
+      googleStatus = readableAccounts.length ? 'ok' : 'error'
       const eventsById = new Map<string, CalendarEvent>()
-      for (const account of googleAccounts) {
+      for (const account of readableAccounts) {
         try {
           const accessToken = await getGoogleAccessToken({
             databaseUrl: env.databaseUrl,
