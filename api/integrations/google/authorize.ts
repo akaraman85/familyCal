@@ -2,7 +2,6 @@ import { requireAuthentication } from '../../_lib/auth.js'
 import { hashState, randomState } from '../../_lib/crypto.js'
 import {
   createOAuthState,
-  ensureDefaultFamilyMembers,
   getFamilyMember,
 } from '../../_lib/db.js'
 import { integrationEnv } from '../../_lib/env.js'
@@ -30,7 +29,6 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     const env = integrationEnv()
     const memberId = queryValue(request, 'memberId')
     if (!memberId) throw new Error('A family member must be selected')
-    await ensureDefaultFamilyMembers(env.databaseUrl, env.ownerId)
     const member = await getFamilyMember(env.databaseUrl, env.ownerId, memberId)
     if (!member) throw new Error('Family member not found')
 

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
-  LogOut, MapPin, Menu, MessageCircleMore, MoreHorizontal, Plus, Search,
+  LogOut, MapPin, Menu, MessageCircleMore, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -20,7 +20,13 @@ import {
   disconnectGoogleCalendar,
   loadGoogleCalendars,
 } from './integrations'
-import { loadFamilyMembers, type FamilyMember } from './family'
+import {
+  deleteFamilyMember,
+  loadFamilyMembers,
+  saveFamilyMember,
+  type FamilyMember,
+  type FamilyMemberInput,
+} from './family'
 import { loadSession, login, logout, type SessionUser } from './auth'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
@@ -499,6 +505,7 @@ function IntegrationsPage() {
     {loading && !members.length
       ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family calendars</div>
       : <div className="member-integration-list">
+      {!members.length && <div className="integration-empty"><Users size={24}/><b>Add a family member first</b><span>Open Family in the sidebar to create the people who will own calendar integrations.</span></div>}
       {members.map((member) => {
         const accounts = member.integrations.filter((item) => item.provider === 'google-calendar')
         const initials = member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
@@ -540,21 +547,41 @@ function FamilyPage() {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [editingMember, setEditingMember] = useState<FamilyMember | null | undefined>(undefined)
+
+  const refresh = async () => {
+    const data = await loadFamilyMembers()
+    setMembers(data.members)
+  }
 
   useEffect(() => {
-    loadFamilyMembers()
-      .then((data) => setMembers(data.members))
+    refresh()
       .catch((requestError: unknown) => {
         setError(requestError instanceof Error ? requestError.message : 'Unable to load family members')
       })
       .finally(() => setLoading(false))
   }, [])
 
-  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><button className="add-btn"><Plus size={18}/>Invite member</button></div>
+  const remove = async (member: FamilyMember) => {
+    const detail = member.integrations.length
+      ? ' Their calendar accounts will become unassigned but will not be disconnected.'
+      : ''
+    if (!window.confirm(`Delete ${member.name}?${detail}`)) return
+    setError(null)
+    try {
+      await deleteFamilyMember(member.id)
+      await refresh()
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to delete family member')
+    }
+  }
+
+  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><button className="add-btn" onClick={() => setEditingMember(null)}><Plus size={18}/>Add member</button></div>
     {error && <div className="integration-error" role="alert">{error}</div>}
     {loading
       ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family members</div>
       : <div className="family-grid">
+      {!members.length && <div className="family-empty"><Users size={25}/><b>No family members yet</b><span>Add the first person in your household, then connect their calendars.</span></div>}
       {members.map((member) => {
         const initials = member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
         return <div className="member-card" key={member.id}>
@@ -567,11 +594,57 @@ function FamilyPage() {
             <a href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}><Plus size={12}/>Add calendar account</a>
           </div>
           <div className="member-divider"/>
-          <div className="member-meta"><span><i className={`dot ${member.color}`}/>{member.integrations.length} calendar integration{member.integrations.length === 1 ? '' : 's'}</span><button><MoreHorizontal size={18}/></button></div>
+          <div className="member-meta"><span><i className={`dot ${member.color}`}/>{member.integrations.length} calendar integration{member.integrations.length === 1 ? '' : 's'}</span><div><button aria-label={`Edit ${member.name}`} onClick={() => setEditingMember(member)}>Edit</button><button aria-label={`Delete ${member.name}`} onClick={() => void remove(member)}>Delete</button></div></div>
         </div>
       })}
-      <button className="invite-card"><div><Plus size={23}/></div><b>Add family member</b><span>Invite someone to your shared calendar</span></button>
+      <button className="invite-card" onClick={() => setEditingMember(null)}><div><Plus size={23}/></div><b>Add family member</b><span>Create a person, then connect their calendar accounts</span></button>
     </div>}
+    {editingMember !== undefined && <FamilyMemberModal
+      member={editingMember}
+      close={() => setEditingMember(undefined)}
+      save={async (input) => {
+        await saveFamilyMember(input, editingMember?.id)
+        await refresh()
+        setEditingMember(undefined)
+      }}
+    />}
+  </div>
+}
+
+function FamilyMemberModal({ member, close, save }: {
+  member: FamilyMember | null
+  close: () => void
+  save: (input: FamilyMemberInput) => Promise<void>
+}) {
+  const [name, setName] = useState(member?.name ?? '')
+  const [email, setEmail] = useState(member?.email ?? '')
+  const [role, setRole] = useState(member?.role ?? 'Member')
+  const [color, setColor] = useState(member?.color ?? 'blue')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  return <div className="modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
+    <form className="family-member-modal" onSubmit={async (event) => {
+      event.preventDefault()
+      setSaving(true)
+      setError(null)
+      try {
+        await save({ name: name.trim(), email: email.trim(), role: role.trim(), color })
+      } catch (saveError) {
+        setError(saveError instanceof Error ? saveError.message : 'Unable to save family member')
+        setSaving(false)
+      }
+    }}>
+      <div className="modal-heading"><div><p className="eyebrow">{member ? 'Edit household' : 'New household member'}</p><h2>{member ? `Update ${member.name}` : 'Add family member'}</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
+      <label className="field"><span>Name</span><input autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name"/></label>
+      <label className="field"><span>Email <small>optional</small></span><input type="email" maxLength={200} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com"/></label>
+      <div className="field-row">
+        <label className="field"><span>Role</span><input required maxLength={50} value={role} onChange={(event) => setRole(event.target.value)} placeholder="Parent, child, administrator…"/></label>
+        <label className="field"><span>Color</span><select value={color} onChange={(event) => setColor(event.target.value)}><option value="blue">Blue</option><option value="coral">Coral</option><option value="green">Green</option><option value="gold">Gold</option></select></label>
+      </div>
+      {error && <div className="modal-error" role="alert">{error}</div>}
+      <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : member ? 'Save changes' : 'Add member'}</button></div>
+    </form>
   </div>
 }
 

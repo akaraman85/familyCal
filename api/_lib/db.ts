@@ -1,8 +1,9 @@
+import { randomUUID } from 'node:crypto'
 import { neon } from '@neondatabase/serverless'
 
 export type IntegrationAccountRow = {
   owner_id: string
-  member_id: string
+  member_id: string | null
   provider: string
   status: 'connected' | 'error'
   external_account_id: string
@@ -181,20 +182,6 @@ export async function consumeOAuthState(
   return rows[0]?.member_id as string | undefined
 }
 
-export async function ensureDefaultFamilyMembers(databaseUrl: string, ownerId: string) {
-  const sql = database(databaseUrl)
-  await sql.query(
-    `INSERT INTO family_members (
-       owner_id, id, display_name, email, role, color, sort_order
-     ) VALUES
-       ($1, 'alex', 'Alex Karaman', 'alex@karaman.family', 'Administrator', 'blue', 1),
-       ($1, 'maya', 'Maya Karaman', 'maya@karaman.family', 'Parent', 'coral', 2),
-       ($1, 'leo', 'Leo Karaman', NULL, 'View only', 'green', 3)
-     ON CONFLICT (owner_id, id) DO NOTHING`,
-    [ownerId],
-  )
-}
-
 export async function getFamilyMember(
   databaseUrl: string,
   ownerId: string,
@@ -221,4 +208,69 @@ export async function listFamilyMembers(databaseUrl: string, ownerId: string) {
     [ownerId],
   )
   return rows as FamilyMemberRow[]
+}
+
+export async function createFamilyMember(
+  databaseUrl: string,
+  ownerId: string,
+  member: Pick<FamilyMemberRow, 'display_name' | 'email' | 'role' | 'color'>,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `INSERT INTO family_members (
+       owner_id, id, display_name, email, role, color, sort_order
+     ) VALUES (
+       $1, $2, $3, $4, $5, $6,
+       COALESCE((SELECT MAX(sort_order) + 1 FROM family_members WHERE owner_id = $1), 1)
+     )
+     RETURNING owner_id, id, display_name, email, role, color, sort_order`,
+    [
+      ownerId,
+      randomUUID(),
+      member.display_name,
+      member.email,
+      member.role,
+      member.color,
+    ],
+  ) as FamilyMemberRow[]
+  return rows[0]
+}
+
+export async function updateFamilyMember(
+  databaseUrl: string,
+  ownerId: string,
+  memberId: string,
+  member: Pick<FamilyMemberRow, 'display_name' | 'email' | 'role' | 'color'>,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `UPDATE family_members
+        SET display_name = $3, email = $4, role = $5, color = $6, updated_at = NOW()
+      WHERE owner_id = $1 AND id = $2
+    RETURNING owner_id, id, display_name, email, role, color, sort_order`,
+    [
+      ownerId,
+      memberId,
+      member.display_name,
+      member.email,
+      member.role,
+      member.color,
+    ],
+  ) as FamilyMemberRow[]
+  return rows[0]
+}
+
+export async function deleteFamilyMember(
+  databaseUrl: string,
+  ownerId: string,
+  memberId: string,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `DELETE FROM family_members
+      WHERE owner_id = $1 AND id = $2
+    RETURNING id`,
+    [ownerId, memberId],
+  )
+  return rows.length === 1
 }

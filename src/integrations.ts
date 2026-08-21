@@ -8,7 +8,7 @@ export type Integration = {
   status: IntegrationStatus
   accounts: Array<{
     id: string
-    memberId: string
+    memberId: string | null
     displayName: string | null
     email: string | null
     scopes: string[]

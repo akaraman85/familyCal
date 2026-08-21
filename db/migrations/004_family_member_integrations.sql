@@ -11,39 +11,20 @@ CREATE TABLE IF NOT EXISTS family_members (
   PRIMARY KEY (owner_id, id)
 );
 
-INSERT INTO family_members (owner_id, id, display_name, email, role, color, sort_order)
-SELECT owner_id, 'alex', 'Alex Karaman', 'alex@karaman.family', 'Administrator', 'blue', 1
-FROM (
-  SELECT owner_id FROM integration_accounts
-  UNION
-  SELECT owner_id FROM saved_events
-) owners
-ON CONFLICT (owner_id, id) DO NOTHING;
-
 ALTER TABLE integration_accounts
   ADD COLUMN IF NOT EXISTS member_id TEXT;
 
-UPDATE integration_accounts
-SET member_id = 'alex'
-WHERE member_id IS NULL;
+ALTER TABLE integration_accounts
+  ALTER COLUMN member_id DROP NOT NULL;
 
 ALTER TABLE integration_accounts
-  ALTER COLUMN member_id SET NOT NULL;
+  DROP CONSTRAINT IF EXISTS integration_accounts_family_member_fkey;
 
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'integration_accounts_family_member_fkey'
-  ) THEN
-    ALTER TABLE integration_accounts
-      ADD CONSTRAINT integration_accounts_family_member_fkey
-      FOREIGN KEY (owner_id, member_id)
-      REFERENCES family_members (owner_id, id)
-      ON DELETE CASCADE;
-  END IF;
-END $$;
+ALTER TABLE integration_accounts
+  ADD CONSTRAINT integration_accounts_family_member_fkey
+  FOREIGN KEY (owner_id, member_id)
+  REFERENCES family_members (owner_id, id)
+  ON DELETE SET NULL;
 
 ALTER TABLE oauth_states
   ADD COLUMN IF NOT EXISTS member_id TEXT;
