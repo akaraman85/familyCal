@@ -29,6 +29,20 @@ npm run dev:full
 Vite app and `/api` functions. Run `npm run build` to type-check and create a
 production build.
 
+## Deployment policy
+
+Vercel Git deployments run automatically only for pushes to `main`. Feature
+branches do not create Preview deployments—or corresponding Neon preview
+branches—unless someone explicitly deploys them through the Vercel dashboard
+or runs `vercel deploy` from that branch. This keeps routine commits from
+consuming Neon branch capacity.
+
+Use a manual Preview deployment only when the change needs browser, integration,
+or isolated-database verification. Delete that Preview deployment after the PR
+is merged so the Vercel-managed Neon integration can clean up its database
+branch. Local type checks and builds remain the default verification path for
+ordinary feature-branch pushes.
+
 ## AI Planner
 
 The AI Planner uses the Vercel AI SDK and AI Gateway to turn natural-language
