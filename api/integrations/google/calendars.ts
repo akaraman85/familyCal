@@ -1,5 +1,8 @@
 import { requireAuthentication } from '../../_lib/auth.js'
-import { listIntegrationAccountsWithCredentials } from '../../_lib/db.js'
+import {
+  listCalendarExclusions,
+  listIntegrationAccountsWithCredentials,
+} from '../../_lib/db.js'
 import { integrationEnv } from '../../_lib/env.js'
 import {
   errorMessage,
@@ -10,6 +13,7 @@ import {
 } from '../../_lib/http.js'
 import {
   getGoogleAccessToken,
+  googleCalendarType,
   GOOGLE_CALENDAR_PROVIDER_ID,
   hasGoogleCalendarReadScope,
   listGoogleCalendars,
@@ -21,11 +25,18 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
   try {
     const env = integrationEnv()
-    const accounts = await listIntegrationAccountsWithCredentials(
-      env.databaseUrl,
-      env.ownerId,
-      GOOGLE_CALENDAR_PROVIDER_ID,
-    )
+    const [accounts, exclusions] = await Promise.all([
+      listIntegrationAccountsWithCredentials(
+        env.databaseUrl,
+        env.ownerId,
+        GOOGLE_CALENDAR_PROVIDER_ID,
+      ),
+      listCalendarExclusions(
+        env.databaseUrl,
+        env.ownerId,
+        GOOGLE_CALENDAR_PROVIDER_ID,
+      ),
+    ])
     const calendars = []
     for (const account of accounts) {
       // A user can grant profile access while declining Calendar access. The
@@ -39,13 +50,21 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         clientSecret: env.googleClientSecret,
       }, account)
       const accountCalendars = await listGoogleCalendars(accessToken)
+      const excludedIds = new Set(
+        exclusions
+          .filter((row) => row.external_account_id === account.external_account_id)
+          .map((row) => row.calendar_id),
+      )
       calendars.push(...accountCalendars.map((calendar) => ({
         accountId: account.external_account_id,
+        memberId: account.member_id,
         id: calendar.id,
         name: calendar.summary,
         primary: calendar.primary ?? false,
+        type: googleCalendarType(calendar),
         accessRole: calendar.accessRole,
         color: calendar.backgroundColor ?? null,
+        included: !excludedIds.has(calendar.id),
       })))
     }
     sendJson(response, 200, {

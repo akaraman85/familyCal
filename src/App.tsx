@@ -20,6 +20,8 @@ import {
 import {
   disconnectGoogleCalendar,
   loadGoogleCalendars,
+  updateGoogleCalendarInclusion,
+  type GoogleCalendar,
 } from './integrations'
 import {
   deleteFamilyMember,
@@ -52,6 +54,7 @@ type EventItem = {
   location?: string
   color: 'coral' | 'blue' | 'green' | 'gold'
   source: 'saved' | 'google'
+  google?: CalendarEventData['google']
 }
 
 type NewEventInput = {
@@ -89,6 +92,7 @@ function toEventItem(event: CalendarEventData): EventItem {
     location: event.location ?? undefined,
     color: event.source === 'google' ? 'blue' : 'green',
     source: event.source,
+    google: event.google,
   }
 }
 
@@ -125,6 +129,19 @@ function timelinePosition(event: EventItem) {
 
 function timelineLabel(hour: number) {
   return format(new Date(2026, 0, 1, hour), 'h a')
+}
+
+function calendarTypeLabel(type: NonNullable<EventItem['google']>['calendar']['type']) {
+  return type[0].toUpperCase() + type.slice(1)
+}
+
+function eventSourceLabel(event: EventItem) {
+  if (!event.google) return `${event.calendar} · Saved event`
+  const accounts = [...new Set(event.google.accounts.map((account) => (
+    account.email || account.displayName
+  )).filter(Boolean))]
+  const via = accounts.length ? ` · via ${accounts.join(', ')}` : ''
+  return `${event.google.calendar.name} · ${calendarTypeLabel(event.google.calendar.type)}${via}`
 }
 
 function App() {
@@ -361,7 +378,7 @@ function AuthenticatedApp({ user, onLogout }: {
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} />}
-        {page === 'Integrations' && <IntegrationsPage />}
+        {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => setEventRefresh((current) => current + 1)} />}
         {page === 'Family' && <FamilyPage />}
         {page === 'Settings' && <SettingsPage />}
       </main>
@@ -440,7 +457,7 @@ function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; se
             <button key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`} onClick={() => onSelect(day)}>
               <span className="day-number">{format(day, 'd')}</span>
               <div className="events">
-                {dayEvents.slice(0, 3).map((event) => <div className={`event-chip ${event.color}`} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</div>)}
+                {dayEvents.slice(0, 3).map((event) => <div className={`event-chip ${event.color}`} title={eventSourceLabel(event)} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</div>)}
                 {dayEvents.length > 3 && <small>+{dayEvents.length - 3} more</small>}
               </div>
             </button>
@@ -459,13 +476,13 @@ function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate:
   return (
     <div className="week-view">
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
-      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <div className={`all-day-event ${event.color}`} key={event.id}>{event.title}</div>)}</div>)}</div>}
+      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <div className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} key={event.id}>{event.title}</div>)}</div>)}</div>}
       <div className="week-body">
         <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}>{timelineLabel(hour)}</span>)}</div>
         {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
           const position = timelinePosition(event)
           if (!position) return null
-          return <div className={`week-event ${event.color}`} style={position} key={event.id}><b>{event.title}</b><span>{event.start}</span></div>
+          return <div className={`week-event ${event.color}`} style={position} title={eventSourceLabel(event)} key={event.id}><b>{event.title}</b><span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span></div>
         })}</div>)}
       </div>
     </div>
@@ -478,7 +495,7 @@ function DayView({ events, selectedDate }: { events: EventItem[]; selectedDate: 
   const timedEvents = dayEvents.filter((event) => !event.allDay)
   return (
     <div className="day-view">
-      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <div className={`all-day-event ${event.color}`} key={event.id}>{event.title}</div>)}</div></div>}
+      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <div className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} key={event.id}>{event.title}</div>)}</div></div>}
       <div className="day-timed">
         <div className="day-timeline">
           {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}><span>{timelineLabel(hour)}</span><i /></div>)}
@@ -487,7 +504,7 @@ function DayView({ events, selectedDate }: { events: EventItem[]; selectedDate: 
           {timedEvents.map((event) => {
             const position = timelinePosition(event)
             if (!position) return null
-            return <div className={`large-event ${event.color}`} key={event.id} style={position}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{event.calendar}{event.location ? ` · ${event.location}` : ''}</small></div>
+            return <div className={`large-event ${event.color}`} key={event.id} style={position} title={eventSourceLabel(event)}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{eventSourceLabel(event)}{event.location ? ` · ${event.location}` : ''}</small></div>
           })}
           {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
         </div>
@@ -526,11 +543,12 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
   </div>
 }
 
-function IntegrationsPage() {
+function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => void }) {
   const [members, setMembers] = useState<FamilyMember[]>([])
-  const [calendarCounts, setCalendarCounts] = useState<Record<string, number>>({})
+  const [calendars, setCalendars] = useState<GoogleCalendar[]>([])
   const [loading, setLoading] = useState(true)
   const [workingAccountId, setWorkingAccountId] = useState<string | null>(null)
+  const [workingCalendar, setWorkingCalendar] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(() => (
     new URLSearchParams(window.location.search).get('status') === 'error'
       ? 'Google Calendar could not be connected. Please try again.'
@@ -550,12 +568,9 @@ function IntegrationsPage() {
       ))
       if (hasReadableGoogleAccount) {
         const calendarData = await loadGoogleCalendars()
-        setCalendarCounts(calendarData.calendars.reduce<Record<string, number>>((counts, calendar) => {
-          counts[calendar.accountId] = (counts[calendar.accountId] ?? 0) + 1
-          return counts
-        }, {}))
+        setCalendars(calendarData.calendars)
       } else {
-        setCalendarCounts({})
+        setCalendars([])
       }
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to load integrations')
@@ -582,6 +597,30 @@ function IntegrationsPage() {
     }
   }
 
+  const setCalendarIncluded = async (calendar: GoogleCalendar, included: boolean) => {
+    const key = `${calendar.accountId}:${calendar.id}`
+    setWorkingCalendar(key)
+    setError(null)
+    setCalendars((current) => current.map((item) => (
+      item.accountId === calendar.accountId && item.id === calendar.id
+        ? { ...item, included }
+        : item
+    )))
+    try {
+      await updateGoogleCalendarInclusion(calendar.accountId, calendar.id, included)
+      onCalendarsChanged()
+    } catch (requestError) {
+      setCalendars((current) => current.map((item) => (
+        item.accountId === calendar.accountId && item.id === calendar.id
+          ? { ...item, included: !included }
+          : item
+      )))
+      setError(requestError instanceof Error ? requestError.message : 'Unable to update calendar')
+    } finally {
+      setWorkingCalendar(null)
+    }
+  }
+
   return <div className="page">
     <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Manage calendar accounts under each family member.</p></div></div>
     <div className="integration-notice"><div><Sparkles size={19}/><span><b>Secure by design</b> Provider credentials and OAuth tokens stay on the server and are never sent to this browser.</span></div></div>
@@ -604,30 +643,57 @@ function IntegrationsPage() {
             {!accounts.length && <div className="member-integration-empty">No calendar integrations connected.</div>}
             {accounts.map((account) => {
               const accountName = account.email || account.displayName || 'Google account'
-              const calendarCount = calendarCounts[account.id]
+              const accountCalendars = calendars
+                .filter((calendar) => calendar.accountId === account.id)
+                .sort((left, right) => (
+                  Number(right.primary) - Number(left.primary)
+                  || left.name.localeCompare(right.name)
+                ))
+              const includedCount = accountCalendars.filter((calendar) => calendar.included).length
               const hasCalendarPermission = hasGoogleCalendarPermission(account.scopes)
-              return <div className="member-integration-account" key={account.id}>
-                <div className="integration-icon google">G</div>
-                <div>
-                  <b>{accountName}</b>
+              return <div className="member-integration-account-group" key={account.id}>
+                <div className="member-integration-account">
+                  <div className="integration-icon google">G</div>
+                  <div>
+                    <b>{accountName}</b>
+                    {hasCalendarPermission
+                      ? <span>{loading ? 'Checking calendars…' : `${includedCount} of ${accountCalendars.length} calendars included`}</span>
+                      : <span className="permission-help">Your Google profile is connected, but Calendar permission is missing. Reconnect and approve “See all your calendars.” A work account may require approval from its Google Workspace administrator.</span>}
+                  </div>
                   {hasCalendarPermission
-                    ? <span>{calendarCount === undefined ? 'Checking calendars…' : `${calendarCount} calendar${calendarCount === 1 ? '' : 's'} available`}</span>
-                    : <span className="permission-help">Your Google profile is connected, but Calendar permission is missing. Reconnect and approve “See all your calendars.” A work account may require approval from its Google Workspace administrator.</span>}
+                    ? <span className="connected"><Check size={13}/>Connected</span>
+                    : <span className="permission-missing"><AlertTriangle size={13}/>Permission missing</span>}
+                  <div className="integration-account-actions">
+                    {!hasCalendarPermission && <a
+                      className="reconnect-btn"
+                      href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}
+                    >Grant access</a>}
+                    <button
+                      className="disconnect-btn"
+                      disabled={workingAccountId !== null}
+                      onClick={() => void disconnect(account.id, accountName)}
+                    >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
+                  </div>
                 </div>
-                {hasCalendarPermission
-                  ? <span className="connected"><Check size={13}/>Connected</span>
-                  : <span className="permission-missing"><AlertTriangle size={13}/>Permission missing</span>}
-                <div className="integration-account-actions">
-                  {!hasCalendarPermission && <a
-                    className="reconnect-btn"
-                    href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}
-                  >Grant access</a>}
-                  <button
-                    className="disconnect-btn"
-                    disabled={workingAccountId !== null}
-                    onClick={() => void disconnect(account.id, accountName)}
-                  >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
-                </div>
+                {hasCalendarPermission && accountCalendars.length > 0 && <div className="account-calendar-list">
+                  {accountCalendars.map((calendar) => {
+                    const key = `${calendar.accountId}:${calendar.id}`
+                    return <div className="account-calendar-row" key={calendar.id}>
+                      <i style={{ backgroundColor: calendar.color ?? undefined }}/>
+                      <div><b>{calendar.name}</b><span className={`calendar-type ${calendar.type}`}>{calendar.type}</span></div>
+                      <span>{calendar.accessRole}</span>
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={calendar.included}
+                        aria-label={`${calendar.included ? 'Exclude' : 'Include'} ${calendar.name}`}
+                        className={`toggle ${calendar.included ? 'on' : ''}`}
+                        disabled={workingCalendar !== null}
+                        onClick={() => void setCalendarIncluded(calendar, !calendar.included)}
+                      ><i/></button>
+                    </div>
+                  })}
+                </div>}
               </div>
             })}
           </div>

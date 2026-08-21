@@ -5,7 +5,10 @@ import {
   type CalendarEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
-import { listIntegrationAccountsWithCredentials } from '../_lib/db.js'
+import {
+  listCalendarExclusions,
+  listIntegrationAccountsWithCredentials,
+} from '../_lib/db.js'
 import { integrationEnv } from '../_lib/env.js'
 import {
   errorMessage,
@@ -121,11 +124,18 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
     )
     let googleEvents: CalendarEvent[] = []
     let googleStatus: 'ok' | 'disconnected' | 'error' = 'disconnected'
-    const googleAccounts = await listIntegrationAccountsWithCredentials(
-      env.databaseUrl,
-      env.ownerId,
-      GOOGLE_CALENDAR_PROVIDER_ID,
-    )
+    const [googleAccounts, exclusions] = await Promise.all([
+      listIntegrationAccountsWithCredentials(
+        env.databaseUrl,
+        env.ownerId,
+        GOOGLE_CALENDAR_PROVIDER_ID,
+      ),
+      listCalendarExclusions(
+        env.databaseUrl,
+        env.ownerId,
+        GOOGLE_CALENDAR_PROVIDER_ID,
+      ),
+    ])
 
     if (googleAccounts.length) {
       const readableAccounts = googleAccounts.filter((account) => (
@@ -141,8 +151,29 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
             clientId: env.googleClientId,
             clientSecret: env.googleClientSecret,
           }, account)
-          const accountEvents = await listAllGoogleEvents(accessToken, timeMin, timeMax)
-          for (const event of accountEvents) eventsById.set(event.id, event)
+          const excludedCalendarIds = new Set(
+            exclusions
+              .filter((row) => row.external_account_id === account.external_account_id)
+              .map((row) => row.calendar_id),
+          )
+          const accountEvents = await listAllGoogleEvents(
+            accessToken,
+            timeMin,
+            timeMax,
+            { account, excludedCalendarIds },
+          )
+          for (const event of accountEvents) {
+            const existing = eventsById.get(event.id)
+            if (existing?.google && event.google) {
+              for (const sourceAccount of event.google.accounts) {
+                if (!existing.google.accounts.some(({ id }) => id === sourceAccount.id)) {
+                  existing.google.accounts.push(sourceAccount)
+                }
+              }
+            } else {
+              eventsById.set(event.id, event)
+            }
+          }
         } catch (error) {
           googleStatus = 'error'
           console.error(`Unable to load Google Calendar events for ${account.external_account_id}`, error)

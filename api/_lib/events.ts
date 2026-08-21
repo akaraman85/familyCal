@@ -10,6 +10,22 @@ export type CalendarEvent = {
   calendar: string
   location: string | null
   source: 'saved' | 'google'
+  google?: {
+    calendar: {
+      id: string
+      name: string
+      primary: boolean
+      type: 'primary' | 'owned' | 'shared' | 'subscribed'
+      accessRole: string
+      color: string | null
+    }
+    accounts: Array<{
+      id: string
+      memberId: string | null
+      email: string | null
+      displayName: string | null
+    }>
+  }
 }
 
 type SavedEventRow = {

@@ -41,14 +41,16 @@ export type GoogleUserInfo = {
   name?: string
 }
 
+export type GoogleCalendarListItem = {
+  id: string
+  summary: string
+  primary?: boolean
+  accessRole: string
+  backgroundColor?: string
+}
+
 type GoogleCalendarList = {
-  items?: Array<{
-    id: string
-    summary: string
-    primary?: boolean
-    accessRole: string
-    backgroundColor?: string
-  }>
+  items?: GoogleCalendarListItem[]
   nextPageToken?: string
 }
 
@@ -193,11 +195,19 @@ export async function listGoogleCalendars(accessToken: string) {
   return calendars
 }
 
+export function googleCalendarType(calendar: GoogleCalendarListItem) {
+  if (calendar.primary) return 'primary' as const
+  if (calendar.accessRole === 'owner') return 'owned' as const
+  if (calendar.accessRole === 'writer') return 'shared' as const
+  return 'subscribed' as const
+}
+
 async function listGoogleCalendarEvents(
   accessToken: string,
-  calendar: NonNullable<GoogleCalendarList['items']>[number],
+  calendar: GoogleCalendarListItem,
   timeMin: Date,
   timeMax: Date,
+  account: IntegrationAccountRow,
 ) {
   const events: CalendarEvent[] = []
   let pageToken: string | undefined
@@ -232,6 +242,22 @@ async function listGoogleCalendarEvents(
         calendar: calendar.summary,
         location: event.location ?? null,
         source: 'google',
+        google: {
+          calendar: {
+            id: calendar.id,
+            name: calendar.summary,
+            primary: calendar.primary ?? false,
+            type: googleCalendarType(calendar),
+            accessRole: calendar.accessRole,
+            color: calendar.backgroundColor ?? null,
+          },
+          accounts: [{
+            id: account.external_account_id,
+            memberId: account.member_id,
+            email: account.account_email,
+            displayName: account.display_name,
+          }],
+        },
       })
     }
     pageToken = page.nextPageToken
@@ -244,17 +270,23 @@ export async function listAllGoogleEvents(
   accessToken: string,
   timeMin: Date,
   timeMax: Date,
+  options: {
+    account: IntegrationAccountRow
+    excludedCalendarIds: Set<string>
+  },
 ) {
   const calendars = await listGoogleCalendars(accessToken)
   const events: CalendarEvent[] = []
 
   // Keep requests sequential to avoid quota bursts for accounts with many calendars.
   for (const calendar of calendars) {
+    if (options.excludedCalendarIds.has(calendar.id)) continue
     events.push(...await listGoogleCalendarEvents(
       accessToken,
       calendar,
       timeMin,
       timeMax,
+      options.account,
     ))
   }
   return events.sort((a, b) => a.startAt.localeCompare(b.startAt))
