@@ -10,6 +10,7 @@ import {
   listIntegrationAccountsWithCredentials,
 } from '../_lib/db.js'
 import { integrationEnv } from '../_lib/env.js'
+import { verifyPlannerProposal } from '../_lib/planner-confirmation.js'
 import {
   errorMessage,
   readJsonBody,
@@ -235,6 +236,20 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
       const requestId = typeof body.requestId === 'string' ? body.requestId.trim() : ''
       if (!requestId || requestId.length > 100) {
         throw new ValidationError('Planner request ID is required')
+      }
+      const proposalToken = typeof body.proposalToken === 'string'
+        ? body.proposalToken
+        : ''
+      if (!proposalToken || !verifyPlannerProposal({
+        token: proposalToken,
+        requestId,
+        ownerId: env.ownerId,
+        events,
+      })) {
+        sendJson(response, 403, {
+          error: 'Planner proposal expired or changed. Prepare it again.',
+        })
+        return
       }
       const created = await createSavedEvents(
         env.databaseUrl,
