@@ -211,6 +211,20 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
 .permission-missing { display:flex;align-items:center;gap:4px;color:#9b4d3b;font-size:8px;font-weight:700;background:var(--orange-soft);padding:5px 7px;border-radius:6px;white-space:nowrap; }
 .integration-account-actions { display:flex;align-items:center;justify-content:flex-end;gap:5px; }
 .reconnect-btn { border:1px solid #e8b9ac;background:var(--orange-soft);color:#9b4d3b;border-radius:6px;padding:6px 8px;font-size:8px;font-weight:700;text-decoration:none;white-space:nowrap; }
+.member-integration-account-group { border-bottom:1px solid var(--line); }
+.member-integration-account-group .member-integration-account { border-bottom:0; }
+.account-calendar-list { margin:0 0 8px 42px;border:1px solid #eceae5;border-radius:9px;background:#fafaf8;overflow:hidden; }
+.account-calendar-row { min-height:44px;display:grid;grid-template-columns:9px minmax(0,1fr) auto auto;align-items:center;gap:9px;padding:6px 10px;border-top:1px solid #eceae5; }
+.account-calendar-row:first-child { border-top:0; }
+.account-calendar-row > i { width:8px;height:8px;border-radius:50%;background:#9da7a2; }
+.account-calendar-row > div { min-width:0;display:flex;align-items:center;gap:7px; }
+.account-calendar-row > div b { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:9px;font-weight:600; }
+.account-calendar-row > span { color:#999;text-transform:capitalize;font-size:7px; }
+.calendar-type { flex:none;border-radius:5px;padding:3px 5px;text-transform:capitalize;font-size:7px;font-weight:700; }
+.calendar-type.primary { background:var(--green-soft);color:#39795e; }.calendar-type.owner { background:var(--blue-soft);color:#45649e; }.calendar-type.editable { background:var(--orange-soft);color:#9b4d3b; }.calendar-type.read-only { background:#efefec;color:#6f7370; }
+.account-calendar-row .toggle { width:44px;height:28px;padding:4px; }
+.account-calendar-row .toggle i { width:20px;height:20px; }
+.account-calendar-row .toggle:disabled { opacity:.55;cursor:wait; }
 .member-integration-empty { color:#999;font-size:9px;padding:17px 0; }
 .integration-empty { min-height:150px;border:1px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;color:#999;text-align:center;padding:20px; }
 .integration-empty b { color:#555;font-size:11px; }.integration-empty span { max-width:280px;font-size:8px;line-height:1.5; }
@@ -298,6 +312,7 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
   .year-grid { grid-template-columns:repeat(2,1fr);padding:12px;gap:9px; }.mini-month { padding:8px; }
   .integration-grid,.family-grid { grid-template-columns:1fr; }.integration-card { grid-template-columns:42px 1fr; }.integration-action { grid-column:2; }
   .member-integration-card { grid-template-columns:42px 1fr; }.member-integration-card > .connect-btn { grid-column:2;justify-self:start; }.member-integration-accounts { grid-column:1 / -1; }.member-integration-account { grid-template-columns:32px minmax(0,1fr) auto; }.member-integration-account .connected,.member-integration-account .permission-missing { display:none; }
+  .account-calendar-list { margin-left:0; }.account-calendar-row { grid-template-columns:9px minmax(0,1fr) auto; }.account-calendar-row > span { display:none; }
   .settings-panel { grid-template-columns:1fr; }.settings-nav { border:0;border-bottom:1px solid var(--line);display:flex;overflow:auto;padding:9px; }.settings-nav button { min-width:90px;text-align:center; }.settings-content { padding:22px 18px; }
   .event-modal,.family-member-modal { padding:20px; }.field-row { grid-template-columns:1fr;gap:0; }
 }

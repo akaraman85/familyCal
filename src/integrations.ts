@@ -1,4 +1,15 @@
 export type IntegrationStatus = 'connected' | 'disconnected' | 'error'
+export type GoogleCalendar = {
+  accountId: string
+  memberId: string | null
+  id: string
+  name: string
+  primary: boolean
+  type: 'primary' | 'owner' | 'editable' | 'read-only'
+  accessRole: string
+  color: string | null
+  included: boolean
+}
 
 export type Integration = {
   id: 'google-calendar'
@@ -36,16 +47,23 @@ export async function loadGoogleCalendars() {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
   })
-  return responseJson<{
-    calendars: Array<{
-      accountId: string
-      id: string
-      name: string
-      primary: boolean
-      accessRole: string
-      color: string | null
-    }>
-  }>(response)
+  return responseJson<{ calendars: GoogleCalendar[] }>(response)
+}
+
+export async function updateGoogleCalendarInclusion(
+  accountId: string,
+  calendarId: string,
+  included: boolean,
+) {
+  const response = await fetch('/api/integrations/google/calendar-preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ accountId, calendarId, included }),
+  })
+  return responseJson<{ accountId: string; calendarId: string; included: boolean }>(
+    response,
+  )
 }
 
 export async function disconnectGoogleCalendar(accountId: string) {

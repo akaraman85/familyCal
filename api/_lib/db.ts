@@ -32,6 +32,13 @@ export type StoredCredentials = {
   tokenType: string
 }
 
+export type CalendarExclusionRow = {
+  owner_id: string
+  provider: string
+  external_account_id: string
+  calendar_id: string
+}
+
 function database(databaseUrl: string) {
   return neon(databaseUrl)
 }
@@ -85,6 +92,50 @@ export async function listIntegrationAccountsWithCredentials(
     [ownerId, provider],
   )
   return rows as IntegrationAccountRow[]
+}
+
+export async function listCalendarExclusions(
+  databaseUrl: string,
+  ownerId: string,
+  provider: string,
+) {
+  const sql = database(databaseUrl)
+  const rows = await sql.query(
+    `SELECT owner_id, provider, external_account_id, calendar_id
+       FROM integration_calendar_exclusions
+      WHERE owner_id = $1 AND provider = $2`,
+    [ownerId, provider],
+  )
+  return rows as CalendarExclusionRow[]
+}
+
+export async function setCalendarIncluded(
+  databaseUrl: string,
+  ownerId: string,
+  provider: string,
+  externalAccountId: string,
+  calendarId: string,
+  included: boolean,
+) {
+  const sql = database(databaseUrl)
+  if (included) {
+    await sql.query(
+      `DELETE FROM integration_calendar_exclusions
+        WHERE owner_id = $1
+          AND provider = $2
+          AND external_account_id = $3
+          AND calendar_id = $4`,
+      [ownerId, provider, externalAccountId, calendarId],
+    )
+    return
+  }
+  await sql.query(
+    `INSERT INTO integration_calendar_exclusions (
+       owner_id, provider, external_account_id, calendar_id
+     ) VALUES ($1, $2, $3, $4)
+     ON CONFLICT DO NOTHING`,
+    [ownerId, provider, externalAccountId, calendarId],
+  )
 }
 
 export async function upsertIntegrationAccount(
