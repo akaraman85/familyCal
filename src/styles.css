@@ -114,21 +114,30 @@ main { margin-left: 248px; min-width: 0; flex: 1; }
 .week-head span { text-transform:uppercase; font-size:8px; color:#999; font-weight:700; }
 .week-head b { font-size:14px; width:25px; height:25px; display:grid; place-items:center; border-radius:50%; }
 .week-head .current b { background:var(--orange); color:white; }
-.week-body { height:510px; display:grid; grid-template-columns:56px repeat(7,1fr); position:relative; background:repeating-linear-gradient(to bottom, transparent 0, transparent 72px, #efede9 73px); }
-.times { display:flex; flex-direction:column; justify-content:space-around; align-items:center; font-size:8px; color:#a1a4a1; }
+.week-all-day { min-height:38px;display:grid;grid-template-columns:56px repeat(7,1fr);border-bottom:1px solid var(--line);font-size:8px;color:#999; }
+.week-all-day > span { display:flex;align-items:center;justify-content:center;text-transform:uppercase;font-size:7px; }
+.week-all-day > div { border-left:1px solid #efede9;padding:4px;min-width:0; }
+.all-day-event { min-height:26px;border-left:3px solid;border-radius:5px;padding:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:8px;font-weight:600; }
+.week-body { height:504px; display:grid; grid-template-columns:56px repeat(7,1fr); position:relative; background:repeating-linear-gradient(to bottom, transparent 0, transparent 71px, #efede9 72px); }
+.times { position:relative;font-size:8px;color:#a1a4a1; }
+.times span { position:absolute;left:0;right:0;text-align:center;transform:translateY(-5px); }
 .week-column { position:relative; border-left:1px solid #efede9; }
-.week-event { position:absolute; left:5px; right:5px; min-height:52px; border-radius:6px; border-left:3px solid; padding:6px; font-size:8px; text-align:left; }
+.week-event { position:absolute; left:5px; right:5px; min-height:0; border-radius:6px; border-left:3px solid; padding:6px; font-size:8px; text-align:left; overflow:hidden; }
 .week-event b,.week-event span { display:block; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; }
 .week-event span { opacity:.7; margin-top:3px; }
 
-.day-view { height:550px; position:relative; padding-left:75px; overflow:auto; }
-.day-timeline { position:absolute; left:0; right:0; top:0; }
-.time-row { height:77px; display:flex; align-items:flex-start; }
-.time-row span { width:68px; color:#a1a4a1; font-size:8px; text-align:right; padding:0 10px; transform:translateY(-5px); }
+.day-view { max-height:550px;overflow:auto; }
+.day-all-day { min-height:42px;display:grid;grid-template-columns:75px 1fr;border-bottom:1px solid var(--line); }
+.day-all-day > span { display:flex;align-items:center;justify-content:flex-end;padding-right:10px;text-transform:uppercase;color:#999;font-size:7px; }
+.day-all-day > div { border-left:1px solid #efede9;padding:6px;display:flex;flex-wrap:wrap;gap:5px; }
+.day-timed { height:504px;position:relative;padding-left:75px; }
+.day-timeline { position:absolute; left:0; right:0; top:0;height:504px; }
+.time-row { position:absolute;left:0;right:0;display:flex;align-items:flex-start; }
+.time-row span { width:68px; flex:none;color:#a1a4a1; font-size:8px; text-align:right; padding:0 10px; transform:translateY(-5px); }
 .time-row i { flex:1; border-top:1px solid #efede9; }
-.day-events { position:relative; height:539px; border-left:1px solid #efede9; }
-.large-event { position:absolute; left:18px; right:22px; border-left:4px solid; border-radius:8px; height:90px; padding:12px 15px; display:flex; flex-direction:column; align-items:flex-start; }
-.large-event > span { font-size:9px; opacity:.7; }.large-event b { font-size:13px; margin:6px 0; }.large-event small { font-size:9px; opacity:.75; }
+.day-events { position:relative; height:504px; border-left:1px solid #efede9; }
+.large-event { position:absolute; left:18px; right:22px; border-left:4px solid; border-radius:8px; padding:6px 10px; display:flex; flex-direction:column; align-items:flex-start;overflow:hidden; }
+.large-event > span { font-size:8px; opacity:.7; }.large-event b { font-size:11px; margin:3px 0; }.large-event small { font-size:8px; opacity:.75; }
 .empty-day { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; color:#aaa; gap:7px; font-size:11px; }
 .empty-day b { color:#666; font-size:13px; }
 
