@@ -54,3 +54,22 @@ export async function saveCalendarEvent(event: {
   })
   return readResponse<{ event: CalendarEventData }>(response)
 }
+
+export async function saveCalendarEvents(events: Array<{
+  title: string
+  startAt: string
+  endAt?: string | null
+  calendar: string
+  location?: string | null
+  allDay?: boolean
+  allDayDate?: string | null
+  allDayEndDate?: string | null
+}>, requestId: string) {
+  const response = await fetch('/api/events', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ events, requestId }),
+  })
+  return readResponse<{ events: CalendarEventData[] }>(response)
+}

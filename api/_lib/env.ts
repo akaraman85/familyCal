@@ -1,10 +1,13 @@
-type IntegrationEnv = {
+type AppEnv = {
   appUrl: string
   databaseUrl: string
+  ownerId: string
+}
+
+type IntegrationEnv = AppEnv & {
   encryptionKey: string
   googleClientId: string
   googleClientSecret: string
-  ownerId: string
 }
 
 function required(name: string) {
@@ -13,7 +16,7 @@ function required(name: string) {
   return value
 }
 
-export function integrationEnv(): IntegrationEnv {
+export function appEnv(): AppEnv {
   const appUrl = required('PUBLIC_APP_URL').replace(/\/$/, '')
   const parsedUrl = new URL(appUrl)
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
@@ -23,9 +26,15 @@ export function integrationEnv(): IntegrationEnv {
   return {
     appUrl,
     databaseUrl: required('DATABASE_URL'),
+    ownerId: required('INTEGRATION_OWNER_ID'),
+  }
+}
+
+export function integrationEnv(): IntegrationEnv {
+  return {
+    ...appEnv(),
     encryptionKey: required('INTEGRATION_ENCRYPTION_KEY'),
     googleClientId: required('GOOGLE_CLIENT_ID'),
     googleClientSecret: required('GOOGLE_CLIENT_SECRET'),
-    ownerId: required('INTEGRATION_OWNER_ID'),
   }
 }

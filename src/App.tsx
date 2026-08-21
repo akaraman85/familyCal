@@ -13,6 +13,7 @@ import {
 import {
   loadCalendarEvents,
   saveCalendarEvent,
+  saveCalendarEvents,
   type CalendarEventData,
   type EventSources,
 } from './events'
@@ -27,6 +28,14 @@ import {
   type FamilyMember,
   type FamilyMemberInput,
 } from './family'
+import {
+  loadPlannerSettings,
+  proposeEvents,
+  updatePlannerSettings,
+  type PlannedEvent,
+  type PlannerProposal,
+  type PlannerSettings,
+} from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
@@ -226,6 +235,12 @@ function AuthenticatedApp({ user, onLogout }: {
     setEventRefresh((current) => current + 1)
   }
 
+  const savePlannedEvents = async (plannedEvents: PlannedEvent[], requestId: string) => {
+    await saveCalendarEvents(plannedEvents, requestId)
+    setEventRefresh((current) => current + 1)
+    setChatOpen(false)
+  }
+
   const moveDate = (direction: number) => {
     if (view === 'Year') setSelectedDate((d) => direction > 0 ? addYears(d, 1) : subYears(d, 1))
     else if (view === 'Month') setSelectedDate((d) => direction > 0 ? addMonths(d, 1) : subMonths(d, 1))
@@ -313,7 +328,7 @@ function AuthenticatedApp({ user, onLogout }: {
       </main>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
-      {chatOpen && <AssistantPanel close={() => setChatOpen(false)} openModal={() => { setChatOpen(false); setModalOpen(true) }} />}
+      {chatOpen && <AssistantPanel close={() => setChatOpen(false)} save={savePlannedEvents} />}
       {modalOpen && (
         <EventModal
           selectedDate={selectedDate}
@@ -673,28 +688,187 @@ function FamilyMemberModal({ member, close, save }: {
 }
 
 function SettingsPage() {
+  const [tab, setTab] = useState<'general' | 'planner'>('general')
   const [weekends, setWeekends] = useState(true)
   const [emails, setEmails] = useState(false)
+  const [planner, setPlanner] = useState<PlannerSettings | null>(null)
+  const [plannerError, setPlannerError] = useState<string | null>(null)
+  const [savingPlanner, setSavingPlanner] = useState(false)
+  const [plannerSaved, setPlannerSaved] = useState(false)
+
+  useEffect(() => {
+    loadPlannerSettings()
+      .then(({ settings }) => setPlanner(settings))
+      .catch((error: unknown) => {
+        setPlannerError(error instanceof Error ? error.message : 'Unable to load AI settings')
+      })
+  }, [])
+
+  const savePlanner = async () => {
+    if (!planner) return
+    setSavingPlanner(true)
+    setPlannerError(null)
+    setPlannerSaved(false)
+    try {
+      const result = await updatePlannerSettings(planner)
+      setPlanner(result.settings)
+      setPlannerSaved(true)
+    } catch (error) {
+      setPlannerError(error instanceof Error ? error.message : 'Unable to save AI settings')
+    } finally {
+      setSavingPlanner(false)
+    }
+  }
+
   return <div className="page settings-page"><div className="page-heading"><div><p className="eyebrow">Preferences</p><h1>Settings</h1><p>Make the calendar work the way your family does.</p></div></div>
-    <section className="settings-panel"><div className="settings-nav"><button className="active">General</button><button>Notifications</button><button>Privacy</button><button>Account</button></div><div className="settings-content"><h2>Calendar preferences</h2><p>Choose how dates and events appear for everyone.</p>
-      <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select defaultValue="Month"><option>Day</option><option>Week</option><option>Month</option><option>Year</option></select></label>
-      <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select defaultValue="Monday"><option>Monday</option><option>Sunday</option></select></label>
-      <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button className={`toggle ${weekends ? 'on' : ''}`} onClick={() => setWeekends(!weekends)}><i/></button></label>
-      <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button className={`toggle ${emails ? 'on' : ''}`} onClick={() => setEmails(!emails)}><i/></button></label>
-    </div></section>
+    <section className="settings-panel"><div className="settings-nav">
+      <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
+      <button className={tab === 'planner' ? 'active' : ''} onClick={() => setTab('planner')}>AI Planner</button>
+      <button disabled>Notifications</button><button disabled>Privacy</button><button disabled>Account</button>
+    </div>
+    {tab === 'general'
+      ? <div className="settings-content"><h2>Calendar preferences</h2><p>Choose how dates and events appear for everyone.</p>
+        <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select defaultValue="Month"><option>Day</option><option>Week</option><option>Month</option><option>Year</option></select></label>
+        <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select defaultValue="Monday"><option>Monday</option><option>Sunday</option></select></label>
+        <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" className={`toggle ${weekends ? 'on' : ''}`} onClick={() => setWeekends(!weekends)}><i/></button></label>
+        <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" className={`toggle ${emails ? 'on' : ''}`} onClick={() => setEmails(!emails)}><i/></button></label>
+      </div>
+      : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals. Nothing is added until you confirm it.</p>
+        <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
+        {!planner && !plannerError && <div className="integration-loading"><LoaderCircle size={16}/>Loading planner settings</div>}
+        {planner && <>
+          <label><span><b>Enable AI Planner</b><small>Allow authenticated users to request event proposals</small></span><button type="button" className={`toggle ${planner.enabled ? 'on' : ''}`} onClick={() => setPlanner({ ...planner, enabled: !planner.enabled })}><i/></button></label>
+          <label><span><b>Model profile</b><small>Choose the balance of speed, cost, and reasoning quality</small></span><select value={planner.modelProfile} onChange={(event) => setPlanner({ ...planner, modelProfile: event.target.value as PlannerSettings['modelProfile'] })}><option value="fast">Fast · GPT-5.6 Luna</option><option value="balanced">Balanced · GPT-5.6 Terra</option><option value="quality">Quality · GPT-5.6 Sol</option></select></label>
+          <label><span><b>Household timezone</b><small>IANA timezone used to resolve phrases like “tomorrow at 7”</small></span><input value={planner.timezone} onChange={(event) => setPlanner({ ...planner, timezone: event.target.value })} placeholder="America/New_York"/></label>
+          <label><span><b>Default calendar</b><small>Used when a request does not name a calendar</small></span><input maxLength={100} value={planner.defaultCalendar} onChange={(event) => setPlanner({ ...planner, defaultCalendar: event.target.value })}/></label>
+          <div className="planner-settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
+        </>}
+        {plannerError && <div className="modal-error" role="alert">{plannerError}</div>}
+      </div>}
+    </section>
   </div>
 }
 
-function AssistantPanel({ close, openModal }: { close: () => void; openModal: () => void }) {
+function formatProposalDate(
+  value: string,
+  timezone: string,
+  options: Intl.DateTimeFormatOptions,
+) {
+  return new Intl.DateTimeFormat('en-US', {
+    ...options,
+    timeZone: timezone,
+  }).format(new Date(value))
+}
+
+function proposalTime(event: PlannedEvent, timezone: string) {
+  const start = new Date(event.startAt)
+  if (event.allDay && event.allDayDate) {
+    const date = formatProposalDate(`${event.allDayDate}T12:00:00Z`, 'UTC', {
+      month: 'short',
+      day: 'numeric',
+    })
+    if (!event.allDayEndDate) return `${date} · All day`
+    const inclusiveEnd = new Date(`${event.allDayEndDate}T12:00:00Z`)
+    inclusiveEnd.setUTCDate(inclusiveEnd.getUTCDate() - 1)
+    const endDate = formatProposalDate(inclusiveEnd.toISOString(), 'UTC', {
+      month: 'short',
+      day: 'numeric',
+    })
+    return `${date}–${endDate} · All day`
+  }
+  const date = formatProposalDate(start.toISOString(), timezone, {
+    month: 'short',
+    day: 'numeric',
+  })
+  const startTime = formatProposalDate(start.toISOString(), timezone, {
+    hour: 'numeric',
+    minute: '2-digit',
+  })
+  const end = event.endAt
+    ? `–${formatProposalDate(event.endAt, timezone, {
+      hour: 'numeric',
+      minute: '2-digit',
+    })}`
+    : ''
+  return `${date} · ${startTime}${end}`
+}
+
+function proposalDatePart(
+  event: PlannedEvent,
+  timezone: string,
+  part: 'day' | 'month',
+) {
+  const value = event.allDay && event.allDayDate
+    ? `${event.allDayDate}T12:00:00Z`
+    : event.startAt
+  return formatProposalDate(value, event.allDay ? 'UTC' : timezone, (
+    part === 'day' ? { day: 'numeric' } : { month: 'short' }
+  ))
+}
+
+function AssistantPanel({ close, save }: {
+  close: () => void
+  save: (events: PlannedEvent[], requestId: string) => Promise<void>
+}) {
   const [text, setText] = useState('')
-  const [submitted, setSubmitted] = useState(false)
-  return <div className="assistant-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><aside className="assistant-panel">
-    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b>Family planner</b><span>Powered by AI</span></div><button onClick={close}><X size={20}/></button></div>
+  const [submittedText, setSubmittedText] = useState('')
+  const [proposal, setProposal] = useState<PlannerProposal | null>(null)
+  const [proposalId, setProposalId] = useState<string | null>(null)
+  const [model, setModel] = useState<string | null>(null)
+  const [timezone, setTimezone] = useState('UTC')
+  const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const submit = async () => {
+    const message = text.trim()
+    if (!message || loading) return
+    setSubmittedText(message)
+    setProposal(null)
+    setProposalId(null)
+    setError(null)
+    setLoading(true)
+    try {
+      const result = await proposeEvents(message)
+      setProposal(result.proposal)
+      setProposalId(result.proposalId)
+      setModel(result.model)
+      setTimezone(result.timezone)
+      if (result.proposal.result === 'needs_clarification') setText('')
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to prepare this event')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const confirm = async () => {
+    if (!proposal?.events.length || !proposalId || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await save(proposal.events, proposalId)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save proposed events')
+      setSaving(false)
+    }
+  }
+
+  return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside className="assistant-panel">
+    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b>Family planner</b><span>Powered by Vercel AI Gateway</span></div><button onClick={close}><X size={20}/></button></div>
     <div className="assistant-body">
-      <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Hi Alex! Tell me what you’d like to add. You can write naturally — I’ll organize the details for you.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
-      {submitted && <><div className="user-message">{text || 'Dinner with Maya tomorrow at 7:30pm'}</div><div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>I found everything I need. Here’s the event I’ll create:</p><div className="parsed-event"><div className="parsed-date"><b>21</b><span>AUG</span></div><div><b>Dinner with Maya</b><span><Clock3 size={13}/>7:30 PM · Family calendar</span></div></div><div className="chat-actions"><button onClick={openModal}>Review details</button><button className="confirm-chat"><Check size={15}/>Add event</button></div></div></div></>}
+      <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
+      {submittedText && <div className="user-message">{submittedText}</div>}
+      {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={14}/></div><div><p>Preparing a structured calendar proposal…</p></div></div>}
+      {proposal && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
+        <p>{proposal.message}</p>
+        {proposal.events.length > 0 && <div className="proposal-events">{proposal.events.map((event, index) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${index}`}><div className="parsed-date"><b>{proposalDatePart(event, timezone, 'day')}</b><span>{proposalDatePart(event, timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
+        {proposal.warnings.length > 0 && <ul className="proposal-warnings">{proposal.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
+        {proposal.result === 'proposal' && <div className="chat-actions"><span>{model?.replace('openai/', '')}</span><button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={15}/>{saving ? 'Adding…' : `Add ${proposal.events.length} event${proposal.events.length === 1 ? '' : 's'}`}</button></div>}
+      </div></div>}
+      {error && <div className="assistant-error" role="alert">{error}</div>}
     </div>
-    <div className="assistant-input"><textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Describe an event or ask about your schedule..." /><div><span>AI can make mistakes. Review details before saving.</span><button disabled={!text.trim()} onClick={() => setSubmitted(true)}><ChevronRight size={19}/></button></div></div>
+    <div className="assistant-input"><textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe one event, a recurring plan, or paste a schedule..." /><div><span>AI can make mistakes. Review every detail before saving.</span><button disabled={!text.trim() || loading} onClick={() => void submit()}><ChevronRight size={19}/></button></div></div>
   </aside></div>
 }
 
