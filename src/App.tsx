@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, ExternalLink, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
+  CircleHelp, Clock3, ExternalLink, ImagePlus, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
   LogOut, MapPin, Menu, MessageCircleMore, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
@@ -33,9 +33,11 @@ import {
 } from './family'
 import {
   loadPlannerSettings,
+  preparePlannerScreenshot,
   proposeEvents,
   updatePlannerSettings,
   type PlannedEvent,
+  type PlannerImageAttachment,
   type PlannerProposal,
   type PlannerSettings,
 } from './planner'
@@ -872,7 +874,7 @@ function SettingsPage() {
         <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" className={`toggle ${weekends ? 'on' : ''}`} onClick={() => setWeekends(!weekends)}><i/></button></label>
         <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" className={`toggle ${emails ? 'on' : ''}`} onClick={() => setEmails(!emails)}><i/></button></label>
       </div>
-      : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals. Nothing is added until you confirm it.</p>
+      : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
         {!planner && !plannerError && <div className="integration-loading"><LoaderCircle size={16}/>Loading planner settings</div>}
         {planner && <>
@@ -949,26 +951,31 @@ function AssistantPanel({ close, save }: {
   close: () => void
   save: (events: PlannedEvent[], requestId: string) => Promise<void>
 }) {
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [text, setText] = useState('')
   const [submittedText, setSubmittedText] = useState('')
+  const [image, setImage] = useState<PlannerImageAttachment | null>(null)
+  const [submittedImage, setSubmittedImage] = useState<string | null>(null)
   const [proposal, setProposal] = useState<PlannerProposal | null>(null)
   const [proposalId, setProposalId] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
   const [timezone, setTimezone] = useState('UTC')
   const [loading, setLoading] = useState(false)
+  const [processingImage, setProcessingImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const submit = async () => {
     const message = text.trim()
-    if (!message || loading) return
-    setSubmittedText(message)
+    if ((!message && !image) || loading || processingImage) return
+    setSubmittedText(message || 'Extract events from this screenshot')
+    setSubmittedImage(image?.previewUrl ?? null)
     setProposal(null)
     setProposalId(null)
     setError(null)
     setLoading(true)
     try {
-      const result = await proposeEvents(message)
+      const result = await proposeEvents(message, image ?? undefined)
       setProposal(result.proposal)
       setProposalId(result.proposalId)
       setModel(result.model)
@@ -978,6 +985,20 @@ function AssistantPanel({ close, save }: {
       setError(requestError instanceof Error ? requestError.message : 'Unable to prepare this event')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const attachScreenshot = async (file: File | undefined) => {
+    if (!file) return
+    setProcessingImage(true)
+    setError(null)
+    try {
+      setImage(await preparePlannerScreenshot(file))
+    } catch (imageError) {
+      setImage(null)
+      setError(imageError instanceof Error ? imageError.message : 'Unable to attach screenshot')
+    } finally {
+      setProcessingImage(false)
     }
   }
 
@@ -997,7 +1018,7 @@ function AssistantPanel({ close, save }: {
     <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b>Family planner</b><span>Powered by Vercel AI Gateway</span></div><button onClick={close}><X size={20}/></button></div>
     <div className="assistant-body">
       <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
-      {submittedText && <div className="user-message">{submittedText}</div>}
+      {submittedText && <div className="user-message">{submittedImage && <img src={submittedImage} alt="Submitted calendar screenshot"/>}<span>{submittedText}</span></div>}
       {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={14}/></div><div><p>Preparing a structured calendar proposal…</p></div></div>}
       {proposal && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
         <p>{proposal.message}</p>
@@ -1007,7 +1028,19 @@ function AssistantPanel({ close, save }: {
       </div></div>}
       {error && <div className="assistant-error" role="alert">{error}</div>}
     </div>
-    <div className="assistant-input"><textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe one event, a recurring plan, or paste a schedule..." /><div><span>AI can make mistakes. Review every detail before saving.</span><button disabled={!text.trim() || loading} onClick={() => void submit()}><ChevronRight size={19}/></button></div></div>
+    <div className="assistant-input">
+      {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => setImage(null)} aria-label="Remove screenshot"><X size={14}/></button></div>}
+      <textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => {
+        void attachScreenshot(event.target.files?.[0])
+        event.target.value = ''
+      }}/>
+      <div className="assistant-input-actions">
+        <button type="button" className="attach-screenshot" disabled={loading || processingImage} onClick={() => fileInputRef.current?.click()} aria-label="Attach calendar screenshot">{processingImage ? <LoaderCircle size={17}/> : <ImagePlus size={17}/>}</button>
+        <span>Images are processed before upload. Review every detail before saving.</span>
+        <button type="button" className="send-planner-request" disabled={(!text.trim() && !image) || loading || processingImage} onClick={() => void submit()} aria-label="Prepare calendar proposal"><ChevronRight size={19}/></button>
+      </div>
+    </div>
   </aside></div>
 }
 

@@ -32,7 +32,8 @@ production build.
 ## AI Planner
 
 The AI Planner uses the Vercel AI SDK and AI Gateway to turn natural-language
-requests into validated event proposals. It never writes during generation.
+requests or attached calendar screenshots into validated event proposals. It
+never writes during generation.
 The browser displays every proposed event, and only an explicit confirmation
 uses the authenticated events API to save the batch transactionally.
 
@@ -47,7 +48,10 @@ Settings → AI Planner persists only non-secret preferences: enabled state,
 model profile, household timezone, and default calendar. The available profiles
 route to OpenAI GPT-5.6 Luna, Terra, and Sol through AI Gateway. Planner prompts
 may contain private household scheduling details; they are sent to the selected
-model provider only when an authenticated user submits a request.
+model provider only when an authenticated user submits a request. Screenshot
+attachments are decoded in the browser, resized to a maximum dimension, rendered
+to a fresh JPEG to remove embedded file metadata, and rejected if the processed
+payload exceeds 2.5 MB. The server accepts only JPEG, PNG, and WebP image data.
 
 ## Database migrations
 

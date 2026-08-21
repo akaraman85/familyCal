@@ -16,8 +16,25 @@ import {
 } from '../_lib/planner-settings.js'
 
 const MAX_MESSAGE_LENGTH = 12_000
+const MAX_IMAGE_BYTES = 2_500_000
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 
 class ValidationError extends Error {}
+
+function matchesImageSignature(bytes: Uint8Array, mediaType: string) {
+  if (mediaType === 'image/jpeg') {
+    return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+  }
+  if (mediaType === 'image/png') {
+    return bytes[0] === 0x89
+      && bytes[1] === 0x50
+      && bytes[2] === 0x4e
+      && bytes[3] === 0x47
+  }
+  return bytes.length >= 12
+    && String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF'
+    && String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
+}
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['POST'])) return
@@ -32,8 +49,31 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }
     const body = rawBody as Record<string, unknown>
     const message = typeof body.message === 'string' ? body.message.trim() : ''
-    if (!message || message.length > MAX_MESSAGE_LENGTH) {
-      throw new ValidationError(`Planner requests must be 1–${MAX_MESSAGE_LENGTH} characters`)
+    let image: { data: Uint8Array; mediaType: string } | undefined
+    if (body.image !== undefined) {
+      if (!body.image || typeof body.image !== 'object' || Array.isArray(body.image)) {
+        throw new ValidationError('Screenshot attachment is invalid')
+      }
+      const rawImage = body.image as Record<string, unknown>
+      const mediaType = typeof rawImage.mediaType === 'string' ? rawImage.mediaType : ''
+      const data = typeof rawImage.data === 'string' ? rawImage.data : ''
+      if (!IMAGE_TYPES.has(mediaType) || !data || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {
+        throw new ValidationError('Use a JPEG, PNG, or WebP screenshot')
+      }
+      const bytes = Buffer.from(data, 'base64')
+      if (
+        !bytes.length
+        || bytes.length > MAX_IMAGE_BYTES
+        || !matchesImageSignature(bytes, mediaType)
+      ) {
+        throw new ValidationError('Screenshot data is invalid or larger than 2.5 MB')
+      }
+      image = { data: bytes, mediaType }
+    }
+    if ((!message && !image) || message.length > MAX_MESSAGE_LENGTH) {
+      throw new ValidationError(
+        `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
+      )
     }
 
     const settings = await getPlannerSettings(env.databaseUrl, env.ownerId)
@@ -54,6 +94,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       databaseUrl: env.databaseUrl,
       ownerId: env.ownerId,
       message,
+      image,
       settings,
       now: new Date(),
     })
