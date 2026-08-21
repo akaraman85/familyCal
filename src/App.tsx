@@ -308,8 +308,12 @@ function AuthenticatedApp({ user, onLogout }: {
     setEventRefresh((current) => current + 1)
   }
 
-  const savePlannedEvents = async (plannedEvents: PlannedEvent[], requestId: string) => {
-    await saveCalendarEvents(plannedEvents, requestId)
+  const savePlannedEvents = async (
+    plannedEvents: PlannedEvent[],
+    requestId: string,
+    proposalToken: string,
+  ) => {
+    await saveCalendarEvents(plannedEvents, requestId, proposalToken)
     setEventRefresh((current) => current + 1)
     setChatOpen(false)
   }
@@ -947,17 +951,73 @@ function proposalDatePart(
   ))
 }
 
+function useDialogAccessibility(
+  dialogRef: { current: HTMLElement | null },
+  close: () => void,
+) {
+  const closeRef = useRef(close)
+  closeRef.current = close
+  useEffect(() => {
+    const previouslyFocused = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null
+    const background = [...document.querySelectorAll<HTMLElement>(
+      '.app-shell > .sidebar, .app-shell > main, .app-shell > .chat-fab',
+    )]
+    const previousOverflow = document.body.style.overflow
+    background.forEach((element) => { element.inert = true })
+    document.body.style.overflow = 'hidden'
+
+    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
+      if (keyboardEvent.key === 'Escape') {
+        keyboardEvent.preventDefault()
+        closeRef.current()
+        return
+      }
+      if (keyboardEvent.key !== 'Tab' || !dialogRef.current) return
+      const focusable = [...dialogRef.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )]
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (keyboardEvent.shiftKey && document.activeElement === first) {
+        keyboardEvent.preventDefault()
+        last.focus()
+      } else if (!keyboardEvent.shiftKey && document.activeElement === last) {
+        keyboardEvent.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    requestAnimationFrame(() => {
+      dialogRef.current?.querySelector<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled])',
+      )?.focus()
+    })
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      background.forEach((element) => { element.inert = false })
+      document.body.style.overflow = previousOverflow
+      previouslyFocused?.focus()
+    }
+  }, [dialogRef])
+}
+
 function AssistantPanel({ close, save }: {
   close: () => void
-  save: (events: PlannedEvent[], requestId: string) => Promise<void>
+  save: (events: PlannedEvent[], requestId: string, proposalToken: string) => Promise<void>
 }) {
+  const panelRef = useRef<HTMLElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  useDialogAccessibility(panelRef, close)
   const [text, setText] = useState('')
   const [submittedText, setSubmittedText] = useState('')
   const [image, setImage] = useState<PlannerImageAttachment | null>(null)
   const [submittedImage, setSubmittedImage] = useState<string | null>(null)
   const [proposal, setProposal] = useState<PlannerProposal | null>(null)
   const [proposalId, setProposalId] = useState<string | null>(null)
+  const [proposalToken, setProposalToken] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
   const [timezone, setTimezone] = useState('UTC')
   const [loading, setLoading] = useState(false)
@@ -972,15 +1032,18 @@ function AssistantPanel({ close, save }: {
     setSubmittedImage(image?.previewUrl ?? null)
     setProposal(null)
     setProposalId(null)
+    setProposalToken(null)
     setError(null)
     setLoading(true)
     try {
       const result = await proposeEvents(message, image ?? undefined)
       setProposal(result.proposal)
       setProposalId(result.proposalId)
+      setProposalToken(result.proposalToken)
       setModel(result.model)
       setTimezone(result.timezone)
-      if (result.proposal.result === 'needs_clarification') setText('')
+      setImage(null)
+      setText('')
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to prepare this event')
     } finally {
@@ -1003,19 +1066,19 @@ function AssistantPanel({ close, save }: {
   }
 
   const confirm = async () => {
-    if (!proposal?.events.length || !proposalId || saving) return
+    if (!proposal?.events.length || !proposalId || !proposalToken || saving) return
     setSaving(true)
     setError(null)
     try {
-      await save(proposal.events, proposalId)
+      await save(proposal.events, proposalId, proposalToken)
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save proposed events')
       setSaving(false)
     }
   }
 
-  return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside className="assistant-panel">
-    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b>Family planner</b><span>Powered by Vercel AI Gateway</span></div><button onClick={close}><X size={20}/></button></div>
+  return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
+    <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>Powered by Vercel AI Gateway</span></div><button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div>
     <div className="assistant-body">
       <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>
       {submittedText && <div className="user-message">{submittedImage && <img src={submittedImage} alt="Submitted calendar screenshot"/>}<span>{submittedText}</span></div>}
@@ -1031,7 +1094,7 @@ function AssistantPanel({ close, save }: {
     <div className="assistant-input">
       {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => setImage(null)} aria-label="Remove screenshot"><X size={14}/></button></div>}
       <textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder={image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
-      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => {
+      <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={(event) => {
         void attachScreenshot(event.target.files?.[0])
         event.target.value = ''
       }}/>
@@ -1064,56 +1127,13 @@ function eventTimeSummary(event: EventItem) {
 
 function EventDetailModal({ event, close }: { event: EventItem; close: () => void }) {
   const modalRef = useRef<HTMLElement>(null)
+  useDialogAccessibility(modalRef, close)
   const accounts = event.google?.accounts ?? []
   const organizer = event.organizer?.displayName || event.organizer?.email
   const safeDescription = useMemo(() => DOMPurify.sanitize(event.description ?? '', {
     ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
     ALLOWED_ATTR: ['href'],
   }), [event.description])
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null
-    const background = [...document.querySelectorAll<HTMLElement>(
-      '.app-shell > .sidebar, .app-shell > main, .app-shell > .chat-fab',
-    )]
-    const previousOverflow = document.body.style.overflow
-    background.forEach((element) => { element.inert = true })
-    document.body.style.overflow = 'hidden'
-
-    const handleKeyDown = (keyboardEvent: KeyboardEvent) => {
-      if (keyboardEvent.key === 'Escape') {
-        keyboardEvent.preventDefault()
-        close()
-        return
-      }
-      if (keyboardEvent.key !== 'Tab' || !modalRef.current) return
-      const focusable = [...modalRef.current.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
-      )]
-      if (!focusable.length) return
-      const first = focusable[0]
-      const last = focusable[focusable.length - 1]
-      if (keyboardEvent.shiftKey && document.activeElement === first) {
-        keyboardEvent.preventDefault()
-        last.focus()
-      } else if (!keyboardEvent.shiftKey && document.activeElement === last) {
-        keyboardEvent.preventDefault()
-        first.focus()
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    requestAnimationFrame(() => {
-      modalRef.current?.querySelector<HTMLElement>('button')?.focus()
-    })
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      background.forEach((element) => { element.inert = false })
-      document.body.style.overflow = previousOverflow
-      previouslyFocused?.focus()
-    }
-  }, [close])
 
   return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) close() }}>
     <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby="event-detail-summary">

@@ -35,7 +35,9 @@ The AI Planner uses the Vercel AI SDK and AI Gateway to turn natural-language
 requests or attached calendar screenshots into validated event proposals. It
 never writes during generation.
 The browser displays every proposed event, and only an explicit confirmation
-uses the authenticated events API to save the batch transactionally.
+uses the authenticated events API to save the batch transactionally. Proposal
+contents are bound to a short-lived server signature, so reviewed events cannot
+be altered before confirmation.
 
 Production deployments authenticate to AI Gateway with the short-lived
 `VERCEL_OIDC_TOKEN` injected by Vercel, so no model credential is stored in the
@@ -51,7 +53,9 @@ may contain private household scheduling details; they are sent to the selected
 model provider only when an authenticated user submits a request. Screenshot
 attachments are decoded in the browser, resized to a maximum dimension, rendered
 to a fresh JPEG to remove embedded file metadata, and rejected if the processed
-payload exceeds 2.5 MB. The server accepts only JPEG, PNG, and WebP image data.
+payload exceeds 2.5 MB. The server accepts only JPEG and PNG image data, applies
+an independent pixel limit, fully decodes it, and canonicalizes it to a fresh
+JPEG before forwarding it to the model.
 
 ## Database migrations
 

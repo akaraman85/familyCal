@@ -7,6 +7,8 @@ export type ApiRequest = IncomingMessage & {
 
 export type ApiResponse = ServerResponse
 
+export class RequestBodyTooLargeError extends Error {}
+
 export function sendJson(response: ApiResponse, status: number, body: unknown) {
   response.statusCode = status
   response.setHeader('Content-Type', 'application/json; charset=utf-8')
@@ -72,15 +74,27 @@ export function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Unexpected error'
 }
 
-export async function readJsonBody(request: ApiRequest) {
+export async function readJsonBody(request: ApiRequest, maxBytes?: number) {
   if (request.body !== undefined) {
+    const serialized = typeof request.body === 'string'
+      ? request.body
+      : JSON.stringify(request.body)
+    if (maxBytes && Buffer.byteLength(serialized) > maxBytes) {
+      throw new RequestBodyTooLargeError('Request body is too large')
+    }
     if (typeof request.body === 'string') return JSON.parse(request.body) as unknown
     return request.body
   }
 
   const chunks: Buffer[] = []
+  let totalBytes = 0
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    totalBytes += buffer.length
+    if (maxBytes && totalBytes > maxBytes) {
+      throw new RequestBodyTooLargeError('Request body is too large')
+    }
+    chunks.push(buffer)
   }
   return JSON.parse(Buffer.concat(chunks).toString('utf8')) as unknown
 }
