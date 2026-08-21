@@ -59,7 +59,14 @@ type GoogleEventList = {
     id: string
     status?: string
     summary?: string
+    description?: string
+    htmlLink?: string
     location?: string
+    organizer?: {
+      email?: string
+      displayName?: string
+      self?: boolean
+    }
     start?: { date?: string; dateTime?: string }
     end?: { date?: string; dateTime?: string }
   }>
@@ -207,6 +214,18 @@ export function googleCalendarType(calendar: GoogleCalendarListItem) {
   return 'read-only' as const
 }
 
+function safeGoogleCalendarUrl(value: string | undefined) {
+  if (!value) return null
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && url.hostname.endsWith('.google.com')
+      ? url.toString()
+      : null
+  } catch {
+    return null
+  }
+}
+
 async function listGoogleCalendarEvents(
   accessToken: string,
   calendar: GoogleCalendarListItem,
@@ -246,6 +265,13 @@ async function listGoogleCalendarEvents(
         allDay: Boolean(event.start?.date && !event.start?.dateTime),
         calendar: calendar.summary,
         location: event.location ?? null,
+        description: event.description?.slice(0, 10_000) ?? null,
+        externalUrl: safeGoogleCalendarUrl(event.htmlLink),
+        organizer: event.organizer ? {
+          email: event.organizer.email ?? null,
+          displayName: event.organizer.displayName ?? null,
+          self: event.organizer.self ?? false,
+        } : null,
         source: 'google',
         google: {
           calendar: {

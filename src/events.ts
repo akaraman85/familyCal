@@ -6,6 +6,13 @@ export type CalendarEventData = {
   allDay: boolean
   calendar: string
   location: string | null
+  description: string | null
+  externalUrl: string | null
+  organizer: {
+    email: string | null
+    displayName: string | null
+    self: boolean
+  } | null
   source: 'saved' | 'google'
   google?: {
     calendar: {

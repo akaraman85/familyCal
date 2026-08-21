@@ -9,6 +9,13 @@ export type CalendarEvent = {
   allDay: boolean
   calendar: string
   location: string | null
+  description: string | null
+  externalUrl: string | null
+  organizer: {
+    email: string | null
+    displayName: string | null
+    self: boolean
+  } | null
   source: 'saved' | 'google'
   google?: {
     calendar: {
@@ -71,6 +78,9 @@ function serialize(row: SavedEventRow): CalendarEvent {
     allDay: row.all_day,
     calendar: row.calendar_name,
     location: row.location,
+    description: null,
+    externalUrl: null,
+    organizer: null,
     source: 'saved',
   }
 }
