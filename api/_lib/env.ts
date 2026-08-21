@@ -7,10 +7,19 @@ type IntegrationEnv = {
   ownerId: string
 }
 
+type StorageEnv = Pick<IntegrationEnv, 'databaseUrl' | 'ownerId'>
+
 function required(name: string) {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Missing required environment variable: ${name}`)
   return value
+}
+
+export function storageEnv(): StorageEnv {
+  return {
+    databaseUrl: required('DATABASE_URL'),
+    ownerId: required('INTEGRATION_OWNER_ID'),
+  }
 }
 
 export function integrationEnv(): IntegrationEnv {
@@ -21,11 +30,10 @@ export function integrationEnv(): IntegrationEnv {
   }
 
   return {
+    ...storageEnv(),
     appUrl,
-    databaseUrl: required('DATABASE_URL'),
     encryptionKey: required('INTEGRATION_ENCRYPTION_KEY'),
     googleClientId: required('GOOGLE_CLIENT_ID'),
     googleClientSecret: required('GOOGLE_CLIENT_SECRET'),
-    ownerId: required('INTEGRATION_OWNER_ID'),
   }
 }

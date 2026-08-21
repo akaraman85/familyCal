@@ -1,6 +1,6 @@
 import { requireAuthentication } from '../_lib/auth.js'
 import { listIntegrationAccounts } from '../_lib/db.js'
-import { integrationEnv } from '../_lib/env.js'
+import { storageEnv } from '../_lib/env.js'
 import { errorMessage, requireMethod, sendJson, type ApiRequest, type ApiResponse } from '../_lib/http.js'
 import { integrationProviders } from '../_lib/integrations.js'
 
@@ -9,7 +9,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   if (!requireAuthentication(request, response)) return
 
   try {
-    const env = integrationEnv()
+    const env = storageEnv()
     const accounts = await listIntegrationAccounts(env.databaseUrl, env.ownerId)
     const accountByProvider = new Map(accounts.map((account) => [account.provider, account]))
 

@@ -5,12 +5,12 @@ import {
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
 import { getIntegrationAccount } from '../_lib/db.js'
-import { integrationEnv } from '../_lib/env.js'
+import { integrationEnv, storageEnv } from '../_lib/env.js'
 import {
   errorMessage,
   readJsonBody,
   requireMethod,
-  requireSameOrigin,
+  requireRequestOrigin,
   sendJson,
   type ApiRequest,
   type ApiResponse,
@@ -56,24 +56,25 @@ function optionalString(value: unknown, maxLength: number) {
 
 async function getEvents(request: ApiRequest, response: ApiResponse) {
   try {
-    const env = integrationEnv()
+    const storage = storageEnv()
     const { timeMin, timeMax } = parseRange(request)
     const savedEvents = await listSavedEvents(
-      env.databaseUrl,
-      env.ownerId,
+      storage.databaseUrl,
+      storage.ownerId,
       timeMin,
       timeMax,
     )
     let googleEvents: CalendarEvent[] = []
     let googleStatus: 'ok' | 'disconnected' | 'error' = 'disconnected'
     const googleAccount = await getIntegrationAccount(
-      env.databaseUrl,
-      env.ownerId,
+      storage.databaseUrl,
+      storage.ownerId,
       GOOGLE_CALENDAR_PROVIDER_ID,
     )
 
     if (googleAccount) {
       try {
+        const env = integrationEnv()
         const accessToken = await getGoogleAccessToken({
           databaseUrl: env.databaseUrl,
           encryptionKey: env.encryptionKey,
@@ -107,8 +108,9 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
 
 async function postEvent(request: ApiRequest, response: ApiResponse) {
   try {
-    const env = integrationEnv()
-    if (!requireSameOrigin(request, response, env.appUrl)) return
+    const env = storageEnv()
+    const appUrl = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, '')
+    if (!requireRequestOrigin(request, response, appUrl)) return
 
     const body = await readJsonBody(request) as Record<string, unknown>
     const title = optionalString(body.title, 200)
