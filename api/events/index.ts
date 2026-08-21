@@ -56,6 +56,12 @@ function optionalString(value: unknown, maxLength: number) {
   return value.trim()
 }
 
+function isIsoDate(value: string | null) {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const date = new Date(`${value}T00:00:00Z`)
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+}
+
 function parseEvent(body: Record<string, unknown>) {
   const title = optionalString(body.title, 200)
   const calendar = optionalString(body.calendar, 100)
@@ -72,11 +78,19 @@ function parseEvent(body: Record<string, unknown>) {
   ) {
     throw new ValidationError('Event dates are invalid')
   }
+  const allDay = body.allDay === true
+  const allDayDate = typeof body.allDayDate === 'string'
+    ? body.allDayDate
+    : null
+  if (allDay && !isIsoDate(allDayDate)) {
+    throw new ValidationError('All-day event date is invalid')
+  }
   return {
     title,
     startAt: startAt.toISOString(),
     endAt: endAt?.toISOString() ?? null,
-    allDay: body.allDay === true,
+    allDay,
+    allDayDate: allDay ? allDayDate : null,
     calendar,
     location,
   }

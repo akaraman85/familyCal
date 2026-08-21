@@ -762,11 +762,17 @@ function formatProposalDate(
 
 function proposalTime(event: PlannedEvent, timezone: string) {
   const start = new Date(event.startAt)
+  if (event.allDay && event.allDayDate) {
+    const date = formatProposalDate(`${event.allDayDate}T12:00:00Z`, 'UTC', {
+      month: 'short',
+      day: 'numeric',
+    })
+    return `${date} · All day`
+  }
   const date = formatProposalDate(start.toISOString(), timezone, {
     month: 'short',
     day: 'numeric',
   })
-  if (event.allDay) return `${date} · All day`
   const startTime = formatProposalDate(start.toISOString(), timezone, {
     hour: 'numeric',
     minute: '2-digit',
@@ -778,6 +784,19 @@ function proposalTime(event: PlannedEvent, timezone: string) {
     })}`
     : ''
   return `${date} · ${startTime}${end}`
+}
+
+function proposalDatePart(
+  event: PlannedEvent,
+  timezone: string,
+  part: 'day' | 'month',
+) {
+  const value = event.allDay && event.allDayDate
+    ? `${event.allDayDate}T12:00:00Z`
+    : event.startAt
+  return formatProposalDate(value, event.allDay ? 'UTC' : timezone, (
+    part === 'day' ? { day: 'numeric' } : { month: 'short' }
+  ))
 }
 
 function AssistantPanel({ close, save }: {
@@ -836,7 +855,7 @@ function AssistantPanel({ close, save }: {
       {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={14}/></div><div><p>Preparing a structured calendar proposal…</p></div></div>}
       {proposal && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
         <p>{proposal.message}</p>
-        {proposal.events.length > 0 && <div className="proposal-events">{proposal.events.map((event, index) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${index}`}><div className="parsed-date"><b>{formatProposalDate(event.startAt, timezone, { day: 'numeric' })}</b><span>{formatProposalDate(event.startAt, timezone, { month: 'short' })}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
+        {proposal.events.length > 0 && <div className="proposal-events">{proposal.events.map((event, index) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${index}`}><div className="parsed-date"><b>{proposalDatePart(event, timezone, 'day')}</b><span>{proposalDatePart(event, timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
         {proposal.warnings.length > 0 && <ul className="proposal-warnings">{proposal.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
         {proposal.result === 'proposal' && <div className="chat-actions"><span>{model?.replace('openai/', '')}</span><button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={15}/>{saving ? 'Adding…' : `Add ${proposal.events.length} event${proposal.events.length === 1 ? '' : 's'}`}</button></div>}
       </div></div>}
