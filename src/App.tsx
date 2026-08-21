@@ -1058,6 +1058,9 @@ function AssistantPanel({ open, close, save }: {
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const canRetryInitialScreenshot = Boolean(
+    pendingTurnId && sessionId && !contextToken && !text.trim() && !image,
+  )
 
   useEffect(() => {
     if (!open) return
@@ -1112,9 +1115,18 @@ function AssistantPanel({ open, close, save }: {
 
   const submit = async () => {
     const message = text.trim()
-    if ((!message && !image) || loading || processingImage || saving) return
-    const userText = message || 'Extract events from this screenshot'
-    const hadImage = Boolean(image)
+    if (
+      (!message && !image && !canRetryInitialScreenshot)
+      || loading
+      || processingImage
+      || saving
+    ) return
+    const userText = message || (
+      canRetryInitialScreenshot
+        ? 'Recover screenshot extraction'
+        : 'Extract events from this screenshot'
+    )
+    const hadImage = Boolean(image) || canRetryInitialScreenshot
     const requestSessionId = sessionId ?? crypto.randomUUID()
     const requestTurnId = pendingTurnId ?? crypto.randomUUID()
     setSessionId(requestSessionId)
@@ -1237,8 +1249,8 @@ function AssistantPanel({ open, close, save }: {
       }}/>
       <div className="assistant-input-actions">
         <button type="button" className="attach-screenshot" disabled={Boolean(contextToken) || loading || processingImage || saving} onClick={() => fileInputRef.current?.click()} aria-label={contextToken ? 'Start a new plan to attach another screenshot' : 'Attach calendar screenshot'} title={contextToken ? 'Start a new plan to attach another screenshot' : undefined}>{processingImage ? <LoaderCircle size={17}/> : <ImagePlus size={17}/>}</button>
-        <span>{contextToken ? 'Follow-ups use the latest event state, not the original image.' : 'Attachments are sent only on this turn and never added to follow-up context.'}</span>
-        <button type="button" className="send-planner-request" disabled={(!text.trim() && !image) || loading || processingImage || saving} onClick={() => void submit()} aria-label="Prepare calendar proposal"><ChevronRight size={19}/></button>
+        <span>{contextToken ? 'Follow-ups use the latest event state, not the original image.' : canRetryInitialScreenshot ? 'Retry can recover the processed result without resending the image.' : 'Attachments are sent only on this turn and never added to follow-up context.'}</span>
+        <button type="button" className="send-planner-request" disabled={(!text.trim() && !image && !canRetryInitialScreenshot) || loading || processingImage || saving} onClick={() => void submit()} aria-label={canRetryInitialScreenshot ? 'Recover previous screenshot proposal' : 'Prepare calendar proposal'}><ChevronRight size={19}/></button>
       </div>
     </div>
   </aside></div>

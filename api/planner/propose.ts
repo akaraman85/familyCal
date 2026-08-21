@@ -105,6 +105,26 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new ValidationError('Planner request is invalid')
     }
     const body = rawBody as Record<string, unknown>
+    const requestedSessionId = typeof body.sessionId === 'string'
+      ? body.sessionId
+      : ''
+    const turnId = typeof body.turnId === 'string' ? body.turnId : ''
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedSessionId)
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(turnId)
+    ) {
+      throw new ValidationError('Planner session identifiers are invalid')
+    }
+    const cachedResponse = await getPlannerTurnResponse<unknown>(
+      env.databaseUrl,
+      env.ownerId,
+      requestedSessionId,
+      turnId,
+    )
+    if (cachedResponse) {
+      sendJson(response, 200, cachedResponse)
+      return
+    }
     const message = typeof body.message === 'string' ? body.message.trim() : ''
     let pendingImage: { data: Uint8Array; mediaType: string } | undefined
     if (body.image !== undefined) {
@@ -131,26 +151,6 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new ValidationError(
         `Add instructions, a screenshot, or both. Instructions can be up to ${MAX_MESSAGE_LENGTH} characters.`,
       )
-    }
-    const requestedSessionId = typeof body.sessionId === 'string'
-      ? body.sessionId
-      : ''
-    const turnId = typeof body.turnId === 'string' ? body.turnId : ''
-    if (
-      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestedSessionId)
-      || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(turnId)
-    ) {
-      throw new ValidationError('Planner session identifiers are invalid')
-    }
-    const cachedResponse = await getPlannerTurnResponse<unknown>(
-      env.databaseUrl,
-      env.ownerId,
-      requestedSessionId,
-      turnId,
-    )
-    if (cachedResponse) {
-      sendJson(response, 200, cachedResponse)
-      return
     }
     const contextToken = typeof body.contextToken === 'string'
       ? body.contextToken
