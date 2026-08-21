@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
+  CircleHelp, Clock3, ExternalLink, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
   LogOut, MapPin, Menu, MessageCircleMore, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
@@ -52,6 +52,9 @@ type EventItem = {
   end?: string
   calendar: string
   location?: string
+  description?: string
+  externalUrl?: string
+  organizer?: CalendarEventData['organizer']
   color: 'coral' | 'blue' | 'green' | 'gold'
   source: 'saved' | 'google'
   google?: CalendarEventData['google']
@@ -77,9 +80,16 @@ function eventDate(event: CalendarEventData) {
   return new Date(year, month - 1, day)
 }
 
+function eventEndDate(event: CalendarEventData) {
+  if (!event.endAt) return null
+  if (!event.allDay) return new Date(event.endAt)
+  const [year, month, day] = event.endAt.split('-').map(Number)
+  return new Date(year, month - 1, day)
+}
+
 function toEventItem(event: CalendarEventData): EventItem {
   const startDate = eventDate(event)
-  const endDate = event.endAt && !event.allDay ? new Date(event.endAt) : null
+  const endDate = eventEndDate(event)
   return {
     id: event.id,
     title: event.title,
@@ -87,9 +97,12 @@ function toEventItem(event: CalendarEventData): EventItem {
     endDate: endDate ?? undefined,
     allDay: event.allDay,
     start: event.allDay ? 'All day' : format(startDate, 'h:mm a'),
-    end: endDate ? format(endDate, 'h:mm a') : undefined,
+    end: endDate && !event.allDay ? format(endDate, 'h:mm a') : undefined,
     calendar: event.calendar,
     location: event.location ?? undefined,
+    description: event.description ?? undefined,
+    externalUrl: event.externalUrl ?? undefined,
+    organizer: event.organizer,
     color: event.source === 'google' ? 'blue' : 'green',
     source: event.source,
     google: event.google,
@@ -241,6 +254,7 @@ function AuthenticatedApp({ user, onLogout }: {
   const [eventsError, setEventsError] = useState<string | null>(null)
   const [eventRefresh, setEventRefresh] = useState(0)
   const [modalOpen, setModalOpen] = useState(false)
+  const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
 
@@ -375,9 +389,10 @@ function AuthenticatedApp({ user, onLogout }: {
             loading={eventsLoading}
             error={eventsError}
             sources={eventSources}
+            selectEvent={setSelectedEvent}
           />
         )}
-        {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} />}
+        {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
         {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => setEventRefresh((current) => current + 1)} />}
         {page === 'Family' && <FamilyPage />}
         {page === 'Settings' && <SettingsPage />}
@@ -385,6 +400,7 @@ function AuthenticatedApp({ user, onLogout }: {
 
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
       {chatOpen && <AssistantPanel close={() => setChatOpen(false)} save={savePlannedEvents} />}
+      {selectedEvent && <EventDetailModal event={selectedEvent} close={() => setSelectedEvent(null)} />}
       {modalOpen && (
         <EventModal
           selectedDate={selectedDate}
@@ -396,10 +412,10 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, selectEvent }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
-  loading: boolean; error: string | null; sources: EventSources
+  loading: boolean; error: string | null; sources: EventSources; selectEvent: (event: EventItem) => void
 }) {
   const now = new Date()
   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
@@ -426,9 +442,9 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             </div>
           </div>
         </div>
-        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} onSelect={setSelectedDate} />}
-        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} />}
-        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} />}
+        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} onSelect={setSelectedDate} selectEvent={selectEvent} />}
+        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} selectEvent={selectEvent} />}
+        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} />}
         {view === 'Year' && <YearView events={events} selectedDate={selectedDate} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
       <div className="calendar-footer">
@@ -442,7 +458,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   )
 }
 
-function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; selectedDate: Date; onSelect: (d: Date) => void }) {
+function MonthView({ events, selectedDate, onSelect, selectEvent }: { events: EventItem[]; selectedDate: Date; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void }) {
   const days = useMemo(() => eachDayOfInterval({
     start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
     end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 }),
@@ -454,13 +470,13 @@ function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; se
         {days.map((day) => {
           const dayEvents = events.filter((event) => isSameDay(event.date, day))
           return (
-            <button key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`} onClick={() => onSelect(day)}>
-              <span className="day-number">{format(day, 'd')}</span>
+            <div key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}>
+              <button type="button" className="day-cell-select" aria-label={`Select ${format(day, 'MMMM d, yyyy')}`} onClick={() => onSelect(day)}><span className="day-number">{format(day, 'd')}</span></button>
               <div className="events">
-                {dayEvents.slice(0, 3).map((event) => <div className={`event-chip ${event.color}`} title={eventSourceLabel(event)} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</div>)}
+                {dayEvents.slice(0, 3).map((event) => <button type="button" className={`event-chip ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</button>)}
                 {dayEvents.length > 3 && <small>+{dayEvents.length - 3} more</small>}
               </div>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -468,7 +484,7 @@ function MonthView({ events, selectedDate, onSelect }: { events: EventItem[]; se
   )
 }
 
-function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate: Date }) {
+function WeekView({ events, selectedDate, selectEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void }) {
   const days = eachDayOfInterval({ start: startOfWeek(selectedDate, { weekStartsOn: 1 }), end: endOfWeek(selectedDate, { weekStartsOn: 1 }) })
   const hasAllDayEvents = events.some((event) => (
     event.allDay && days.some((day) => isSameDay(event.date, day))
@@ -476,26 +492,26 @@ function WeekView({ events, selectedDate }: { events: EventItem[]; selectedDate:
   return (
     <div className="week-view">
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
-      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <div className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} key={event.id}>{event.title}</div>)}</div>)}</div>}
+      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div>)}</div>}
       <div className="week-body">
         <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}>{timelineLabel(hour)}</span>)}</div>
         {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
           const position = timelinePosition(event)
           if (!position) return null
-          return <div className={`week-event ${event.color}`} style={position} title={eventSourceLabel(event)} key={event.id}><b>{event.title}</b><span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span></div>
+          return <button type="button" className={`week-event ${event.color}`} style={position} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}><b>{event.title}</b><span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span></button>
         })}</div>)}
       </div>
     </div>
   )
 }
 
-function DayView({ events, selectedDate }: { events: EventItem[]; selectedDate: Date }) {
+function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void }) {
   const dayEvents = events.filter((e) => isSameDay(e.date, selectedDate))
   const allDayEvents = dayEvents.filter((event) => event.allDay)
   const timedEvents = dayEvents.filter((event) => !event.allDay)
   return (
     <div className="day-view">
-      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <div className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} key={event.id}>{event.title}</div>)}</div></div>}
+      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div></div>}
       <div className="day-timed">
         <div className="day-timeline">
           {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: (hour * 60 - TIMELINE_START_MINUTES) * TIMELINE_HEIGHT / (TIMELINE_END_MINUTES - TIMELINE_START_MINUTES) }}><span>{timelineLabel(hour)}</span><i /></div>)}
@@ -504,7 +520,7 @@ function DayView({ events, selectedDate }: { events: EventItem[]; selectedDate: 
           {timedEvents.map((event) => {
             const position = timelinePosition(event)
             if (!position) return null
-            return <div className={`large-event ${event.color}`} key={event.id} style={position} title={eventSourceLabel(event)}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{eventSourceLabel(event)}{event.location ? ` · ${event.location}` : ''}</small></div>
+            return <button type="button" className={`large-event ${event.color}`} key={event.id} style={position} title={eventSourceLabel(event)} onClick={() => selectEvent(event)}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{eventSourceLabel(event)}{event.location ? ` · ${event.location}` : ''}</small></button>
           })}
           {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
         </div>
@@ -522,7 +538,7 @@ function YearView({ events, selectedDate, onSelect }: { events: EventItem[]; sel
   })}</div>
 }
 
-function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: () => void }) {
+function OverviewPage({ events, openModal, selectEvent }: { events: EventItem[]; openModal: () => void; selectEvent: (event: EventItem) => void }) {
   const savedCount = events.filter((event) => event.source === 'saved').length
   const googleCount = events.filter((event) => event.source === 'google').length
   return <div className="page overview-page">
@@ -534,7 +550,7 @@ function OverviewPage({ events, openModal }: { events: EventItem[]; openModal: (
     </div>
     <div className="overview-grid">
       <section className="panel"><div className="panel-title"><div><h2>Coming up</h2><p>Your next family moments</p></div><button>View calendar <ChevronRight size={15} /></button></div>
-        <div className="agenda-list">{events.slice(0,5).map((e) => <div className="agenda-item" key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.source === 'google' ? 'alex' : 'family'}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></div>)}
+        <div className="agenda-list">{events.slice(0,5).map((e) => <button type="button" className="agenda-item" onClick={() => selectEvent(e)} key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.source === 'google' ? 'alex' : 'family'}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></button>)}
           {!events.length && <div className="agenda-empty">No events in the current calendar view.</div>}
         </div>
       </section>
@@ -992,6 +1008,49 @@ function AssistantPanel({ close, save }: {
     </div>
     <div className="assistant-input"><textarea maxLength={12000} value={text} onChange={(event) => setText(event.target.value)} placeholder="Describe one event, a recurring plan, or paste a schedule..." /><div><span>AI can make mistakes. Review every detail before saving.</span><button disabled={!text.trim() || loading} onClick={() => void submit()}><ChevronRight size={19}/></button></div></div>
   </aside></div>
+}
+
+function eventTimeSummary(event: EventItem) {
+  if (event.allDay) {
+    if (!event.endDate) return `${format(event.date, 'EEEE, MMMM d, yyyy')} · All day`
+    const inclusiveEnd = new Date(event.endDate)
+    inclusiveEnd.setDate(inclusiveEnd.getDate() - 1)
+    if (isSameDay(event.date, inclusiveEnd)) {
+      return `${format(event.date, 'EEEE, MMMM d, yyyy')} · All day`
+    }
+    return `${format(event.date, 'MMM d')} – ${format(inclusiveEnd, 'MMM d, yyyy')} · All day`
+  }
+  const date = format(event.date, 'EEEE, MMMM d, yyyy')
+  if (!event.endDate) return `${date} · ${event.start}`
+  if (isSameDay(event.date, event.endDate)) {
+    return `${date} · ${event.start} – ${event.end}`
+  }
+  return `${format(event.date, 'MMM d, h:mm a')} – ${format(event.endDate, 'MMM d, yyyy, h:mm a')}`
+}
+
+function EventDetailModal({ event, close }: { event: EventItem; close: () => void }) {
+  const accounts = event.google?.accounts ?? []
+  const organizer = event.organizer?.displayName || event.organizer?.email
+  return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) close() }}>
+    <article className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title">
+      <div className="modal-heading"><div><p className="eyebrow">{event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{event.title}</h2></div><button type="button" autoFocus onClick={close} aria-label="Close event details"><X size={20}/></button></div>
+      <div className="event-detail-summary">
+        <div className={`event-detail-date ${event.color}`}><b>{format(event.date, 'd')}</b><span>{format(event.date, 'MMM')}</span></div>
+        <div><b>{eventTimeSummary(event)}</b><span>{eventSourceLabel(event)}</span></div>
+      </div>
+      <dl className="event-detail-list">
+        <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>
+        {event.location && <div><dt><MapPin size={16}/>Location</dt><dd>{event.location}</dd></div>}
+        {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
+        {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
+      </dl>
+      {event.description && <section className="event-description"><b>Description</b><p>{event.description}</p></section>}
+      <div className="event-detail-actions">
+        <button type="button" onClick={close}>Close</button>
+        {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
+      </div>
+    </article>
+  </div>
 }
 
 function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
