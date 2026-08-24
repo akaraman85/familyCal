@@ -1,4 +1,5 @@
 import { requireAuthentication } from '../../_lib/auth.js'
+import { invalidateConnectedCalendarCache } from '../../_lib/connected-events.js'
 import {
   getIntegrationAccount,
   setCalendarIncluded,
@@ -57,6 +58,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       accountId,
       calendarId,
       body.included,
+    )
+    await invalidateConnectedCalendarCache(
+      env.databaseUrl,
+      env.ownerId,
+      accountId,
     )
     sendJson(response, 200, {
       accountId,

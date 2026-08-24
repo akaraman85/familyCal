@@ -51,17 +51,23 @@ export async function loadCalendarEvents(
   timeMin: Date,
   timeMax: Date,
   signal?: AbortSignal,
+  options?: { revalidate?: boolean },
 ) {
   const query = new URLSearchParams({
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
   })
+  if (options?.revalidate) query.set('revalidate', '1')
   const response = await fetch(`/api/events?${query}`, {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
     signal,
   })
-  return readResponse<{ events: CalendarEventData[]; sources: EventSources }>(response)
+  return readResponse<{
+    events: CalendarEventData[]
+    sources: EventSources
+    stale: boolean
+  }>(response)
 }
 
 export type CalendarEventWrite = {

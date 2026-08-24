@@ -288,6 +288,8 @@ function AuthenticatedApp({ user, onLogout }: {
   const [eventsLoading, setEventsLoading] = useState(true)
   const [eventsError, setEventsError] = useState<string | null>(null)
   const [eventRefresh, setEventRefresh] = useState(0)
+  const eventCacheRef = useRef(new Map<string, { events: EventItem[]; sources: EventSources }>())
+  const revalidateGoogleRef = useRef(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
@@ -313,37 +315,77 @@ function AuthenticatedApp({ user, onLogout }: {
     const start = startOfDay(selectedDate)
     return { start, end: addDays(start, 1) }
   }, [selectedDate, view])
+  const rangeKey = `${eventRange.start.toISOString()}|${eventRange.end.toISOString()}`
+
+  const refreshEvents = (revalidateGoogle = false) => {
+    revalidateGoogleRef.current = revalidateGoogle
+    setEventRefresh((current) => current + 1)
+  }
 
   useEffect(() => {
     const controller = new AbortController()
-    setEventsLoading(true)
+    const cached = eventCacheRef.current.get(rangeKey)
+    const revalidateGoogle = revalidateGoogleRef.current
+    revalidateGoogleRef.current = false
+    if (cached) {
+      setEvents(cached.events)
+      setEventSources(cached.sources)
+      setEventsLoading(revalidateGoogle)
+    } else {
+      setEventsLoading(true)
+    }
     setEventsError(null)
-    loadCalendarEvents(eventRange.start, eventRange.end, controller.signal)
-      .then((data) => {
-        setEvents(data.events.map(toEventItem))
-        setEventSources(data.sources)
-      })
-      .catch((error: unknown) => {
-        if (error instanceof DOMException && error.name === 'AbortError') return
-        setEvents([])
-        setEventsError(error instanceof Error ? error.message : 'Unable to load events')
-      })
-      .finally(() => {
+
+    const apply = (data: Awaited<ReturnType<typeof loadCalendarEvents>>) => {
+      const items = data.events.map(toEventItem)
+      eventCacheRef.current.set(rangeKey, { events: items, sources: data.sources })
+      setEvents(items)
+      setEventSources(data.sources)
+    }
+
+    void (async () => {
+      try {
+        const first = await loadCalendarEvents(
+          eventRange.start,
+          eventRange.end,
+          controller.signal,
+          { revalidate: revalidateGoogle },
+        )
+        if (controller.signal.aborted) return
+        apply(first)
+        if (first.stale && !revalidateGoogle) {
+          setEventsLoading(true)
+          const next = await loadCalendarEvents(
+            eventRange.start,
+            eventRange.end,
+            controller.signal,
+            { revalidate: true },
+          )
+          if (controller.signal.aborted) return
+          apply(next)
+        }
         if (!controller.signal.aborted) setEventsLoading(false)
-      })
+      } catch (error: unknown) {
+        if (error instanceof DOMException && error.name === 'AbortError') return
+        if (!eventCacheRef.current.has(rangeKey)) setEvents([])
+        setEventsError(error instanceof Error ? error.message : 'Unable to load events')
+        if (!controller.signal.aborted) setEventsLoading(false)
+      }
+    })()
+
     return () => controller.abort()
-  }, [eventRange, eventRefresh])
+  }, [eventRange, eventRefresh, rangeKey])
 
   const saveEvent = async (event: NewEventInput) => {
     await saveCalendarEvent(event)
     setModalOpen(false)
-    setEventRefresh((current) => current + 1)
+    refreshEvents()
   }
 
   const updateEvent = async (id: string, event: NewEventInput) => {
     const result = await updateCalendarEvent(id, event)
     setSelectedEvent(toEventItem(result.event))
-    setEventRefresh((current) => current + 1)
+    refreshEvents()
   }
 
   const savePlannedEvents = async (
@@ -360,7 +402,7 @@ function AuthenticatedApp({ user, onLogout }: {
       sessionId,
       revision,
     )
-    setEventRefresh((current) => current + 1)
+    refreshEvents()
     setChatOpen(false)
   }
 
@@ -446,7 +488,7 @@ function AuthenticatedApp({ user, onLogout }: {
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
-        {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => setEventRefresh((current) => current + 1)} />}
+        {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => refreshEvents(true)} />}
         {page === 'Family' && <FamilyPage />}
         {page === 'Settings' && <SettingsPage />}
       </main>
@@ -485,7 +527,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
         <button className="ai-plan-btn" onClick={openChat}><Sparkles size={17} />Plan with AI</button>
       </div>
       {error && <div className="calendar-source-error" role="alert">{error}</div>}
-      {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">Saved events are shown, but Google Calendar could not be reached.</div>}
+      {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">{events.some((event) => event.source === 'google') ? 'Google Calendar could not be refreshed. Showing the last loaded events.' : 'Saved events are shown, but Google Calendar could not be reached.'}</div>}
       <section className="calendar-card">
         <div className="calendar-toolbar">
           <div className="date-navigation">
@@ -511,7 +553,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
           <span><i className="dot family" />Saved events</span>
           {sources.google !== 'disconnected' && <span><i className="dot alex" />Google Calendar</span>}
         </div>
-        {loading && <span className="calendar-loading"><LoaderCircle size={12}/>Loading events</span>}
+        {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
       </div>
     </div>
   )
