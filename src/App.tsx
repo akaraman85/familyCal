@@ -71,7 +71,32 @@ type EventItem = {
 
 type NewEventInput = CalendarEventWrite
 
-const EVENT_CALENDARS = ['Family', 'Alex', 'Maya']
+const HOUSEHOLD_CALENDAR = 'Family'
+
+function familyCalendarNames(members: FamilyMember[], extra?: string) {
+  const names = [HOUSEHOLD_CALENDAR]
+  for (const member of members) {
+    if (member.name && !names.includes(member.name)) names.push(member.name)
+  }
+  if (extra && !names.includes(extra)) names.push(extra)
+  return names
+}
+
+function useFamilyCalendars(extra?: string) {
+  const [members, setMembers] = useState<FamilyMember[]>([])
+  useEffect(() => {
+    let cancelled = false
+    loadFamilyMembers()
+      .then((data) => {
+        if (!cancelled) setMembers(data.members)
+      })
+      .catch(() => {
+        if (!cancelled) setMembers([])
+      })
+    return () => { cancelled = true }
+  }, [])
+  return familyCalendarNames(members, extra)
+}
 
 const GOOGLE_CALENDAR_READ_SCOPE =
   'https://www.googleapis.com/auth/calendar.readonly'
@@ -1506,9 +1531,7 @@ function EventDetailModal({ event, close, save }: {
     ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
     ALLOWED_ATTR: ['href'],
   }), [event.description])
-  const calendars = EVENT_CALENDARS.includes(event.calendar)
-    ? EVENT_CALENDARS
-    : [...EVENT_CALENDARS, event.calendar]
+  const calendars = useFamilyCalendars(event.calendar)
   const canEdit = Boolean(save)
 
   useEffect(() => {
@@ -1593,7 +1616,8 @@ function EventDetailModal({ event, close, save }: {
 
 function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
   const [title, setTitle] = useState('')
-  const [calendar, setCalendar] = useState('Family')
+  const calendars = useFamilyCalendars()
+  const [calendar, setCalendar] = useState(HOUSEHOLD_CALENDAR)
   const [date, setDate] = useState(format(selectedDate, 'yyyy-MM-dd'))
   const [time, setTime] = useState('09:00')
   const [location, setLocation] = useState('')
@@ -1618,7 +1642,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
     <label className="field"><span>Event title</span><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <div className="field-row"><label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)}/></label><label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)}/></label></div>
-    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}>{EVENT_CALENDARS.map((name) => <option key={name}>{name}</option>)}</select></label>
+    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" /></label>
     {error && <div className="modal-error" role="alert">{error}</div>}
     <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
