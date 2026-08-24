@@ -64,18 +64,33 @@ export async function loadCalendarEvents(
   return readResponse<{ events: CalendarEventData[]; sources: EventSources }>(response)
 }
 
-export async function saveCalendarEvent(event: {
+export type CalendarEventWrite = {
   title: string
   startAt: string
   endAt?: string | null
   calendar: string
   location?: string | null
-}) {
+  allDay?: boolean
+  allDayDate?: string | null
+  allDayEndDate?: string | null
+}
+
+export async function saveCalendarEvent(event: CalendarEventWrite) {
   const response = await fetch('/api/events', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'same-origin',
     body: JSON.stringify(event),
+  })
+  return readResponse<{ event: CalendarEventData }>(response)
+}
+
+export async function updateCalendarEvent(id: string, event: CalendarEventWrite) {
+  const response = await fetch('/api/events', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ id, ...event }),
   })
   return readResponse<{ event: CalendarEventData }>(response)
 }
