@@ -143,6 +143,43 @@ export async function createSavedEvent(
   return serialize(rows[0])
 }
 
+export async function updateSavedEvent(
+  databaseUrl: string,
+  ownerId: string,
+  eventId: string,
+  event: NewSavedEvent,
+) {
+  const sql = neon(databaseUrl)
+  const rows = await sql.query(
+    `UPDATE saved_events
+        SET title = $3,
+            start_at = $4,
+            end_at = $5,
+            all_day = $6,
+            all_day_date = $7,
+            all_day_end_date = $8,
+            calendar_name = $9,
+            location = $10,
+            updated_at = NOW()
+      WHERE owner_id = $1 AND id = $2
+      RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
+        calendar_name, location`,
+    [
+      ownerId,
+      eventId,
+      event.title,
+      event.startAt,
+      event.endAt ?? null,
+      event.allDay ?? false,
+      event.allDayDate ?? null,
+      event.allDayEndDate ?? null,
+      event.calendar,
+      event.location ?? null,
+    ],
+  ) as SavedEventRow[]
+  return rows[0] ? serialize(rows[0]) : null
+}
+
 export async function createSavedEvents(
   databaseUrl: string,
   ownerId: string,

@@ -3,6 +3,7 @@ import {
   createSavedEvents,
   listSavedEvents,
   PlannerSessionConflictError,
+  updateSavedEvent,
   type CalendarEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
@@ -119,6 +120,17 @@ function parseEvent(body: Record<string, unknown>) {
     calendar,
     location,
   }
+}
+
+function parseSavedEventId(id: unknown) {
+  if (typeof id !== 'string' || !id.startsWith('saved:')) {
+    throw new ValidationError('Only saved family events can be updated')
+  }
+  const eventId = id.slice('saved:'.length)
+  if (!eventId || eventId.length > 80) {
+    throw new ValidationError('Event is invalid')
+  }
+  return eventId
 }
 
 async function getEvents(request: ApiRequest, response: ApiResponse) {
@@ -286,9 +298,40 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
   }
 }
 
+async function patchEvent(request: ApiRequest, response: ApiResponse) {
+  try {
+    const env = integrationEnv()
+    if (!requireSameOrigin(request, response, env.appUrl)) return
+
+    const rawBody = await readJsonBody(request)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new ValidationError('Event details are invalid')
+    }
+    const body = rawBody as Record<string, unknown>
+    const updated = await updateSavedEvent(
+      env.databaseUrl,
+      env.ownerId,
+      parseSavedEventId(body.id),
+      parseEvent(body),
+    )
+    if (!updated) {
+      sendJson(response, 404, { error: 'Event not found' })
+      return
+    }
+    sendJson(response, 200, { event: updated })
+  } catch (error) {
+    console.error('Unable to update calendar event', error)
+    const validationError = error instanceof ValidationError || error instanceof SyntaxError
+    sendJson(response, validationError ? 400 : 500, {
+      error: validationError ? errorMessage(error) : 'The event could not be updated',
+    })
+  }
+}
+
 export default async function handler(request: ApiRequest, response: ApiResponse) {
-  if (!requireMethod(request, response, ['GET', 'POST'])) return
+  if (!requireMethod(request, response, ['GET', 'POST', 'PATCH'])) return
   if (!requireAuthentication(request, response)) return
   if (request.method === 'POST') return postEvent(request, response)
+  if (request.method === 'PATCH') return patchEvent(request, response)
   return getEvents(request, response)
 }

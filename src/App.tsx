@@ -6,7 +6,7 @@ import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, ExternalLink, ImagePlus, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
-  LogOut, MapPin, Menu, MessageCircleMore, Plus, Search,
+  LogOut, MapPin, Menu, MessageCircleMore, Pencil, Plus, Search,
   Settings, Sparkles, Users, WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -18,7 +18,9 @@ import {
   loadCalendarEvents,
   saveCalendarEvent,
   saveCalendarEvents,
+  updateCalendarEvent,
   type CalendarEventData,
+  type CalendarEventWrite,
   type EventSources,
 } from './events'
 import {
@@ -67,12 +69,9 @@ type EventItem = {
   google?: CalendarEventData['google']
 }
 
-type NewEventInput = {
-  title: string
-  startAt: string
-  calendar: string
-  location?: string
-}
+type NewEventInput = CalendarEventWrite
+
+const EVENT_CALENDARS = ['Family', 'Alex', 'Maya']
 
 const GOOGLE_CALENDAR_READ_SCOPE =
   'https://www.googleapis.com/auth/calendar.readonly'
@@ -316,6 +315,12 @@ function AuthenticatedApp({ user, onLogout }: {
     setEventRefresh((current) => current + 1)
   }
 
+  const updateEvent = async (id: string, event: NewEventInput) => {
+    const result = await updateCalendarEvent(id, event)
+    setSelectedEvent(toEventItem(result.event))
+    setEventRefresh((current) => current + 1)
+  }
+
   const savePlannedEvents = async (
     plannedEvents: PlannedEvent[],
     requestId: string,
@@ -423,7 +428,13 @@ function AuthenticatedApp({ user, onLogout }: {
 
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
       <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />
-      {selectedEvent && <EventDetailModal event={selectedEvent} close={() => setSelectedEvent(null)} />}
+      {selectedEvent && (
+        <EventDetailModal
+          event={selectedEvent}
+          close={() => setSelectedEvent(null)}
+          save={selectedEvent.source === 'saved' ? updateEvent : undefined}
+        />
+      )}
       {modalOpen && (
         <EventModal
           selectedDate={selectedDate}
@@ -1411,44 +1422,171 @@ function eventTimeSummary(event: EventItem) {
   return `${format(event.date, 'MMM d, h:mm a')} – ${format(event.endDate, 'MMM d, yyyy, h:mm a')}`
 }
 
-function EventDetailModal({ event, close }: { event: EventItem; close: () => void }) {
+function exclusiveAllDayEnd(inclusiveEnd: string) {
+  const date = new Date(`${inclusiveEnd}T12:00:00Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
+}
+
+function eventEditValues(event: EventItem) {
+  let endDate = ''
+  if (event.allDay && event.endDate) {
+    const inclusive = new Date(event.endDate)
+    inclusive.setDate(inclusive.getDate() - 1)
+    if (!isSameDay(event.date, inclusive)) endDate = format(inclusive, 'yyyy-MM-dd')
+  }
+  return {
+    title: event.title,
+    calendar: event.calendar,
+    date: format(event.date, 'yyyy-MM-dd'),
+    time: event.allDay ? '09:00' : format(event.date, 'HH:mm'),
+    endTime: event.allDay || !event.endDate ? '' : format(event.endDate, 'HH:mm'),
+    endDate,
+    allDay: event.allDay,
+    location: event.location ?? '',
+  }
+}
+
+function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventInput {
+  const title = form.title.trim() || 'Untitled event'
+  const location = form.location.trim() || undefined
+  if (form.allDay) {
+    if (form.endDate && form.endDate < form.date) {
+      throw new Error('End date must be on or after the start date')
+    }
+    const allDayEndDate = form.endDate && form.endDate !== form.date
+      ? exclusiveAllDayEnd(form.endDate)
+      : null
+    return {
+      title,
+      calendar: form.calendar,
+      location,
+      startAt: new Date(`${form.date}T00:00:00`).toISOString(),
+      endAt: allDayEndDate ? new Date(`${allDayEndDate}T00:00:00`).toISOString() : null,
+      allDay: true,
+      allDayDate: form.date,
+      allDayEndDate,
+    }
+  }
+  const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
+  const endAt = form.endTime
+    ? new Date(`${form.endDate || form.date}T${form.endTime}:00`)
+    : null
+  if (Number.isNaN(startAt.getTime())) throw new Error('Event dates are invalid')
+  if (endAt && (Number.isNaN(endAt.getTime()) || endAt <= startAt)) {
+    throw new Error('End time must be after the start time')
+  }
+  return {
+    title,
+    calendar: form.calendar,
+    location,
+    startAt: startAt.toISOString(),
+    endAt: endAt?.toISOString() ?? null,
+    allDay: false,
+    allDayDate: null,
+    allDayEndDate: null,
+  }
+}
+
+function EventDetailModal({ event, close, save }: {
+  event: EventItem
+  close: () => void
+  save?: (id: string, input: NewEventInput) => Promise<void>
+}) {
   const modalRef = useRef<HTMLElement>(null)
+  const titleInputRef = useRef<HTMLInputElement>(null)
   useDialogAccessibility(modalRef, close)
+  const [editing, setEditing] = useState(false)
+  const [form, setForm] = useState(() => eventEditValues(event))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const accounts = event.google?.accounts ?? []
   const organizer = event.organizer?.displayName || event.organizer?.email
   const safeDescription = useMemo(() => DOMPurify.sanitize(event.description ?? '', {
     ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
     ALLOWED_ATTR: ['href'],
   }), [event.description])
+  const calendars = EVENT_CALENDARS.includes(event.calendar)
+    ? EVENT_CALENDARS
+    : [...EVENT_CALENDARS, event.calendar]
+  const canEdit = Boolean(save)
 
-  return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget) close() }}>
-    <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby="event-detail-summary">
-      <div className="modal-heading"><div><p className="eyebrow">{event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{event.title}</h2></div><button type="button" autoFocus onClick={close} aria-label="Close event details"><X size={20}/></button></div>
-      <div className="event-detail-summary" id="event-detail-summary">
-        <div className={`event-detail-date ${event.color}`}><b>{format(event.date, 'd')}</b><span>{format(event.date, 'MMM')}</span></div>
-        <div><b>{eventTimeSummary(event)}</b><span>{eventSourceLabel(event)}</span></div>
-      </div>
-      <dl className="event-detail-list">
-        <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>
-        {event.location && <div><dt><MapPin size={16}/>Location</dt><dd>{event.location}</dd></div>}
-        {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
-        {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
-      </dl>
-      {safeDescription && <section className="event-description"><b>Description</b><div
-        onClick={(mouseEvent) => {
-          const target = mouseEvent.target instanceof Element
-            ? mouseEvent.target.closest<HTMLAnchorElement>('a[href]')
-            : null
-          if (!target) return
-          mouseEvent.preventDefault()
-          window.open(target.href, '_blank', 'noopener,noreferrer')
-        }}
-        dangerouslySetInnerHTML={{ __html: safeDescription }}
-      /></section>}
-      <div className="event-detail-actions">
-        <button type="button" onClick={close}>Close</button>
-        {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
-      </div>
+  useEffect(() => {
+    setForm(eventEditValues(event))
+    setEditing(false)
+    setError(null)
+  }, [event])
+
+  useEffect(() => {
+    if (editing) titleInputRef.current?.focus()
+  }, [editing])
+
+  const submit = async (submitEvent: FormEvent) => {
+    submitEvent.preventDefault()
+    if (!save || saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await save(event.id, eventWriteFromForm(form))
+      setEditing(false)
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Unable to save event')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !saving) close() }}>
+    <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
+      <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={saving}><X size={20}/></button></div>
+      {editing
+        ? <form onSubmit={(submitEvent) => void submit(submitEvent)}>
+          <label className="field"><span>Event title</span><input ref={titleInputRef} required maxLength={200} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder="What’s happening?" /></label>
+          <label className="event-edit-toggle"><span>All-day event</span><button type="button" role="switch" aria-checked={form.allDay} className={`toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i/></button></label>
+          <div className="field-row">
+            <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })}/></label>
+            {form.allDay
+              ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
+              : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(change) => setForm({ ...form, time: change.target.value })}/></label>}
+          </div>
+          {!form.allDay && <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })}/></label>}
+          <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>{calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}</select></label>
+          <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
+          {error && <div className="modal-error" role="alert">{error}</div>}
+          <div className="event-detail-actions">
+            <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={saving}>Cancel</button>
+            <button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+          </div>
+        </form>
+        : <>
+          <div className="event-detail-summary" id="event-detail-summary">
+            <div className={`event-detail-date ${event.color}`}><b>{format(event.date, 'd')}</b><span>{format(event.date, 'MMM')}</span></div>
+            <div><b>{eventTimeSummary(event)}</b><span>{eventSourceLabel(event)}</span></div>
+          </div>
+          <dl className="event-detail-list">
+            <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>
+            {event.location && <div><dt><MapPin size={16}/>Location</dt><dd>{event.location}</dd></div>}
+            {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
+            {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
+          </dl>
+          {safeDescription && <section className="event-description"><b>Description</b><div
+            onClick={(mouseEvent) => {
+              const target = mouseEvent.target instanceof Element
+                ? mouseEvent.target.closest<HTMLAnchorElement>('a[href]')
+                : null
+              if (!target) return
+              mouseEvent.preventDefault()
+              window.open(target.href, '_blank', 'noopener,noreferrer')
+            }}
+            dangerouslySetInnerHTML={{ __html: safeDescription }}
+          /></section>}
+          {!canEdit && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Open the event in Google Calendar to change it.</p>}
+          <div className="event-detail-actions">
+            <button type="button" onClick={close}>Close</button>
+            {canEdit && <button type="button" className="edit-event" onClick={() => setEditing(true)}><Pencil size={14}/>Edit</button>}
+            {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
+          </div>
+        </>}
     </article>
   </div>
 }
@@ -1480,7 +1618,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
     <label className="field"><span>Event title</span><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <div className="field-row"><label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)}/></label><label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)}/></label></div>
-    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}><option>Family</option><option>Alex</option><option>Maya</option></select></label>
+    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}>{EVENT_CALENDARS.map((name) => <option key={name}>{name}</option>)}</select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" /></label>
     {error && <div className="modal-error" role="alert">{error}</div>}
     <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
