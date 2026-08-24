@@ -1096,6 +1096,7 @@ function useAssistantPanelWidth(active: boolean) {
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return
+    event.currentTarget.focus({ preventScroll: true })
     event.preventDefault()
     event.currentTarget.setPointerCapture(event.pointerId)
     dragRef.current = {
@@ -1358,7 +1359,7 @@ function AssistantPanel({ open, close, save }: {
 
   return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} id="assistant-panel" className={`assistant-panel${resizing ? ' resizing' : ''}`} style={{ '--assistant-panel-width': `${panelWidth}px` } as CSSProperties} role="dialog" aria-modal="true" aria-labelledby="assistant-title">
     <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>{contextToken ? `${turnsRemaining} turns remaining` : 'Powered by Vercel AI Gateway'}</span></div><div className="assistant-header-actions">{contextToken && <button type="button" className="new-plan-button" disabled={loading || saving || processingImage || resetting} onClick={() => void resetSession()}>{resetting ? 'Resetting…' : 'New plan'}</button>}<button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div></div>
-    <div className="assistant-resize" role="separator" aria-orientation="vertical" aria-controls="assistant-panel" aria-label="Resize AI planner" aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH} aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH} aria-valuenow={panelWidth} aria-valuetext={`${panelWidth} pixels`} title="Drag to resize" tabIndex={0} {...resizeHandleProps} />
+    <div className="assistant-resize" role="separator" aria-orientation="vertical" aria-controls="assistant-panel" aria-label="Resize AI planner" aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH} aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH} aria-valuenow={panelWidth} aria-valuetext={`${panelWidth} pixels`} title="Drag to resize, or use arrow keys" tabIndex={0} {...resizeHandleProps} />
     <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar proposal' : proposal?.result === 'needs_clarification' ? `Clarification needed: ${proposal.message}` : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
       {!turns.length && !pendingText && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>}
