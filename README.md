@@ -163,3 +163,6 @@ in Postgres by UTC month for two minutes, then served stale while a background
 revalidate refreshes it. Changing calendar inclusion invalidates that account’s
 cache. Disconnecting deletes the cache with the stored grant. No synthetic sync
 activity is stored or displayed.
+
+See [ADR 0002](docs/adr/0002-google-event-cache.md) for why the cache lives in
+Postgres and is not an import of Google events.
