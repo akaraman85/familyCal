@@ -1,4 +1,7 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import {
+  useEffect, useMemo, useRef, useState,
+  type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
+} from 'react'
 import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
@@ -1028,6 +1031,133 @@ type PlannerChatTurn = {
   timezone: string
 }
 
+const ASSISTANT_PANEL_WIDTH_KEY = 'karaman-assistant-panel-width'
+const DEFAULT_ASSISTANT_PANEL_WIDTH = 390
+const MIN_ASSISTANT_PANEL_WIDTH = 320
+const MAX_ASSISTANT_PANEL_WIDTH = 1100
+
+function clampAssistantPanelWidth(width: number, viewportWidth = window.innerWidth) {
+  const min = Math.min(MIN_ASSISTANT_PANEL_WIDTH, viewportWidth)
+  const max = Math.min(MAX_ASSISTANT_PANEL_WIDTH, viewportWidth)
+  return Math.min(max, Math.max(min, Math.round(width)))
+}
+
+function readStoredAssistantPanelWidth() {
+  try {
+    const stored = Number(window.localStorage.getItem(ASSISTANT_PANEL_WIDTH_KEY))
+    if (!Number.isFinite(stored) || stored <= 0) return DEFAULT_ASSISTANT_PANEL_WIDTH
+    return stored
+  } catch {
+    return DEFAULT_ASSISTANT_PANEL_WIDTH
+  }
+}
+
+function persistAssistantPanelWidth(width: number) {
+  try {
+    window.localStorage.setItem(ASSISTANT_PANEL_WIDTH_KEY, String(width))
+  } catch {
+    // Private mode or quota errors should not block resizing.
+  }
+}
+
+function useAssistantPanelWidth(active: boolean) {
+  const [width, setWidth] = useState(() => (
+    typeof window === 'undefined'
+      ? DEFAULT_ASSISTANT_PANEL_WIDTH
+      : clampAssistantPanelWidth(readStoredAssistantPanelWidth())
+  ))
+  const [resizing, setResizing] = useState(false)
+  const dragRef = useRef<{ pointerId: number; startX: number; startWidth: number } | null>(null)
+  const widthRef = useRef(width)
+  widthRef.current = width
+
+  const applyWidth = (next: number, persist: boolean) => {
+    const clamped = clampAssistantPanelWidth(next)
+    widthRef.current = clamped
+    setWidth(clamped)
+    if (persist) persistAssistantPanelWidth(clamped)
+    return clamped
+  }
+
+  useEffect(() => {
+    if (!active) return
+    setWidth((current) => clampAssistantPanelWidth(current))
+    const onWindowResize = () => {
+      setWidth((current) => clampAssistantPanelWidth(current))
+    }
+    window.addEventListener('resize', onWindowResize)
+    return () => window.removeEventListener('resize', onWindowResize)
+  }, [active])
+
+  useEffect(() => {
+    document.body.classList.toggle('assistant-resizing', resizing)
+    return () => document.body.classList.remove('assistant-resizing')
+  }, [resizing])
+
+  const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    event.preventDefault()
+    event.currentTarget.setPointerCapture(event.pointerId)
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startWidth: widthRef.current,
+    }
+    setResizing(true)
+  }
+
+  const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    applyWidth(drag.startWidth + (drag.startX - event.clientX), false)
+  }
+
+  const endDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    setResizing(false)
+    persistAssistantPanelWidth(widthRef.current)
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+  }
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const step = event.shiftKey ? 48 : 16
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault()
+      applyWidth(width + step, true)
+    } else if (event.key === 'ArrowRight') {
+      event.preventDefault()
+      applyWidth(width - step, true)
+    } else if (event.key === 'Home') {
+      event.preventDefault()
+      applyWidth(MIN_ASSISTANT_PANEL_WIDTH, true)
+    } else if (event.key === 'End') {
+      event.preventDefault()
+      applyWidth(MAX_ASSISTANT_PANEL_WIDTH, true)
+    }
+  }
+
+  const onDoubleClick = () => {
+    applyWidth(DEFAULT_ASSISTANT_PANEL_WIDTH, true)
+  }
+
+  return {
+    width,
+    resizing,
+    resizeHandleProps: {
+      onPointerDown,
+      onPointerMove,
+      onPointerUp: endDrag,
+      onPointerCancel: endDrag,
+      onKeyDown,
+      onDoubleClick,
+    },
+  }
+}
+
 function AssistantPanel({ open, close, save }: {
   open: boolean
   close: () => void
@@ -1043,6 +1173,7 @@ function AssistantPanel({ open, close, save }: {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const conversationEndRef = useRef<HTMLDivElement>(null)
   const imageProcessingIdRef = useRef(0)
+  const { width: panelWidth, resizing, resizeHandleProps } = useAssistantPanelWidth(open)
   useDialogAccessibility(panelRef, close, open)
   const [text, setText] = useState('')
   const [image, setImage] = useState<PlannerImageAttachment | null>(null)
@@ -1225,8 +1356,9 @@ function AssistantPanel({ open, close, save }: {
 
   if (!open) return null
 
-  return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} className="assistant-panel" role="dialog" aria-modal="true" aria-labelledby="assistant-title">
+  return <div className="assistant-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}><aside ref={panelRef} id="assistant-panel" className={`assistant-panel${resizing ? ' resizing' : ''}`} style={{ '--assistant-panel-width': `${panelWidth}px` } as CSSProperties} role="dialog" aria-modal="true" aria-labelledby="assistant-title">
     <div className="assistant-header"><div className="assistant-symbol"><Sparkles size={19}/></div><div><b id="assistant-title">Family planner</b><span>{contextToken ? `${turnsRemaining} turns remaining` : 'Powered by Vercel AI Gateway'}</span></div><div className="assistant-header-actions">{contextToken && <button type="button" className="new-plan-button" disabled={loading || saving || processingImage || resetting} onClick={() => void resetSession()}>{resetting ? 'Resetting…' : 'New plan'}</button>}<button type="button" onClick={close} aria-label="Close AI planner"><X size={20}/></button></div></div>
+    <div className="assistant-resize" role="separator" aria-orientation="vertical" aria-controls="assistant-panel" aria-label="Resize AI planner" aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH} aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH} aria-valuenow={panelWidth} aria-valuetext={`${panelWidth} pixels`} title="Drag to resize" tabIndex={0} {...resizeHandleProps} />
     <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar proposal' : proposal?.result === 'needs_clarification' ? `Clarification needed: ${proposal.message}` : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
       {!turns.length && !pendingText && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>}
