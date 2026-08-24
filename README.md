@@ -10,7 +10,7 @@ calendar views.
 - Conversational AI planning flow
 - Structured event proposals through Vercel AI Gateway
 - Server-side integration registry with Google Calendar as the first provider
-- Live read-only Google Calendar events with encrypted OAuth token storage
+- Read-only Google Calendar events with encrypted OAuth token storage and stale-while-revalidate caching
 - Per-account primary, owner, editable, and read-only calendar controls
 - Postgres-backed events created directly in the family calendar
 - Family member and preference administration
@@ -117,7 +117,7 @@ supporting separate household accounts or user-level permissions.
 
 The browser receives normalized calendar event data, never provider credentials.
 Google access and refresh tokens are encrypted with AES-256-GCM before being
-written to Postgres. Token exchange, refresh, live event reads, revocation, and
+written to Postgres. Token exchange, refresh, event reads, revocation, and
 OAuth state validation all run in server functions.
 
 Before deployment, provision:
@@ -157,6 +157,9 @@ parent records for calendar integrations; no sample household members are
 created automatically. Each member can own multiple encrypted Google account
 credentials. The selected member is captured in the OAuth state and attached
 to the account only after the callback validates that state. Accounts can be
-connected and disconnected independently. Google events are read live and are
-not copied into the database; no synthetic sync activity is stored or
-displayed.
+connected and disconnected independently. Google events stay sourced from
+Google and are not imported as family events. Each connected account is cached
+in Postgres by UTC month for two minutes, then served stale while a background
+revalidate refreshes it. Changing calendar inclusion invalidates that account’s
+cache. Disconnecting deletes the cache with the stored grant. No synthetic sync
+activity is stored or displayed.

@@ -4,13 +4,9 @@ import {
   listSavedEvents,
   PlannerSessionConflictError,
   updateSavedEvent,
-  type CalendarEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
-import {
-  listCalendarExclusions,
-  listIntegrationAccountsWithCredentials,
-} from '../_lib/db.js'
+import { loadConnectedGoogleEvents } from '../_lib/connected-events.js'
 import { integrationEnv } from '../_lib/env.js'
 import { verifyPlannerProposal } from '../_lib/planner-confirmation.js'
 import {
@@ -22,23 +18,10 @@ import {
   type ApiRequest,
   type ApiResponse,
 } from '../_lib/http.js'
-import {
-  getGoogleAccessToken,
-  GOOGLE_CALENDAR_PROVIDER_ID,
-  hasGoogleCalendarReadScope,
-  listAllGoogleEvents,
-} from '../_lib/providers/google-calendar.js'
 
 const MAX_RANGE_MS = 370 * 24 * 60 * 60 * 1000
 
 class ValidationError extends Error {}
-
-const CALENDAR_TYPE_RANK = {
-  'read-only': 0,
-  editable: 1,
-  owner: 2,
-  primary: 3,
-} as const
 
 function queryValue(request: ApiRequest, name: string) {
   const value = request.query?.[name]
@@ -59,6 +42,11 @@ function parseRange(request: ApiRequest) {
     throw new ValidationError('timeMin and timeMax must define a valid range of 370 days or less')
   }
   return { timeMin, timeMax }
+}
+
+function parseRevalidate(request: ApiRequest) {
+  const value = queryValue(request, 'revalidate')
+  return value === '1' || value === 'true'
 }
 
 function optionalString(value: unknown, maxLength: number) {
@@ -137,84 +125,32 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
   try {
     const env = integrationEnv()
     const { timeMin, timeMax } = parseRange(request)
-    const savedEvents = await listSavedEvents(
-      env.databaseUrl,
-      env.ownerId,
-      timeMin,
-      timeMax,
-    )
-    let googleEvents: CalendarEvent[] = []
-    let googleStatus: 'ok' | 'disconnected' | 'error' = 'disconnected'
-    const [googleAccounts, exclusions] = await Promise.all([
-      listIntegrationAccountsWithCredentials(
+    const revalidate = parseRevalidate(request)
+    const [savedEvents, google] = await Promise.all([
+      listSavedEvents(
         env.databaseUrl,
         env.ownerId,
-        GOOGLE_CALENDAR_PROVIDER_ID,
+        timeMin,
+        timeMax,
       ),
-      listCalendarExclusions(
-        env.databaseUrl,
-        env.ownerId,
-        GOOGLE_CALENDAR_PROVIDER_ID,
-      ),
+      loadConnectedGoogleEvents({
+        databaseUrl: env.databaseUrl,
+        encryptionKey: env.encryptionKey,
+        clientId: env.googleClientId,
+        clientSecret: env.googleClientSecret,
+        ownerId: env.ownerId,
+        timeMin,
+        timeMax,
+        revalidate,
+      }),
     ])
 
-    if (googleAccounts.length) {
-      const readableAccounts = googleAccounts.filter((account) => (
-        hasGoogleCalendarReadScope(account.scopes)
-      ))
-      googleStatus = readableAccounts.length ? 'ok' : 'error'
-      const eventsById = new Map<string, CalendarEvent>()
-      for (const account of readableAccounts) {
-        try {
-          const accessToken = await getGoogleAccessToken({
-            databaseUrl: env.databaseUrl,
-            encryptionKey: env.encryptionKey,
-            clientId: env.googleClientId,
-            clientSecret: env.googleClientSecret,
-          }, account)
-          const excludedCalendarIds = new Set(
-            exclusions
-              .filter((row) => row.external_account_id === account.external_account_id)
-              .map((row) => row.calendar_id),
-          )
-          const accountEvents = await listAllGoogleEvents(
-            accessToken,
-            timeMin,
-            timeMax,
-            { account, excludedCalendarIds },
-          )
-          for (const event of accountEvents) {
-            const existing = eventsById.get(event.id)
-            if (existing?.google && event.google) {
-              if (
-                CALENDAR_TYPE_RANK[event.google.calendar.type]
-                > CALENDAR_TYPE_RANK[existing.google.calendar.type]
-              ) {
-                existing.google.calendar = event.google.calendar
-                existing.calendar = event.calendar
-              }
-              for (const sourceAccount of event.google.accounts) {
-                if (!existing.google.accounts.some(({ id }) => id === sourceAccount.id)) {
-                  existing.google.accounts.push(sourceAccount)
-                }
-              }
-            } else {
-              eventsById.set(event.id, event)
-            }
-          }
-        } catch (error) {
-          googleStatus = 'error'
-          console.error(`Unable to load Google Calendar events for ${account.external_account_id}`, error)
-        }
-      }
-      googleEvents = [...eventsById.values()]
-    }
-
-    const events = [...savedEvents, ...googleEvents]
+    const events = [...savedEvents, ...google.events]
       .sort((a, b) => a.startAt.localeCompare(b.startAt))
     sendJson(response, 200, {
       events,
-      sources: { saved: 'ok', google: googleStatus },
+      sources: { saved: 'ok', google: google.status },
+      stale: google.stale,
     })
   } catch (error) {
     console.error('Unable to load calendar events', error)
