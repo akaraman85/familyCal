@@ -49,8 +49,22 @@ import {
   type PlannerSettings,
 } from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
+import {
+  CALENDAR_VIEWS,
+  DEFAULT_CALENDAR_SETTINGS,
+  MINI_WEEKDAY_LABELS,
+  WEEKDAY_LABELS,
+  isWeekendDate,
+  loadCalendarSettings,
+  updateCalendarSettings,
+  weekStartDay,
+  yearGridOffset,
+  type CalendarSettings,
+  type CalendarView,
+  type WeekStart,
+} from './calendar-settings'
 
-type View = 'Day' | 'Week' | 'Month' | 'Year'
+type View = CalendarView
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
 type EventColor = 'coral' | 'blue' | 'green' | 'gold'
 type EventItem = {
@@ -326,7 +340,11 @@ function AuthenticatedApp({ user, onLogout }: {
       ? 'Integrations'
       : 'Calendar'
   ))
-  const [view, setView] = useState<View>('Month')
+  const [view, setView] = useState<View>(DEFAULT_CALENDAR_SETTINGS.defaultView)
+  const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(
+    DEFAULT_CALENDAR_SETTINGS,
+  )
+  const userChangedView = useRef(false)
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const { members: familyMembers, refreshMembers } = useFamilyMembers()
   const [rawEvents, setRawEvents] = useState<CalendarEventData[]>([])
@@ -347,6 +365,21 @@ function AuthenticatedApp({ user, onLogout }: {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const weekStartsOn = weekStartDay(calendarSettings.weekStartsOn)
+
+  useEffect(() => {
+    loadCalendarSettings()
+      .then(({ settings }) => {
+        setCalendarSettings(settings)
+        if (!userChangedView.current) setView(settings.defaultView)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  const changeView = (next: View) => {
+    userChangedView.current = true
+    setView(next)
+  }
 
   const eventRange = useMemo(() => {
     if (view === 'Year') {
@@ -357,17 +390,17 @@ function AuthenticatedApp({ user, onLogout }: {
     }
     if (view === 'Month') {
       return {
-        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
-        end: addDays(endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 }), 1),
+        start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn }),
+        end: addDays(endOfWeek(endOfMonth(selectedDate), { weekStartsOn }), 1),
       }
     }
     if (view === 'Week') {
-      const start = startOfWeek(selectedDate, { weekStartsOn: 1 })
+      const start = startOfWeek(selectedDate, { weekStartsOn })
       return { start, end: addDays(start, 7) }
     }
     const start = startOfDay(selectedDate)
     return { start, end: addDays(start, 1) }
-  }, [selectedDate, view])
+  }, [selectedDate, view, weekStartsOn])
   const rangeKey = `${eventRange.start.toISOString()}|${eventRange.end.toISOString()}`
 
   const refreshEvents = (revalidateGoogle = false) => {
@@ -477,7 +510,7 @@ function AuthenticatedApp({ user, onLogout }: {
     : view === 'Day'
       ? format(selectedDate, 'EEEE, MMMM d')
       : view === 'Week'
-        ? `${format(startOfWeek(selectedDate, { weekStartsOn: 1 }), 'MMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn: 1 }), 'MMM d, yyyy')}`
+        ? `${format(startOfWeek(selectedDate, { weekStartsOn }), 'MMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn }), 'MMM d, yyyy')}`
         : format(selectedDate, 'MMMM yyyy')
 
   const navItems: { icon: typeof CalendarDays; label: Page }[] = [
@@ -535,7 +568,7 @@ function AuthenticatedApp({ user, onLogout }: {
           <CalendarPage
             events={events}
             view={view}
-            setView={setView}
+            setView={changeView}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
             dateTitle={dateTitle}
@@ -545,13 +578,17 @@ function AuthenticatedApp({ user, onLogout }: {
             error={eventsError}
             sources={eventSources}
             members={familyMembers}
+            weekStartsOn={calendarSettings.weekStartsOn}
+            showWeekends={calendarSettings.showWeekends}
             selectEvent={setSelectedEvent}
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
         {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => refreshEvents(true)} />}
         {page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
-        {page === 'Settings' && <SettingsPage />}
+        {page === 'Settings' && (
+          <SettingsPage onCalendarSettingsSaved={setCalendarSettings} />
+        )}
       </main>
 
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
@@ -574,10 +611,10 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, selectEvent }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
-  loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; selectEvent: (event: EventItem) => void
+  loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
 }) {
   const now = new Date()
   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
@@ -600,14 +637,14 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
           <div className="view-controls">
             <button className="filter-btn"><ListFilter size={16} />Filter</button>
             <div className="segmented">
-              {(['Day', 'Week', 'Month', 'Year'] as View[]).map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}
+              {CALENDAR_VIEWS.map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}
             </div>
           </div>
         </div>
-        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} onSelect={setSelectedDate} selectEvent={selectEvent} />}
-        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} selectEvent={selectEvent} />}
+        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} />}
+        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} />}
         {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} />}
-        {view === 'Year' && <YearView events={events} selectedDate={selectedDate} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
+        {view === 'Year' && <YearView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
       <div className="calendar-footer">
         <div className="calendar-legend">
@@ -622,14 +659,15 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   )
 }
 
-function MonthView({ events, selectedDate, onSelect, selectEvent }: { events: EventItem[]; selectedDate: Date; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void }) {
+function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void }) {
+  const weekStart = weekStartDay(weekStartsOn)
   const days = useMemo(() => eachDayOfInterval({
-    start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: 1 }),
-    end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: 1 }),
-  }), [selectedDate])
+    start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: weekStart }),
+    end: endOfWeek(endOfMonth(selectedDate), { weekStartsOn: weekStart }),
+  }), [selectedDate, weekStart])
   return (
     <div className="month-view">
-      <div className="weekday-row">{['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'].map((d) => <div key={d}>{d}</div>)}</div>
+      <div className="weekday-row">{WEEKDAY_LABELS[weekStartsOn].map((d) => <div key={d}>{d}</div>)}</div>
       <div className="month-grid">
         {days.map((day) => {
           const dayEvents = events.filter((event) => isSameDay(event.date, day))
@@ -648,13 +686,17 @@ function MonthView({ events, selectedDate, onSelect, selectEvent }: { events: Ev
   )
 }
 
-function WeekView({ events, selectedDate, selectEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void }) {
-  const days = eachDayOfInterval({ start: startOfWeek(selectedDate, { weekStartsOn: 1 }), end: endOfWeek(selectedDate, { weekStartsOn: 1 }) })
+function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void }) {
+  const weekStart = weekStartDay(weekStartsOn)
+  const days = eachDayOfInterval({
+    start: startOfWeek(selectedDate, { weekStartsOn: weekStart }),
+    end: endOfWeek(selectedDate, { weekStartsOn: weekStart }),
+  }).filter((day) => showWeekends || !isWeekendDate(day))
   const hasAllDayEvents = events.some((event) => (
     event.allDay && days.some((day) => isSameDay(event.date, day))
   ))
   return (
-    <div className="week-view">
+    <div className="week-view" style={{ '--week-days': String(days.length) } as CSSProperties}>
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
       {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div>)}</div>}
       <div className="week-body">
@@ -693,12 +735,13 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
   )
 }
 
-function YearView({ events, selectedDate, onSelect }: { events: EventItem[]; selectedDate: Date; onSelect: (d: Date) => void }) {
+function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void }) {
+  const weekdayLabels = MINI_WEEKDAY_LABELS[weekStartsOn]
   return <div className="year-grid">{Array.from({ length: 12 }, (_, month) => {
     const first = new Date(selectedDate.getFullYear(), month, 1)
-    const offset = (first.getDay() + 6) % 7
+    const offset = yearGridOffset(first, weekStartsOn)
     const days = new Date(selectedDate.getFullYear(), month + 1, 0).getDate()
-    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{['M','T','W','T','F','S','S'].map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date()) ? 'today' : ''} ${events.some((e) => isSameDay(e.date, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
+    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{weekdayLabels.map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date()) ? 'today' : ''} ${events.some((e) => isSameDay(e.date, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
   })}</div>
 }
 
@@ -991,22 +1034,49 @@ function FamilyMemberModal({ member, close, save }: {
   </div>
 }
 
-function SettingsPage() {
+function SettingsPage({ onCalendarSettingsSaved }: {
+  onCalendarSettingsSaved: (settings: CalendarSettings) => void
+}) {
   const [tab, setTab] = useState<'general' | 'planner'>('general')
-  const [weekends, setWeekends] = useState(true)
-  const [emails, setEmails] = useState(false)
+  const [calendar, setCalendar] = useState<CalendarSettings | null>(null)
+  const [calendarError, setCalendarError] = useState<string | null>(null)
+  const [savingCalendar, setSavingCalendar] = useState(false)
+  const [calendarSaved, setCalendarSaved] = useState(false)
   const [planner, setPlanner] = useState<PlannerSettings | null>(null)
   const [plannerError, setPlannerError] = useState<string | null>(null)
   const [savingPlanner, setSavingPlanner] = useState(false)
   const [plannerSaved, setPlannerSaved] = useState(false)
 
   useEffect(() => {
+    loadCalendarSettings()
+      .then(({ settings }) => setCalendar(settings))
+      .catch((error: unknown) => {
+        setCalendar(DEFAULT_CALENDAR_SETTINGS)
+        setCalendarError(error instanceof Error ? error.message : 'Unable to load calendar preferences')
+      })
     loadPlannerSettings()
       .then(({ settings }) => setPlanner(settings))
       .catch((error: unknown) => {
         setPlannerError(error instanceof Error ? error.message : 'Unable to load AI settings')
       })
   }, [])
+
+  const saveCalendar = async () => {
+    if (!calendar) return
+    setSavingCalendar(true)
+    setCalendarError(null)
+    setCalendarSaved(false)
+    try {
+      const result = await updateCalendarSettings(calendar)
+      setCalendar(result.settings)
+      onCalendarSettingsSaved(result.settings)
+      setCalendarSaved(true)
+    } catch (error) {
+      setCalendarError(error instanceof Error ? error.message : 'Unable to save calendar preferences')
+    } finally {
+      setSavingCalendar(false)
+    }
+  }
 
   const savePlanner = async () => {
     if (!planner) return
@@ -1032,10 +1102,15 @@ function SettingsPage() {
     </div>
     {tab === 'general'
       ? <div className="settings-content"><h2>Calendar preferences</h2><p>Choose how dates and events appear for everyone.</p>
-        <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select defaultValue="Month"><option>Day</option><option>Week</option><option>Month</option><option>Year</option></select></label>
-        <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select defaultValue="Monday"><option>Monday</option><option>Sunday</option></select></label>
-        <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" className={`toggle ${weekends ? 'on' : ''}`} onClick={() => setWeekends(!weekends)}><i/></button></label>
-        <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" className={`toggle ${emails ? 'on' : ''}`} onClick={() => setEmails(!emails)}><i/></button></label>
+        {!calendar && !calendarError && <div className="integration-loading"><LoaderCircle size={16}/>Loading calendar preferences</div>}
+        {calendar && <>
+          <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select value={calendar.defaultView} onChange={(event) => { setCalendar({ ...calendar, defaultView: event.target.value as CalendarView }); setCalendarSaved(false) }}>{CALENDAR_VIEWS.map((view) => <option key={view} value={view}>{view}</option>)}</select></label>
+          <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select value={calendar.weekStartsOn} onChange={(event) => { setCalendar({ ...calendar, weekStartsOn: event.target.value as WeekStart }); setCalendarSaved(false) }}><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
+          <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" role="switch" aria-checked={calendar.showWeekends} className={`toggle ${calendar.showWeekends ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, showWeekends: !calendar.showWeekends }); setCalendarSaved(false) }}><i/></button></label>
+          <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" role="switch" aria-checked={calendar.dailyAgendaEmail} className={`toggle ${calendar.dailyAgendaEmail ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, dailyAgendaEmail: !calendar.dailyAgendaEmail }); setCalendarSaved(false) }}><i/></button></label>
+          <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <span><Check size={14}/>Saved</span>}</div>
+        </>}
+        {calendarError && <div className="modal-error" role="alert">{calendarError}</div>}
       </div>
       : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
@@ -1045,7 +1120,7 @@ function SettingsPage() {
           <label><span><b>Model profile</b><small>Choose the balance of speed, cost, and reasoning quality</small></span><select value={planner.modelProfile} onChange={(event) => setPlanner({ ...planner, modelProfile: event.target.value as PlannerSettings['modelProfile'] })}><option value="fast">Fast · GPT-5.6 Luna</option><option value="balanced">Balanced · GPT-5.6 Terra</option><option value="quality">Quality · GPT-5.6 Sol</option></select></label>
           <label><span><b>Household timezone</b><small>IANA timezone used to resolve phrases like “tomorrow at 7”</small></span><input value={planner.timezone} onChange={(event) => setPlanner({ ...planner, timezone: event.target.value })} placeholder="America/New_York"/></label>
           <label><span><b>Default calendar</b><small>Used when a request does not name a calendar</small></span><input maxLength={100} value={planner.defaultCalendar} onChange={(event) => setPlanner({ ...planner, defaultCalendar: event.target.value })}/></label>
-          <div className="planner-settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
+          <div className="settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
         </>}
         {plannerError && <div className="modal-error" role="alert">{plannerError}</div>}
       </div>}
