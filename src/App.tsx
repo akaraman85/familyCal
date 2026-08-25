@@ -6,9 +6,9 @@ import {
 import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, ExternalLink, ImagePlus, LayoutDashboard, Link2, ListFilter, LoaderCircle, LockKeyhole,
-  LogOut, MapPin, Menu, MessageCircleMore, Pencil, Plus, Search,
-  Settings, Sparkles, Users, WandSparkles, X,
+  CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutDashboard, LayoutGrid,
+  Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
+  Pencil, Plus, Repeat, Search, Settings, Sparkles, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
@@ -241,6 +241,104 @@ function timelineLabel(hour: number) {
   return format(new Date(2026, 0, 1, hour), 'h a')
 }
 
+function useIsMobile(breakpoint = 760) {
+  const [isMobile, setIsMobile] = useState(
+    () => window.matchMedia(`(max-width: ${breakpoint}px)`).matches,
+  )
+  useEffect(() => {
+    const media = window.matchMedia(`(max-width: ${breakpoint}px)`)
+    const update = (event: MediaQueryListEvent) => setIsMobile(event.matches)
+    media.addEventListener('change', update)
+    return () => media.removeEventListener('change', update)
+  }, [breakpoint])
+  return isMobile
+}
+
+const VIEW_OPTIONS: { value: View; label: string; icon: typeof CalendarDays }[] = [
+  { value: 'Day', label: 'Day', icon: CalendarDays },
+  { value: 'Week', label: 'Week', icon: Columns2 },
+  { value: 'Month', label: 'Month', icon: LayoutGrid },
+  { value: 'Year', label: 'Year', icon: CalendarDays },
+]
+
+function WeekDatePicker({ selectedDate, weekStartsOn, onSelect }: {
+  selectedDate: Date
+  weekStartsOn: WeekStart
+  onSelect: (date: Date) => void
+}) {
+  const weekStart = weekStartDay(weekStartsOn)
+  const days = eachDayOfInterval({
+    start: startOfWeek(selectedDate, { weekStartsOn: weekStart }),
+    end: endOfWeek(selectedDate, { weekStartsOn: weekStart }),
+  })
+  return (
+    <div className="week-date-picker">
+      {days.map((day) => (
+        <button
+          key={day.toISOString()}
+          type="button"
+          className={`week-date-pill ${isSameDay(day, selectedDate) ? 'selected' : ''} ${isSameDay(day, new Date()) && !isSameDay(day, selectedDate) ? 'today' : ''}`}
+          onClick={() => onSelect(day)}
+        >
+          <span>{format(day, 'EEE')}</span>
+          <b>{format(day, 'd')}</b>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ViewDropdown({ view, setView }: { view: View; setView: (view: View) => void }) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const current = VIEW_OPTIONS.find((option) => option.value === view) ?? VIEW_OPTIONS[0]
+  const CurrentIcon = current.icon
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <div className="view-dropdown" ref={menuRef}>
+      <button
+        type="button"
+        className="view-dropdown-trigger"
+        aria-expanded={open}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        <CurrentIcon size={16} />
+        {current.label}
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="glass-menu view-dropdown-menu" role="menu">
+          {VIEW_OPTIONS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              type="button"
+              role="menuitem"
+              className={view === value ? 'active' : ''}
+              onClick={() => {
+                setView(value)
+                setOpen(false)
+              }}
+            >
+              <Icon size={16} />
+              <span>{label}</span>
+              {view === value && <Check size={14} />}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function calendarTypeLabel(type: NonNullable<EventItem['google']>['calendar']['type']) {
   return type[0].toUpperCase() + type.slice(1)
 }
@@ -340,12 +438,17 @@ function AuthenticatedApp({ user, onLogout }: {
       ? 'Integrations'
       : 'Calendar'
   ))
-  const [view, setView] = useState<View>(DEFAULT_CALENDAR_SETTINGS.defaultView)
+  const [view, setView] = useState<View>(() => (
+    window.matchMedia('(max-width: 760px)').matches
+      ? 'Day'
+      : DEFAULT_CALENDAR_SETTINGS.defaultView
+  ))
   const [calendarSettings, setCalendarSettings] = useState<CalendarSettings>(
     DEFAULT_CALENDAR_SETTINGS,
   )
   const userChangedView = useRef(false)
   const [selectedDate, setSelectedDate] = useState(() => new Date())
+  const isMobile = useIsMobile()
   const { members: familyMembers, refreshMembers } = useFamilyMembers()
   const [rawEvents, setRawEvents] = useState<CalendarEventData[]>([])
   const [eventSources, setEventSources] = useState<EventSources>({
@@ -365,16 +468,19 @@ function AuthenticatedApp({ user, onLogout }: {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const [fabOpen, setFabOpen] = useState(false)
   const weekStartsOn = weekStartDay(calendarSettings.weekStartsOn)
 
   useEffect(() => {
     loadCalendarSettings()
       .then(({ settings }) => {
         setCalendarSettings(settings)
-        if (!userChangedView.current) setView(settings.defaultView)
+        if (!userChangedView.current) {
+          setView(isMobile ? 'Day' : settings.defaultView)
+        }
       })
       .catch(() => undefined)
-  }, [])
+  }, [isMobile])
 
   const changeView = (next: View) => {
     userChangedView.current = true
@@ -581,6 +687,7 @@ function AuthenticatedApp({ user, onLogout }: {
             weekStartsOn={calendarSettings.weekStartsOn}
             showWeekends={calendarSettings.showWeekends}
             selectEvent={setSelectedEvent}
+            isMobile={isMobile}
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
@@ -591,6 +698,43 @@ function AuthenticatedApp({ user, onLogout }: {
         )}
       </main>
 
+      <div className={`fab-stack ${fabOpen ? 'open' : ''} ${page === 'Calendar' && isMobile ? 'visible' : ''}`}>
+        {fabOpen && (
+          <>
+            <button
+              type="button"
+              className="fab fab-ai"
+              aria-label="Open AI planner"
+              onClick={() => {
+                setChatOpen(true)
+                setFabOpen(false)
+              }}
+            >
+              <Sparkles size={20} />
+            </button>
+            <button
+              type="button"
+              className="fab fab-event"
+              aria-label="Add event"
+              onClick={() => {
+                setModalOpen(true)
+                setFabOpen(false)
+              }}
+            >
+              <CalendarDays size={20} />
+            </button>
+          </>
+        )}
+        <button
+          type="button"
+          className="fab fab-main"
+          aria-label={fabOpen ? 'Close quick actions' : 'Open quick actions'}
+          aria-expanded={fabOpen}
+          onClick={() => setFabOpen((open) => !open)}
+        >
+          {fabOpen ? <X size={22} /> : <Plus size={22} />}
+        </button>
+      </div>
       <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
       <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />
       {selectedEvent && (
@@ -611,32 +755,44 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, isMobile }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
   loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
+  isMobile: boolean
 }) {
   const now = new Date()
   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
+  const selectDay = (day: Date) => {
+    setSelectedDate(day)
+    if (isMobile && view !== 'Day') setView('Day')
+  }
   return (
     <div className="page calendar-page">
-      <div className="page-heading">
+      <div className="page-heading desktop-only">
         <div><p className="eyebrow">{format(now, 'EEEE, MMMM d')}</p><h1>Good {greeting}, Alex</h1><p>Here’s what’s happening with your family.</p></div>
         <button className="ai-plan-btn" onClick={openChat}><Sparkles size={17} />Plan with AI</button>
       </div>
       {error && <div className="calendar-source-error" role="alert">{error}</div>}
       {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">{events.some((event) => event.source === 'google') ? 'Google Calendar could not be refreshed. Showing the last loaded events.' : 'Saved events are shown, but Google Calendar could not be reached.'}</div>}
       <section className="calendar-card">
+        <div className="mobile-calendar-header mobile-only">
+          <div className="mobile-calendar-top">
+            <h2>{format(selectedDate, 'MMMM yyyy')}</h2>
+            <ViewDropdown view={view} setView={setView} />
+          </div>
+          <WeekDatePicker selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={selectDay} />
+        </div>
         <div className="calendar-toolbar">
-          <div className="date-navigation">
+          <div className="date-navigation desktop-toolbar">
             <button className="today-btn" onClick={() => setSelectedDate(new Date())}>Today</button>
             <button className="square-btn" onClick={() => moveDate(-1)}><ChevronLeft size={18} /></button>
             <button className="square-btn" onClick={() => moveDate(1)}><ChevronRight size={18} /></button>
             <h2>{dateTitle}</h2>
           </div>
           <div className="view-controls">
-            <button className="filter-btn"><ListFilter size={16} />Filter</button>
-            <div className="segmented">
+            <button className="filter-btn desktop-toolbar"><ListFilter size={16} />Filter</button>
+            <div className="segmented desktop-toolbar">
               {CALENDAR_VIEWS.map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}
             </div>
           </div>
@@ -715,6 +871,13 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
   const dayEvents = events.filter((e) => isSameDay(e.date, selectedDate))
   const allDayEvents = dayEvents.filter((event) => event.allDay)
   const timedEvents = dayEvents.filter((event) => !event.allDay)
+  const now = new Date()
+  const isToday = isSameDay(selectedDate, now)
+  const nowMinutes = now.getHours() * 60 + now.getMinutes()
+  const showNowLine = isToday
+    && nowMinutes >= TIMELINE_START_MINUTES
+    && nowMinutes <= TIMELINE_END_MINUTES
+  const nowTop = showNowLine ? timelinePercent(nowMinutes) : null
   return (
     <div className="day-view">
       {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div></div>}
@@ -723,10 +886,31 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
           {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: timelinePercent(hour * 60) }}><span>{timelineLabel(hour)}</span><i /></div>)}
         </div>
         <div className="day-events">
+          {showNowLine && nowTop && (
+            <div className="now-indicator" style={{ top: nowTop }}>
+              <span>{format(now, 'h:mm a')}</span>
+              <i />
+            </div>
+          )}
           {timedEvents.map((event) => {
             const position = timelinePosition(event)
             if (!position) return null
-            return <button type="button" className={`large-event ${event.color}`} key={event.id} style={position} title={eventSourceLabel(event)} onClick={() => selectEvent(event)}><span>{event.start}{event.end ? ` – ${event.end}` : ''}</span><b>{event.title}</b><small>{eventSourceLabel(event)}{event.location ? ` · ${event.location}` : ''}</small></button>
+            return (
+              <button
+                type="button"
+                className={`day-event-card ${event.color}`}
+                key={event.id}
+                style={position}
+                title={eventSourceLabel(event)}
+                onClick={() => selectEvent(event)}
+              >
+                <div className="day-event-content">
+                  <b>{event.title}</b>
+                  <span>{event.start}{event.end ? ` – ${event.end}` : ''}</span>
+                </div>
+                <span className="day-event-check" aria-hidden="true" />
+              </button>
+            )
           })}
           {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
         </div>
@@ -1875,22 +2059,43 @@ function EventDetailModal({ event, close, save }: {
 }
 
 function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
+  const isMobile = useIsMobile()
   const [title, setTitle] = useState('')
   const calendars = useFamilyCalendars()
   const [calendar, setCalendar] = useState(HOUSEHOLD_CALENDAR)
   const [date, setDate] = useState(format(selectedDate, 'yyyy-MM-dd'))
   const [time, setTime] = useState('09:00')
+  const [endTime, setEndTime] = useState('10:00')
+  const [allDay, setAllDay] = useState(false)
   const [location, setLocation] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={async (e) => {
-    e.preventDefault()
+
+  const submit = async (submitEvent: FormEvent) => {
+    submitEvent.preventDefault()
     setSaving(true)
     setError(null)
     try {
+      if (allDay) {
+        await save({
+          title: title.trim() || 'Untitled event',
+          startAt: new Date(`${date}T00:00:00`).toISOString(),
+          endAt: null,
+          allDay: true,
+          allDayDate: date,
+          allDayEndDate: null,
+          calendar,
+          location: location.trim() || undefined,
+        })
+        return
+      }
+      const startAt = new Date(`${date}T${time}:00`)
+      const endAt = endTime ? new Date(`${date}T${endTime}:00`) : null
+      if (endAt && endAt <= startAt) throw new Error('End time must be after the start time')
       await save({
         title: title.trim() || 'Untitled event',
-        startAt: new Date(`${date}T${time}:00`).toISOString(),
+        startAt: startAt.toISOString(),
+        endAt: endAt?.toISOString() ?? null,
         calendar,
         location: location.trim() || undefined,
       })
@@ -1898,7 +2103,113 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
       setError(saveError instanceof Error ? saveError.message : 'Unable to save event')
       setSaving(false)
     }
-  }}>
+  }
+
+  if (isMobile) {
+    return (
+      <div className="modal-scrim sheet-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !saving) close() }}>
+        <form className="event-sheet" onSubmit={(submitEvent) => void submit(submitEvent)}>
+          <header className="sheet-header">
+            <button type="button" className="sheet-cancel" onClick={close} disabled={saving}>Cancel</button>
+            <h2>New Event</h2>
+            <button type="submit" className="sheet-save" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          </header>
+          <div className="sheet-body">
+            <label className="sheet-title-field">
+              <input
+                autoFocus
+                value={title}
+                onChange={(change) => setTitle(change.target.value)}
+                placeholder="Event title"
+                maxLength={200}
+              />
+            </label>
+            <div className="sheet-card">
+              <div className="sheet-row">
+                <Clock3 size={18} />
+                <div className="sheet-row-content">
+                  {!allDay && (
+                    <div className="sheet-time-range">
+                      <input type="time" value={time} onChange={(change) => setTime(change.target.value)} aria-label="Start time" />
+                      <ChevronRight size={14} />
+                      <input type="time" value={endTime} onChange={(change) => setEndTime(change.target.value)} aria-label="End time" />
+                    </div>
+                  )}
+                  <label className="sheet-value-row sheet-date-label">
+                    <span>{format(new Date(`${date}T12:00:00`), 'EEEE, MMMM d')}</span>
+                    <ChevronDown size={16} />
+                    <input type="date" className="sheet-date-input" value={date} onChange={(change) => setDate(change.target.value)} aria-label="Event date" />
+                  </label>
+                  <div className="sheet-toggle-row">
+                    <span>All day</span>
+                    <button type="button" role="switch" aria-checked={allDay} className={`toggle mobile-toggle ${allDay ? 'on' : ''}`} onClick={() => setAllDay((current) => !current)}><i /></button>
+                  </div>
+                  <button type="button" className="sheet-value-row muted">
+                    <Globe size={16} />
+                    <span>Time zone</span>
+                    <span className="sheet-value">Local</span>
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div className="sheet-card">
+              <div className="sheet-row">
+                <Repeat size={18} />
+                <button type="button" className="sheet-value-row">
+                  <span>Repeat</span>
+                  <span className="sheet-value">Never</span>
+                  <ChevronDown size={16} />
+                </button>
+              </div>
+            </div>
+            <div className="sheet-card">
+              <div className="sheet-row">
+                <Users size={18} />
+                <button type="button" className="sheet-value-row">
+                  <span>Participant</span>
+                  <span className="sheet-value">{calendar}</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              <div className="sheet-row">
+                <Video size={18} />
+                <button type="button" className="sheet-value-row">
+                  <span>Conferencing</span>
+                  <ChevronRight size={16} />
+                </button>
+              </div>
+              <div className="sheet-row">
+                <MapPin size={18} />
+                <div className="sheet-row-content">
+                  <input
+                    className="sheet-inline-input"
+                    value={location}
+                    onChange={(change) => setLocation(change.target.value)}
+                    placeholder="Location"
+                    maxLength={500}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="sheet-card sheet-description">
+              <textarea placeholder="Add description" rows={4} />
+              <button type="button" className="use-ai-btn"><Sparkles size={14} />Use AI</button>
+            </div>
+            <label className="sheet-calendar-select">
+              <span>Calendar</span>
+              <select value={calendar} onChange={(change) => setCalendar(change.target.value)}>
+                {calendars.map((name) => <option key={name}>{name}</option>)}
+              </select>
+            </label>
+            {error && <div className="modal-error" role="alert">{error}</div>}
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={(e) => void submit(e)}>
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
     <label className="field"><span>Event title</span><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
     <div className="field-row"><label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)}/></label><label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)}/></label></div>
