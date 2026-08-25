@@ -1,6 +1,7 @@
 import {
   useEffect, useMemo, useRef, useState,
-  type CSSProperties, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
+  type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent,
+  type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
 } from 'react'
 import DOMPurify from 'dompurify'
 import {
@@ -1173,6 +1174,13 @@ type PlannerChatTurn = {
   timezone: string
 }
 
+const PLANNER_SCREENSHOT_TYPES = new Set(['image/jpeg', 'image/png'])
+
+function firstPlannerScreenshotFile(files: FileList | null | undefined) {
+  if (!files) return undefined
+  return [...files].find((file) => PLANNER_SCREENSHOT_TYPES.has(file.type))
+}
+
 const ASSISTANT_PANEL_WIDTH_KEY = 'karaman-assistant-panel-width'
 const DEFAULT_ASSISTANT_PANEL_WIDTH = 390
 const MIN_ASSISTANT_PANEL_WIDTH = 320
@@ -1316,6 +1324,7 @@ function AssistantPanel({ open, close, save }: {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const conversationEndRef = useRef<HTMLDivElement>(null)
   const imageProcessingIdRef = useRef(0)
+  const screenshotDragDepthRef = useRef(0)
   const { width: panelWidth, resizing, resizeHandleProps } = useAssistantPanelWidth(open)
   useDialogAccessibility(panelRef, close, open)
   const [text, setText] = useState('')
@@ -1336,9 +1345,12 @@ function AssistantPanel({ open, close, save }: {
   const [saving, setSaving] = useState(false)
   const [resetting, setResetting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [screenshotDropActive, setScreenshotDropActive] = useState(false)
   const canRetryInitialScreenshot = Boolean(
     pendingTurnId && sessionId && !contextToken && !text.trim() && !image,
   )
+  const screenshotEasyActionOpen = !turns.length && !pendingText
+  const canAttachScreenshot = !contextToken && !loading && !processingImage && !saving
 
   useEffect(() => {
     if (!open) return
@@ -1351,12 +1363,15 @@ function AssistantPanel({ open, close, save }: {
   useEffect(() => {
     if (!open) {
       imageProcessingIdRef.current += 1
+      screenshotDragDepthRef.current = 0
       setImage(null)
       setProcessingImage(false)
+      setScreenshotDropActive(false)
     }
   }, [open])
 
   const clearSession = () => {
+    screenshotDragDepthRef.current = 0
     setText('')
     setImage(null)
     setTurns([])
@@ -1372,6 +1387,7 @@ function AssistantPanel({ open, close, save }: {
     setProposalToken(null)
     setSaving(false)
     setError(null)
+    setScreenshotDropActive(false)
   }
 
   const resetSession = async () => {
@@ -1471,6 +1487,47 @@ function AssistantPanel({ open, close, save }: {
     }
   }
 
+  const removeScreenshot = () => {
+    setImage(null)
+    setPendingTurnId(null)
+    if (!contextToken) setSessionId(null)
+  }
+
+  const onScreenshotDragEnter = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    if (!canAttachScreenshot) return
+    screenshotDragDepthRef.current += 1
+    setScreenshotDropActive(true)
+  }
+
+  const onScreenshotDragOver = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    if (!canAttachScreenshot) {
+      event.dataTransfer.dropEffect = 'none'
+      return
+    }
+    event.dataTransfer.dropEffect = 'copy'
+  }
+
+  const onScreenshotDragLeave = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    screenshotDragDepthRef.current = Math.max(0, screenshotDragDepthRef.current - 1)
+    if (screenshotDragDepthRef.current === 0) setScreenshotDropActive(false)
+  }
+
+  const onScreenshotDrop = (event: ReactDragEvent<HTMLElement>) => {
+    event.preventDefault()
+    screenshotDragDepthRef.current = 0
+    setScreenshotDropActive(false)
+    if (!canAttachScreenshot) return
+    const file = firstPlannerScreenshotFile(event.dataTransfer.files)
+    if (!file) {
+      setError('Choose a JPEG or PNG screenshot')
+      return
+    }
+    void attachScreenshot(file)
+  }
+
   const confirm = async () => {
     if (
       !proposal?.events.length
@@ -1504,7 +1561,29 @@ function AssistantPanel({ open, close, save }: {
     <div className="assistant-resize" role="separator" aria-orientation="vertical" aria-controls="assistant-panel" aria-label="Resize AI planner" aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH} aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH} aria-valuenow={panelWidth} aria-valuetext={`${panelWidth} pixels`} title="Drag to resize, or use arrow keys" tabIndex={0} {...resizeHandleProps} />
     <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar proposal' : proposal?.result === 'needs_clarification' ? `Clarification needed: ${proposal.message}` : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
-      {!turns.length && !pendingText && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div><p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p><span>Try something like:</span><button onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button></div></div>}
+      {screenshotEasyActionOpen && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
+        <p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p>
+        <span>Easy actions</span>
+        <div className="planner-easy-actions">
+          <button type="button" className="planner-easy-action" onClick={() => setText('Swimming lessons every Tuesday at 4pm for the next 6 weeks')}>“Swimming lessons every Tuesday at 4pm for the next 6 weeks”</button>
+          <div
+            className={`planner-screenshot-action${screenshotDropActive ? ' dropping' : ''}`}
+            onDragEnter={onScreenshotDragEnter}
+            onDragOver={onScreenshotDragOver}
+            onDragLeave={onScreenshotDragLeave}
+            onDrop={onScreenshotDrop}
+          >
+            {image
+              ? <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={removeScreenshot} aria-label="Remove screenshot"><X size={14}/></button></div>
+              : <button type="button" className="planner-screenshot-drop" disabled={!canAttachScreenshot} onClick={() => fileInputRef.current?.click()}>
+                  {processingImage ? <LoaderCircle size={18}/> : <ImagePlus size={18}/>}
+                  <b>Extract events from a screenshot</b>
+                  <small>{processingImage ? 'Processing screenshot…' : 'Add a JPEG or PNG here, then continue — no extra prompt needed.'}</small>
+                </button>}
+            <button type="button" className="planner-screenshot-continue" disabled={!image || loading || processingImage || saving} onClick={() => void submit()}>Continue</button>
+          </div>
+        </div>
+      </div></div>}
       {turns.map((turn, index) => <div className="planner-turn" key={turn.id}>
         <div className="user-message">{turn.hadImage && <span className="processed-screenshot"><ImagePlus size={14}/>Screenshot processed</span>}<span>{turn.userText}</span></div>
         <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
@@ -1520,7 +1599,7 @@ function AssistantPanel({ open, close, save }: {
       <div ref={conversationEndRef}/>
     </div>
     <div className="assistant-input">
-      {image && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={() => { setImage(null); setPendingTurnId(null); if (!contextToken) setSessionId(null) }} aria-label="Remove screenshot"><X size={14}/></button></div>}
+      {image && !screenshotEasyActionOpen && <div className="screenshot-attachment"><img src={image.previewUrl} alt="Screenshot ready for extraction"/><span><b>{image.name}</b><small>Ready to extract events</small></span><button type="button" onClick={removeScreenshot} aria-label="Remove screenshot"><X size={14}/></button></div>}
       <textarea aria-label="AI planner request" disabled={saving} maxLength={contextToken ? 4000 : 12000} value={text} onChange={(event) => { setText(event.target.value); setPendingTurnId(null); if (!contextToken) setSessionId(null) }} placeholder={contextToken ? 'Refine this plan or answer the clarification…' : image ? 'Optional: add context about this screenshot…' : 'Describe an event, paste a schedule, or attach a screenshot…'} />
       <input ref={fileInputRef} type="file" accept="image/jpeg,image/png" hidden onChange={(event) => {
         void attachScreenshot(event.target.files?.[0])
