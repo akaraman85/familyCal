@@ -51,6 +51,7 @@ import { loadSession, login, logout, type SessionUser } from './auth'
 
 type View = 'Day' | 'Week' | 'Month' | 'Year'
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
+type EventColor = 'coral' | 'blue' | 'green' | 'gold'
 type EventItem = {
   id: string
   title: string
@@ -64,7 +65,7 @@ type EventItem = {
   description?: string
   externalUrl?: string
   organizer?: CalendarEventData['organizer']
-  color: 'coral' | 'blue' | 'green' | 'gold'
+  color: EventColor
   source: 'saved' | 'google'
   google?: CalendarEventData['google']
 }
@@ -72,6 +73,14 @@ type EventItem = {
 type NewEventInput = CalendarEventWrite
 
 const HOUSEHOLD_CALENDAR = 'Family'
+const HOUSEHOLD_EVENT_COLOR: EventColor = 'green'
+const EVENT_COLORS = new Set<EventColor>(['coral', 'blue', 'green', 'gold'])
+const GOOGLE_CALENDAR_TYPE_RANK = {
+  'read-only': 0,
+  editable: 1,
+  owner: 2,
+  primary: 3,
+} as const
 
 function familyCalendarNames(members: FamilyMember[], extra?: string) {
   const names = [HOUSEHOLD_CALENDAR]
@@ -82,8 +91,9 @@ function familyCalendarNames(members: FamilyMember[], extra?: string) {
   return names
 }
 
-function useFamilyCalendars(extra?: string) {
+function useFamilyMembers() {
   const [members, setMembers] = useState<FamilyMember[]>([])
+  const [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => {
     let cancelled = false
     loadFamilyMembers()
@@ -94,8 +104,45 @@ function useFamilyCalendars(extra?: string) {
         if (!cancelled) setMembers([])
       })
     return () => { cancelled = true }
-  }, [])
+  }, [refreshKey])
+  return {
+    members,
+    refreshMembers: () => setRefreshKey((current) => current + 1),
+  }
+}
+
+function useFamilyCalendars(extra?: string) {
+  const { members } = useFamilyMembers()
   return familyCalendarNames(members, extra)
+}
+
+function asEventColor(color: string | undefined): EventColor {
+  return color && EVENT_COLORS.has(color as EventColor)
+    ? color as EventColor
+    : HOUSEHOLD_EVENT_COLOR
+}
+
+function eventColor(
+  event: Pick<CalendarEventData, 'calendar' | 'source' | 'google'>,
+  members: FamilyMember[],
+): EventColor {
+  if (event.google?.accounts.length) {
+    const ranked = [...event.google.accounts].sort(
+      (a, b) => (
+        GOOGLE_CALENDAR_TYPE_RANK[b.calendarType]
+        - GOOGLE_CALENDAR_TYPE_RANK[a.calendarType]
+      ),
+    )
+    for (const account of ranked) {
+      const member = members.find((item) => item.id === account.memberId)
+      if (member) return asEventColor(member.color)
+    }
+  }
+  if (event.source === 'saved') {
+    const member = members.find((item) => item.name === event.calendar)
+    if (member) return asEventColor(member.color)
+  }
+  return HOUSEHOLD_EVENT_COLOR
 }
 
 const GOOGLE_CALENDAR_READ_SCOPE =
@@ -118,7 +165,7 @@ function eventEndDate(event: CalendarEventData) {
   return new Date(year, month - 1, day)
 }
 
-function toEventItem(event: CalendarEventData): EventItem {
+function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventItem {
   const startDate = eventDate(event)
   const endDate = eventEndDate(event)
   return {
@@ -134,7 +181,7 @@ function toEventItem(event: CalendarEventData): EventItem {
     description: event.description ?? undefined,
     externalUrl: event.externalUrl ?? undefined,
     organizer: event.organizer,
-    color: event.source === 'google' ? 'blue' : 'green',
+    color: eventColor(event, members),
     source: event.source,
     google: event.google,
   }
@@ -280,7 +327,8 @@ function AuthenticatedApp({ user, onLogout }: {
   ))
   const [view, setView] = useState<View>('Month')
   const [selectedDate, setSelectedDate] = useState(() => new Date())
-  const [events, setEvents] = useState<EventItem[]>([])
+  const { members: familyMembers, refreshMembers } = useFamilyMembers()
+  const [rawEvents, setRawEvents] = useState<CalendarEventData[]>([])
   const [eventSources, setEventSources] = useState<EventSources>({
     saved: 'ok',
     google: 'disconnected',
@@ -288,7 +336,11 @@ function AuthenticatedApp({ user, onLogout }: {
   const [eventsLoading, setEventsLoading] = useState(true)
   const [eventsError, setEventsError] = useState<string | null>(null)
   const [eventRefresh, setEventRefresh] = useState(0)
-  const eventCacheRef = useRef(new Map<string, { events: EventItem[]; sources: EventSources }>())
+  const eventCacheRef = useRef(new Map<string, { events: CalendarEventData[]; sources: EventSources }>())
+  const events = useMemo(
+    () => rawEvents.map((event) => toEventItem(event, familyMembers)),
+    [rawEvents, familyMembers],
+  )
   const revalidateGoogleRef = useRef(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
@@ -328,7 +380,7 @@ function AuthenticatedApp({ user, onLogout }: {
     const revalidateGoogle = revalidateGoogleRef.current
     revalidateGoogleRef.current = false
     if (cached) {
-      setEvents(cached.events)
+      setRawEvents(cached.events)
       setEventSources(cached.sources)
       setEventsLoading(revalidateGoogle)
     } else {
@@ -337,9 +389,8 @@ function AuthenticatedApp({ user, onLogout }: {
     setEventsError(null)
 
     const apply = (data: Awaited<ReturnType<typeof loadCalendarEvents>>) => {
-      const items = data.events.map(toEventItem)
-      eventCacheRef.current.set(rangeKey, { events: items, sources: data.sources })
-      setEvents(items)
+      eventCacheRef.current.set(rangeKey, { events: data.events, sources: data.sources })
+      setRawEvents(data.events)
       setEventSources(data.sources)
     }
 
@@ -367,7 +418,7 @@ function AuthenticatedApp({ user, onLogout }: {
         if (!controller.signal.aborted) setEventsLoading(false)
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return
-        if (!eventCacheRef.current.has(rangeKey)) setEvents([])
+        if (!eventCacheRef.current.has(rangeKey)) setRawEvents([])
         setEventsError(error instanceof Error ? error.message : 'Unable to load events')
         if (!controller.signal.aborted) setEventsLoading(false)
       }
@@ -375,6 +426,14 @@ function AuthenticatedApp({ user, onLogout }: {
 
     return () => controller.abort()
   }, [eventRange, eventRefresh, rangeKey])
+
+  useEffect(() => {
+    setSelectedEvent((current) => {
+      if (!current) return current
+      const color = eventColor(current, familyMembers)
+      return color === current.color ? current : { ...current, color }
+    })
+  }, [familyMembers])
 
   const saveEvent = async (event: NewEventInput) => {
     await saveCalendarEvent(event)
@@ -384,7 +443,7 @@ function AuthenticatedApp({ user, onLogout }: {
 
   const updateEvent = async (id: string, event: NewEventInput) => {
     const result = await updateCalendarEvent(id, event)
-    setSelectedEvent(toEventItem(result.event))
+    setSelectedEvent(toEventItem(result.event, familyMembers))
     refreshEvents()
   }
 
@@ -484,12 +543,13 @@ function AuthenticatedApp({ user, onLogout }: {
             loading={eventsLoading}
             error={eventsError}
             sources={eventSources}
+            members={familyMembers}
             selectEvent={setSelectedEvent}
           />
         )}
         {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
         {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => refreshEvents(true)} />}
-        {page === 'Family' && <FamilyPage />}
+        {page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
         {page === 'Settings' && <SettingsPage />}
       </main>
 
@@ -513,10 +573,10 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, selectEvent }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, selectEvent }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
-  loading: boolean; error: string | null; sources: EventSources; selectEvent: (event: EventItem) => void
+  loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; selectEvent: (event: EventItem) => void
 }) {
   const now = new Date()
   const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
@@ -550,8 +610,10 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
       </section>
       <div className="calendar-footer">
         <div className="calendar-legend">
-          <span><i className="dot family" />Saved events</span>
-          {sources.google !== 'disconnected' && <span><i className="dot alex" />Google Calendar</span>}
+          {members.map((member) => (
+            <span key={member.id}><i className={`dot ${member.color}`} />{member.name}</span>
+          ))}
+          <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}</span>
         </div>
         {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
       </div>
@@ -651,7 +713,7 @@ function OverviewPage({ events, openModal, selectEvent }: { events: EventItem[];
     </div>
     <div className="overview-grid">
       <section className="panel"><div className="panel-title"><div><h2>Coming up</h2><p>Your next family moments</p></div><button>View calendar <ChevronRight size={15} /></button></div>
-        <div className="agenda-list">{events.slice(0,5).map((e) => <button type="button" className="agenda-item" onClick={() => selectEvent(e)} key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.source === 'google' ? 'alex' : 'family'}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></button>)}
+        <div className="agenda-list">{events.slice(0,5).map((e) => <button type="button" className="agenda-item" onClick={() => selectEvent(e)} key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.color}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></button>)}
           {!events.length && <div className="agenda-empty">No events in the current calendar view.</div>}
         </div>
       </section>
@@ -821,7 +883,7 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
   </div>
 }
 
-function FamilyPage() {
+function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -849,6 +911,7 @@ function FamilyPage() {
     try {
       await deleteFamilyMember(member.id)
       await refresh()
+      onMembersChanged?.()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to delete family member')
     }
@@ -883,6 +946,7 @@ function FamilyPage() {
       save={async (input) => {
         await saveFamilyMember(input, editingMember?.id)
         await refresh()
+        onMembersChanged?.()
         setEditingMember(undefined)
       }}
     />}
