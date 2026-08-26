@@ -3,8 +3,8 @@
   "buildCommand": "npm run vercel-build",
   "git": {
     "deploymentEnabled": {
-      "main": true,
-      "*": false
+      "**": false,
+      "main": true
     }
   },
   "functions": {
@@ -23,6 +23,32 @@
         {
           "key": "Referrer-Policy",
           "value": "same-origin"
+        }
+      ]
+    },
+    {
+      "source": "/sw.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "Service-Worker-Allowed",
+          "value": "/"
+        }
+      ]
+    },
+    {
+      "source": "/manifest.webmanifest",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/manifest+json"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
         }
       ]
     }

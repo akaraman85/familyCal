@@ -25,14 +25,15 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 320px; min-height: 100vh; }
+html { min-height: 100%; }
+body { margin: 0; min-width: 320px; min-height: 100vh; min-height: 100dvh; }
 .sr-only { position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important; }
 button, input, textarea, select { font: inherit; }
 button { color: inherit; }
 button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible { outline: 3px solid rgba(82,117,184,.22); outline-offset: 1px; }
 
 .app-shell { min-height: 100vh; min-height: 100dvh; display: flex; }
-.sidebar { width: 248px; background: #faf9f6; border-right: 1px solid var(--line); padding: 26px 17px 18px; position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; z-index: 30; }
+.sidebar { width: 248px; background: #faf9f6; border-right: 1px solid var(--line); padding: 26px 17px max(18px, env(safe-area-inset-bottom, 0px)); position: fixed; inset: 0 auto 0 0; display: flex; flex-direction: column; z-index: 30; }
 .brand { display: flex; align-items: center; gap: 11px; padding: 0 7px 28px; }
 .brand-mark { width: 37px; height: 37px; border-radius: 11px; color: white; background: var(--orange); display: grid; place-items: center; box-shadow: 0 5px 13px rgba(231,109,77,.24); }
 .brand strong { display:block; font: 700 16px/1.25 Manrope; letter-spacing: -.3px; }
@@ -408,8 +409,25 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 
 .auth-loading { min-height:100vh;display:flex;align-items:center;justify-content:center;gap:9px;color:#777;font-size:12px; }
 .auth-loading svg,.login-submit:disabled svg { animation:spin 1s linear infinite; }
-.login-page { margin-left:0;min-height:100vh;display:grid;place-items:center;padding:24px;background:radial-gradient(circle at 50% 10%,#fff 0,#f5f4f0 58%); }
-.login-card { width:min(390px,100%);background:white;border:1px solid var(--line);border-radius:16px;padding:34px;box-shadow:0 16px 50px rgba(47,50,48,.08); }
+.login-page { margin-left:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:max(24px,env(safe-area-inset-top,0px)) max(24px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(24px,env(safe-area-inset-left,0px));background:radial-gradient(circle at 50% 10%,#fff 0,#f5f4f0 58%); }
+.login-stack { width:min(390px,100%);display:flex;flex-direction:column;gap:14px; }
+.login-card { width:100%;background:white;border:1px solid var(--line);border-radius:16px;padding:34px;box-shadow:0 16px 50px rgba(47,50,48,.08); }
+.ios-install-hint { display:flex;align-items:flex-start;gap:10px;margin:12px 32px 0;padding:12px 14px;background:#fffaf7;border:1px solid #ead8cf;border-radius:12px;color:#b75b43;font-size:12px;line-height:1.45; }
+.ios-install-hint p { margin:0;flex:1;min-width:0; }
+.ios-install-hint svg { flex:none;margin-top:1px; }
+.ios-install-hint-dismiss { border:0;background:transparent;color:#b75b43;padding:4px;border-radius:7px;display:grid;place-items:center;cursor:pointer;flex:none; }
+.ios-install-hint-dismiss:hover { background:#f6e4dc; }
+.login-stack .ios-install-hint { margin:0; }
+.install-guide { margin-top:28px;padding-top:22px;border-top:1px solid var(--line); }
+.install-guide h2 { font:600 16px Manrope;margin:0 0 6px; }
+.install-guide p, .install-guide li { color:#777;font-size:11px;line-height:1.55; }
+.install-guide p { margin:0 0 12px; }
+.install-guide ol { margin:0 0 12px;padding-left:18px; }
+.install-guide li { margin:0 0 6px; }
+.install-guide-note { color:#999!important;font-size:10px!important; }
+@media (display-mode: standalone) {
+  .ios-install-hint { display:none!important; }
+}
 .login-mark { margin-bottom:23px; }
 .login-card h1 { font:700 25px/1.3 Manrope;margin:5px 0 6px;letter-spacing:-.6px; }
 .login-card > p:not(.eyebrow) { color:var(--muted);font-size:11px;line-height:1.6;margin:0 0 24px; }
@@ -429,6 +447,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 @media (max-width: 760px) {
   .sidebar { transform:translateX(-100%);transition:.25s;width:248px;box-shadow:10px 0 30px rgba(0,0,0,.12); }.sidebar.open { transform:translateX(0); }.mobile-close,.mobile-menu { display:grid;place-items:center; }.nav-scrim { position:fixed;inset:0;background:rgba(0,0,0,.25);z-index:25; }
   main { margin-left:0; }.topbar { padding:0 15px;height:61px;gap:10px; }.search { width:auto;flex:1; }.search kbd,.weather { display:none; }.top-actions { gap:7px; }.top-actions .add-btn { display:none; }
+  .ios-install-hint { margin:12px 15px 0; }
   .page { padding:22px 15px 35px; }.page-heading { align-items:center; }.page-heading h1 { font-size:20px; }.page-heading .ai-plan-btn { font-size:0;width:37px;padding:0;justify-content:center; }
   .mobile-only { display:block; }
   .desktop-only { display:none; }

@@ -15,6 +15,7 @@ calendar views.
 - Postgres-backed events created directly in the family calendar
 - Family member and preference administration
 - Responsive desktop and mobile layouts
+- Installable progressive web app on iPhone, iPad, and desktop
 
 ## Development
 
@@ -29,13 +30,24 @@ npm run dev:full
 Vite app and `/api` functions. Run `npm run build` to type-check and create a
 production build.
 
+## Install on iPhone and iPad
+
+The production site is a progressive web app. After deploying over HTTPS:
+
+1. Open the calendar in **Safari** on an iPhone or iPad.
+2. Tap **Share**, then **Add to Home Screen**, then **Add**.
+3. Open **Karaman** from the Home Screen. It launches full screen, without Safari’s toolbar.
+
+Safari is required for Home Screen install on iOS. Settings includes the same steps, and iPhone/iPad Safari shows a dismissible install hint until the app is added. Regenerating app icons: `npm run icons`.
+
 ## Deployment policy
 
 Vercel Git deployments run automatically only for pushes to `main`. Feature
 branches do not create Preview deployments—or corresponding Neon preview
 branches—unless someone explicitly deploys them through the Vercel dashboard
 or runs `vercel deploy` from that branch. This keeps routine commits from
-consuming Neon branch capacity.
+consuming Neon branch capacity. The ignore glob is `**` rather than `*`,
+because `*` does not match `/` in names such as `cursor/feature`.
 
 Use a manual Preview deployment only when the change needs browser, integration,
 or isolated-database verification. Delete that Preview deployment after the PR
