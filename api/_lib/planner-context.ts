@@ -11,7 +11,7 @@ export type PlannerContextState = {
   revision: number
   expiresAt: number
   turnCount: number
-  status: 'proposal' | 'needs_clarification'
+  status: 'proposal' | 'needs_clarification' | 'calendar_info'
   assistantMessage: string
   events: PlannerConfirmationEvent[]
   warnings: string[]
@@ -63,7 +63,7 @@ export function readPlannerContext(token: string, ownerId: string) {
       || !Number.isInteger(state.turnCount)
       || state.turnCount < 1
       || state.turnCount > MAX_TURNS
-      || !['proposal', 'needs_clarification'].includes(state.status)
+      || !['proposal', 'needs_clarification', 'calendar_info'].includes(state.status)
       || typeof state.assistantMessage !== 'string'
       || !Array.isArray(state.events)
       || state.events.length > 20

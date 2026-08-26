@@ -19,7 +19,7 @@ export type PlannedEvent = {
 }
 
 export type PlannerProposal = {
-  result: 'proposal' | 'needs_clarification'
+  result: 'proposal' | 'needs_clarification' | 'calendar_info'
   message: string
   events: PlannedEvent[]
   warnings: string[]
