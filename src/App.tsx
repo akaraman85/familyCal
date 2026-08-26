@@ -5,10 +5,10 @@ import {
 } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  AlertTriangle, Bell, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  AlertTriangle, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutDashboard, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
-  Pencil, Plus, Repeat, Search, Settings, Sparkles, Users, Video, WandSparkles, X,
+  Pencil, Plus, Repeat, Settings, Sparkles, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
@@ -667,9 +667,7 @@ function AuthenticatedApp({ user, onLogout }: {
       <main>
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
-          <div className="search"><Search size={17} /><input aria-label="Search" placeholder="Search events, people..." /><kbd>⌘ K</kbd></div>
           <div className="top-actions">
-            <button className="icon-btn notification"><Bell size={19} /><i /></button>
             <button className="add-btn" onClick={() => setModalOpen(true)}><Plus size={18} />Add event</button>
           </div>
         </header>
@@ -684,7 +682,6 @@ function AuthenticatedApp({ user, onLogout }: {
             setSelectedDate={setSelectedDate}
             dateTitle={dateTitle}
             moveDate={moveDate}
-            openChat={() => setChatOpen(true)}
             loading={eventsLoading}
             error={eventsError}
             sources={eventSources}
@@ -760,24 +757,18 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, openChat, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, isMobile }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, isMobile }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
-  setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void; openChat: () => void
+  setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
   loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
   isMobile: boolean
 }) {
-  const now = new Date()
-  const greeting = now.getHours() < 12 ? 'morning' : now.getHours() < 18 ? 'afternoon' : 'evening'
   const selectDay = (day: Date) => {
     setSelectedDate(day)
     if (isMobile && view !== 'Day') setView('Day')
   }
   return (
     <div className="page calendar-page">
-      <div className="page-heading desktop-only">
-        <div><p className="eyebrow">{format(now, 'EEEE, MMMM d')}</p><h1>Good {greeting}, Alex</h1><p>Here’s what’s happening with your family.</p></div>
-        <button className="ai-plan-btn" onClick={openChat}><Sparkles size={17} />Plan with AI</button>
-      </div>
       {error && <div className="calendar-source-error" role="alert">{error}</div>}
       {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">{events.some((event) => event.source === 'google') ? 'Google Calendar could not be refreshed. Showing the last loaded events.' : 'Saved events are shown, but Google Calendar could not be reached.'}</div>}
       <section className="calendar-card">
