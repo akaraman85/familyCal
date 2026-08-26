@@ -49,6 +49,7 @@ import {
   type PlannerSettings,
 } from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
+import { IosInstallGuide, IosInstallHint } from './install-app'
 import {
   CALENDAR_VIEWS,
   DEFAULT_CALENDAR_SETTINGS,
@@ -408,24 +409,27 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
   }
 
   return <main className="login-page">
-    <form className="login-card" onSubmit={submit}>
-      <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
-      <p className="eyebrow">Private family calendar</p>
-      <h1>Welcome back</h1>
-      <p>Sign in to view calendars, integrations, and saved events.</p>
-      <label className="field">
-        <span>Username</span>
-        <input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required/>
-      </label>
-      <label className="field">
-        <span>Password</span>
-        <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
-      </label>
-      {error && <div className="login-error" role="alert">{error}</div>}
-      <button className="login-submit" type="submit" disabled={submitting}>
-        {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
-      </button>
-    </form>
+    <div className="login-stack">
+      <IosInstallHint />
+      <form className="login-card" onSubmit={submit}>
+        <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
+        <p className="eyebrow">Private family calendar</p>
+        <h1>Welcome back</h1>
+        <p>Sign in to view calendars, integrations, and saved events.</p>
+        <label className="field">
+          <span>Username</span>
+          <input autoFocus autoComplete="username" value={username} onChange={(event) => setUsername(event.target.value)} required/>
+        </label>
+        <label className="field">
+          <span>Password</span>
+          <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
+        </label>
+        {error && <div className="login-error" role="alert">{error}</div>}
+        <button className="login-submit" type="submit" disabled={submitting}>
+          {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
+        </button>
+      </form>
+    </div>
   </main>
 }
 
@@ -669,6 +673,7 @@ function AuthenticatedApp({ user, onLogout }: {
             <button className="add-btn" onClick={() => setModalOpen(true)}><Plus size={18} />Add event</button>
           </div>
         </header>
+        {page !== 'Settings' && <IosInstallHint />}
 
         {page === 'Calendar' && (
           <CalendarPage
@@ -1295,6 +1300,7 @@ function SettingsPage({ onCalendarSettingsSaved }: {
           <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <span><Check size={14}/>Saved</span>}</div>
         </>}
         {calendarError && <div className="modal-error" role="alert">{calendarError}</div>}
+        <IosInstallGuide />
       </div>
       : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>

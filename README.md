@@ -15,6 +15,7 @@ calendar views.
 - Postgres-backed events created directly in the family calendar
 - Family member and preference administration
 - Responsive desktop and mobile layouts
+- Installable progressive web app on iPhone, iPad, and desktop
 
 ## Development
 
@@ -28,6 +29,16 @@ npm run dev:full
 `npm run dev` starts the frontend only. Use `npm run dev:full` to run both the
 Vite app and `/api` functions. Run `npm run build` to type-check and create a
 production build.
+
+## Install on iPhone and iPad
+
+The production site is a progressive web app. After deploying over HTTPS:
+
+1. Open the calendar in **Safari** on an iPhone or iPad.
+2. Tap **Share**, then **Add to Home Screen**, then **Add**.
+3. Open **Karaman** from the Home Screen. It launches full screen, without Safari’s toolbar.
+
+Safari is required for Home Screen install on iOS. Settings includes the same steps, and iPhone/iPad Safari shows a dismissible install hint until the app is added. Regenerating app icons: `npm run icons`.
 
 ## Deployment policy
 
