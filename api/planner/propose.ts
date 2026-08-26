@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { requireAuthentication } from '../_lib/auth.js'
-import { appEnv } from '../_lib/env.js'
+import { integrationEnv } from '../_lib/env.js'
 import {
   readJsonBody,
   RequestBodyTooLargeError,
@@ -94,7 +94,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   if (!requireAuthentication(request, response)) return
 
   try {
-    const env = appEnv()
+    const env = integrationEnv()
     if (!requireSameOrigin(request, response, env.appUrl)) return
     const contentLength = Number(request.headers['content-length'] ?? 0)
     if (contentLength > MAX_REQUEST_BYTES) {
@@ -215,6 +215,9 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     const result = await proposeCalendarEvents({
       databaseUrl: env.databaseUrl,
       ownerId: env.ownerId,
+      encryptionKey: env.encryptionKey,
+      googleClientId: env.googleClientId,
+      googleClientSecret: env.googleClientSecret,
       message,
       image,
       context: context ?? undefined,

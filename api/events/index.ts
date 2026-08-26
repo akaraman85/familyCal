@@ -1,12 +1,15 @@
 import {
   createSavedEvent,
   createSavedEvents,
-  listSavedEvents,
   PlannerSessionConflictError,
   updateSavedEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
-import { loadConnectedGoogleEvents } from '../_lib/connected-events.js'
+import {
+  EventSearchRangeError,
+  searchCalendarEvents,
+  validateEventSearchRange,
+} from '../_lib/event-search.js'
 import { integrationEnv } from '../_lib/env.js'
 import { verifyPlannerProposal } from '../_lib/planner-confirmation.js'
 import {
@@ -18,8 +21,6 @@ import {
   type ApiRequest,
   type ApiResponse,
 } from '../_lib/http.js'
-
-const MAX_RANGE_MS = 370 * 24 * 60 * 60 * 1000
 
 class ValidationError extends Error {}
 
@@ -33,13 +34,13 @@ function queryValue(request: ApiRequest, name: string) {
 function parseRange(request: ApiRequest) {
   const timeMin = new Date(queryValue(request, 'timeMin') ?? '')
   const timeMax = new Date(queryValue(request, 'timeMax') ?? '')
-  if (
-    Number.isNaN(timeMin.getTime())
-    || Number.isNaN(timeMax.getTime())
-    || timeMax <= timeMin
-    || timeMax.getTime() - timeMin.getTime() > MAX_RANGE_MS
-  ) {
-    throw new ValidationError('timeMin and timeMax must define a valid range of 370 days or less')
+  try {
+    validateEventSearchRange(timeMin, timeMax)
+  } catch (error) {
+    if (error instanceof EventSearchRangeError) {
+      throw new ValidationError(error.message)
+    }
+    throw error
   }
   return { timeMin, timeMax }
 }
@@ -126,31 +127,24 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
     const env = integrationEnv()
     const { timeMin, timeMax } = parseRange(request)
     const revalidate = parseRevalidate(request)
-    const [savedEvents, google] = await Promise.all([
-      listSavedEvents(
-        env.databaseUrl,
-        env.ownerId,
-        timeMin,
-        timeMax,
-      ),
-      loadConnectedGoogleEvents({
-        databaseUrl: env.databaseUrl,
-        encryptionKey: env.encryptionKey,
-        clientId: env.googleClientId,
-        clientSecret: env.googleClientSecret,
-        ownerId: env.ownerId,
-        timeMin,
-        timeMax,
-        revalidate,
-      }),
-    ])
-
-    const events = [...savedEvents, ...google.events]
-      .sort((a, b) => a.startAt.localeCompare(b.startAt))
+    const searchResult = await searchCalendarEvents({
+      databaseUrl: env.databaseUrl,
+      ownerId: env.ownerId,
+      encryptionKey: env.encryptionKey,
+      clientId: env.googleClientId,
+      clientSecret: env.googleClientSecret,
+      timeMin,
+      timeMax,
+      revalidate,
+      limit: Number.POSITIVE_INFINITY,
+    })
     sendJson(response, 200, {
-      events,
-      sources: { saved: 'ok', google: google.status },
-      stale: google.stale,
+      events: searchResult.events,
+      sources: {
+        saved: searchResult.sources.saved === 'skipped' ? 'ok' : searchResult.sources.saved,
+        google: searchResult.sources.google === 'skipped' ? 'ok' : searchResult.sources.google,
+      },
+      stale: searchResult.stale,
     })
   } catch (error) {
     console.error('Unable to load calendar events', error)
