@@ -2085,14 +2085,17 @@ function EventDetailModal({ event, close, save, remove }: {
 
 function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
   const isMobile = useIsMobile()
-  const [title, setTitle] = useState('')
   const calendars = useFamilyCalendars()
-  const [calendar, setCalendar] = useState(HOUSEHOLD_CALENDAR)
-  const [date, setDate] = useState(format(selectedDate, 'yyyy-MM-dd'))
-  const [time, setTime] = useState('09:00')
-  const [endTime, setEndTime] = useState('10:00')
-  const [allDay, setAllDay] = useState(false)
-  const [location, setLocation] = useState('')
+  const [form, setForm] = useState({
+    title: '',
+    calendar: HOUSEHOLD_CALENDAR,
+    date: format(selectedDate, 'yyyy-MM-dd'),
+    time: '09:00',
+    endTime: '',
+    endDate: '',
+    allDay: false,
+    location: '',
+  })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -2101,29 +2104,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
     setSaving(true)
     setError(null)
     try {
-      if (allDay) {
-        await save({
-          title: title.trim() || 'Untitled event',
-          startAt: new Date(`${date}T00:00:00`).toISOString(),
-          endAt: null,
-          allDay: true,
-          allDayDate: date,
-          allDayEndDate: null,
-          calendar,
-          location: location.trim() || undefined,
-        })
-        return
-      }
-      const startAt = new Date(`${date}T${time}:00`)
-      const endAt = endTime ? new Date(`${date}T${endTime}:00`) : null
-      if (endAt && endAt <= startAt) throw new Error('End time must be after the start time')
-      await save({
-        title: title.trim() || 'Untitled event',
-        startAt: startAt.toISOString(),
-        endAt: endAt?.toISOString() ?? null,
-        calendar,
-        location: location.trim() || undefined,
-      })
+      await save(eventWriteFromForm(form))
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save event')
       setSaving(false)
@@ -2143,8 +2124,8 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
             <label className="sheet-title-field">
               <input
                 autoFocus
-                value={title}
-                onChange={(change) => setTitle(change.target.value)}
+                value={form.title}
+                onChange={(change) => setForm({ ...form, title: change.target.value })}
                 placeholder="Event title"
                 maxLength={200}
               />
@@ -2153,21 +2134,28 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
               <div className="sheet-row">
                 <Clock3 size={18} />
                 <div className="sheet-row-content">
-                  {!allDay && (
+                  {!form.allDay && (
                     <div className="sheet-time-range">
-                      <input type="time" value={time} onChange={(change) => setTime(change.target.value)} aria-label="Start time" />
+                      <input type="time" value={form.time} onChange={(change) => setForm({ ...form, time: change.target.value })} aria-label="Start time" />
                       <ChevronRight size={14} />
-                      <input type="time" value={endTime} onChange={(change) => setEndTime(change.target.value)} aria-label="End time" />
+                      <input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })} aria-label="End time" />
                     </div>
                   )}
                   <label className="sheet-value-row sheet-date-label">
-                    <span>{format(new Date(`${date}T12:00:00`), 'EEEE, MMMM d')}</span>
+                    <span>{format(new Date(`${form.date}T12:00:00`), 'EEEE, MMMM d')}</span>
                     <ChevronDown size={16} />
-                    <input type="date" className="sheet-date-input" value={date} onChange={(change) => setDate(change.target.value)} aria-label="Event date" />
+                    <input type="date" className="sheet-date-input" value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })} aria-label="Event date" />
                   </label>
+                  {form.allDay && (
+                    <label className="sheet-value-row sheet-date-label">
+                      <span>End date</span>
+                      <ChevronDown size={16} />
+                      <input type="date" className="sheet-date-input" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} aria-label="End date" />
+                    </label>
+                  )}
                   <div className="sheet-toggle-row">
                     <span>All day</span>
-                    <button type="button" role="switch" aria-checked={allDay} className={`toggle mobile-toggle ${allDay ? 'on' : ''}`} onClick={() => setAllDay((current) => !current)}><i /></button>
+                    <button type="button" role="switch" aria-checked={form.allDay} className={`toggle mobile-toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i /></button>
                   </div>
                   <button type="button" className="sheet-value-row muted">
                     <Globe size={16} />
@@ -2193,7 +2181,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
                 <Users size={18} />
                 <button type="button" className="sheet-value-row">
                   <span>Participant</span>
-                  <span className="sheet-value">{calendar}</span>
+                  <span className="sheet-value">{form.calendar}</span>
                   <ChevronRight size={16} />
                 </button>
               </div>
@@ -2209,8 +2197,8 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
                 <div className="sheet-row-content">
                   <input
                     className="sheet-inline-input"
-                    value={location}
-                    onChange={(change) => setLocation(change.target.value)}
+                    value={form.location}
+                    onChange={(change) => setForm({ ...form, location: change.target.value })}
                     placeholder="Location"
                     maxLength={500}
                   />
@@ -2223,7 +2211,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
             </div>
             <label className="sheet-calendar-select">
               <span>Calendar</span>
-              <select value={calendar} onChange={(change) => setCalendar(change.target.value)}>
+              <select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>
                 {calendars.map((name) => <option key={name}>{name}</option>)}
               </select>
             </label>
@@ -2236,10 +2224,17 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
 
   return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={(e) => void submit(e)}>
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
-    <label className="field"><span>Event title</span><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What’s happening?" /></label>
-    <div className="field-row"><label className="field"><span>Date</span><input type="date" value={date} onChange={(e) => setDate(e.target.value)}/></label><label className="field"><span>Start time</span><input type="time" value={time} onChange={(e) => setTime(e.target.value)}/></label></div>
-    <label className="field"><span>Calendar</span><select value={calendar} onChange={(e) => setCalendar(e.target.value)}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
-    <label className="field"><span>Location <small>optional</small></span><input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Add a place" /></label>
+    <label className="field"><span>Event title</span><input autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="What’s happening?" /></label>
+    <label className="event-edit-toggle"><span>All-day event</span><button type="button" role="switch" aria-checked={form.allDay} className={`toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i/></button></label>
+    <div className="field-row">
+      <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}/></label>
+      {form.allDay
+        ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}/></label>
+        : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}/></label>}
+    </div>
+    {!form.allDay && <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}/></label>}
+    <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(e) => setForm({ ...form, calendar: e.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
+    <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Add a place" /></label>
     {error && <div className="modal-error" role="alert">{error}</div>}
     <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
     <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>
