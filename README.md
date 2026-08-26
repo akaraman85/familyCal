@@ -46,7 +46,8 @@ Vercel Git deployments run automatically only for pushes to `main`. Feature
 branches do not create Preview deployments—or corresponding Neon preview
 branches—unless someone explicitly deploys them through the Vercel dashboard
 or runs `vercel deploy` from that branch. This keeps routine commits from
-consuming Neon branch capacity.
+consuming Neon branch capacity. The ignore glob is `**` rather than `*`,
+because `*` does not match `/` in names such as `cursor/feature`.
 
 Use a manual Preview deployment only when the change needs browser, integration,
 or isolated-database verification. Delete that Preview deployment after the PR
