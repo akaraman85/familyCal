@@ -1,6 +1,7 @@
 import {
   createSavedEvent,
   createSavedEvents,
+  deleteSavedEvent,
   PlannerSessionConflictError,
   updateSavedEvent,
 } from '../_lib/events.js'
@@ -111,9 +112,9 @@ function parseEvent(body: Record<string, unknown>) {
   }
 }
 
-function parseSavedEventId(id: unknown) {
+function parseSavedEventId(id: unknown, action: 'updated' | 'deleted' = 'updated') {
   if (typeof id !== 'string' || !id.startsWith('saved:')) {
-    throw new ValidationError('Only saved family events can be updated')
+    throw new ValidationError(`Only saved family events can be ${action}`)
   }
   const eventId = id.slice('saved:'.length)
   if (!eventId || eventId.length > 80) {
@@ -228,6 +229,36 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
   }
 }
 
+async function deleteEvent(request: ApiRequest, response: ApiResponse) {
+  try {
+    const env = integrationEnv()
+    if (!requireSameOrigin(request, response, env.appUrl)) return
+
+    const rawBody = await readJsonBody(request)
+    if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
+      throw new ValidationError('Event details are invalid')
+    }
+    const body = rawBody as Record<string, unknown>
+    if (!await deleteSavedEvent(
+      env.databaseUrl,
+      env.ownerId,
+      parseSavedEventId(body.id, 'deleted'),
+    )) {
+      sendJson(response, 404, { error: 'Event not found' })
+      return
+    }
+    response.statusCode = 204
+    response.setHeader('Cache-Control', 'no-store')
+    response.end()
+  } catch (error) {
+    console.error('Unable to delete calendar event', error)
+    const validationError = error instanceof ValidationError || error instanceof SyntaxError
+    sendJson(response, validationError ? 400 : 500, {
+      error: validationError ? errorMessage(error) : 'The event could not be deleted',
+    })
+  }
+}
+
 async function patchEvent(request: ApiRequest, response: ApiResponse) {
   try {
     const env = integrationEnv()
@@ -259,9 +290,10 @@ async function patchEvent(request: ApiRequest, response: ApiResponse) {
 }
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
-  if (!requireMethod(request, response, ['GET', 'POST', 'PATCH'])) return
+  if (!requireMethod(request, response, ['GET', 'POST', 'PATCH', 'DELETE'])) return
   if (!requireAuthentication(request, response)) return
   if (request.method === 'POST') return postEvent(request, response)
   if (request.method === 'PATCH') return patchEvent(request, response)
+  if (request.method === 'DELETE') return deleteEvent(request, response)
   return getEvents(request, response)
 }

@@ -8,7 +8,7 @@ import {
   AlertTriangle, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutDashboard, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
-  Pencil, Plus, Repeat, Settings, Sparkles, Users, Video, WandSparkles, X,
+  Pencil, Plus, Repeat, Settings, Sparkles, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
@@ -17,6 +17,7 @@ import {
 } from 'date-fns'
 import {
   loadCalendarEvents,
+  deleteCalendarEvent,
   saveCalendarEvent,
   saveCalendarEvents,
   updateCalendarEvent,
@@ -591,6 +592,12 @@ function AuthenticatedApp({ user, onLogout }: {
     refreshEvents()
   }
 
+  const deleteEvent = async (id: string) => {
+    await deleteCalendarEvent(id)
+    setSelectedEvent(null)
+    refreshEvents()
+  }
+
   const savePlannedEvents = async (
     plannedEvents: PlannedEvent[],
     requestId: string,
@@ -744,6 +751,7 @@ function AuthenticatedApp({ user, onLogout }: {
           event={selectedEvent}
           close={() => setSelectedEvent(null)}
           save={selectedEvent.source === 'saved' ? updateEvent : undefined}
+          remove={selectedEvent.source === 'saved' ? deleteEvent : undefined}
         />
       )}
       {modalOpen && (
@@ -1955,10 +1963,11 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
   }
 }
 
-function EventDetailModal({ event, close, save }: {
+function EventDetailModal({ event, close, save, remove }: {
   event: EventItem
   close: () => void
   save?: (id: string, input: NewEventInput) => Promise<void>
+  remove?: (id: string) => Promise<void>
 }) {
   const modalRef = useRef<HTMLElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -1966,6 +1975,7 @@ function EventDetailModal({ event, close, save }: {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState(() => eventEditValues(event))
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const accounts = event.google?.accounts ?? []
   const organizer = event.organizer?.displayName || event.organizer?.email
@@ -1975,6 +1985,8 @@ function EventDetailModal({ event, close, save }: {
   }), [event.description])
   const calendars = useFamilyCalendars(event.calendar)
   const canEdit = Boolean(save)
+  const canDelete = Boolean(remove)
+  const busy = saving || deleting
 
   useEffect(() => {
     setForm(eventEditValues(event))
@@ -1988,7 +2000,7 @@ function EventDetailModal({ event, close, save }: {
 
   const submit = async (submitEvent: FormEvent) => {
     submitEvent.preventDefault()
-    if (!save || saving) return
+    if (!save || busy) return
     setSaving(true)
     setError(null)
     try {
@@ -2001,9 +2013,22 @@ function EventDetailModal({ event, close, save }: {
     }
   }
 
-  return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !saving) close() }}>
+  const deleteEvent = async () => {
+    if (!remove || busy) return
+    if (!window.confirm(`Delete "${event.title}"? This cannot be undone.`)) return
+    setDeleting(true)
+    setError(null)
+    try {
+      await remove(event.id)
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Unable to delete event')
+      setDeleting(false)
+    }
+  }
+
+  return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !busy) close() }}>
     <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
-      <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={saving}><X size={20}/></button></div>
+      <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={busy}><X size={20}/></button></div>
       {editing
         ? <form onSubmit={(submitEvent) => void submit(submitEvent)}>
           <label className="field"><span>Event title</span><input ref={titleInputRef} required maxLength={200} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder="What’s happening?" /></label>
@@ -2019,8 +2044,9 @@ function EventDetailModal({ event, close, save }: {
           <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
           {error && <div className="modal-error" role="alert">{error}</div>}
           <div className="event-detail-actions">
-            <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={saving}>Cancel</button>
-            <button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</button>
+            {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
+            <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={busy}>Cancel</button>
+            <button className="save-event" type="submit" disabled={busy}>{saving ? 'Saving…' : 'Save changes'}</button>
           </div>
         </form>
         : <>
@@ -2047,8 +2073,9 @@ function EventDetailModal({ event, close, save }: {
           /></section>}
           {!canEdit && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Open the event in Google Calendar to change it.</p>}
           <div className="event-detail-actions">
-            <button type="button" onClick={close}>Close</button>
-            {canEdit && <button type="button" className="edit-event" onClick={() => setEditing(true)}><Pencil size={14}/>Edit</button>}
+            {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
+            <button type="button" onClick={close} disabled={busy}>Close</button>
+            {canEdit && <button type="button" className="edit-event" onClick={() => setEditing(true)} disabled={busy}><Pencil size={14}/>Edit</button>}
             {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}
           </div>
         </>}

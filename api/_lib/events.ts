@@ -143,6 +143,21 @@ export async function createSavedEvent(
   return serialize(rows[0])
 }
 
+export async function deleteSavedEvent(
+  databaseUrl: string,
+  ownerId: string,
+  eventId: string,
+) {
+  const sql = neon(databaseUrl)
+  const rows = await sql.query(
+    `DELETE FROM saved_events
+      WHERE owner_id = $1 AND id = $2
+      RETURNING id`,
+    [ownerId, eventId],
+  )
+  return rows.length === 1
+}
+
 export async function updateSavedEvent(
   databaseUrl: string,
   ownerId: string,
