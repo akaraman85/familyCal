@@ -2,7 +2,17 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+function appBuildId() {
+  if (process.env.VERCEL_GIT_COMMIT_SHA) {
+    return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7)
+  }
+  return 'dev'
+}
+
 export default defineConfig({
+  define: {
+    __APP_BUILD_ID__: JSON.stringify(appBuildId()),
+  },
   plugins: [
     react(),
     VitePWA({
@@ -56,11 +66,25 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         cleanupOutdatedCaches: true,
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        globPatterns: ['**/*.{js,css,ico,png,svg,webmanifest}'],
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
         runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'pages',
+              expiration: {
+                maxEntries: 10,
+                maxAgeSeconds: 60 * 60,
+              },
+              networkTimeoutSeconds: 3,
+            },
+          },
           {
             urlPattern: /\/api\//,
             handler: 'NetworkOnly',

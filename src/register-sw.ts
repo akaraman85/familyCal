@@ -6,6 +6,7 @@ registerSW({
     window.location.reload()
   },
   onRegisteredSW(_swUrl, registration) {
+    registration?.update()
     registration?.addEventListener('updatefound', () => {
       const worker = registration.installing
       worker?.addEventListener('statechange', () => {
