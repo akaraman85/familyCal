@@ -101,6 +101,18 @@ export async function updateCalendarEvent(id: string, event: CalendarEventWrite)
   return readResponse<{ event: CalendarEventData }>(response)
 }
 
+export async function deleteCalendarEvent(id: string) {
+  const response = await fetch('/api/events', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ id }),
+  })
+  if (response.ok) return
+  const body = await response.json().catch(() => ({ error: 'Request failed' })) as { error?: string }
+  throw new Error(body.error || 'Unable to delete event')
+}
+
 export async function saveCalendarEvents(events: Array<{
   title: string
   startAt: string
