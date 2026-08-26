@@ -1903,12 +1903,33 @@ function exclusiveAllDayEnd(inclusiveEnd: string) {
   return date.toISOString().slice(0, 10)
 }
 
+function defaultEndTimeAfter(startTime: string, durationMinutes = 60) {
+  const [hours = 9, minutes = 0] = startTime.split(':').map(Number)
+  const date = new Date(2026, 0, 1, hours, minutes)
+  date.setMinutes(date.getMinutes() + durationMinutes)
+  return format(date, 'HH:mm')
+}
+
+function timedEventEndsBeforeStart(form: {
+  date: string
+  time: string
+  endDate: string
+  endTime: string
+}) {
+  if (!form.endTime) return false
+  const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
+  const endAt = new Date(`${form.endDate || form.date}T${form.endTime}:00`)
+  return Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt
+}
+
 function eventEditValues(event: EventItem) {
   let endDate = ''
   if (event.allDay && event.endDate) {
     const inclusive = new Date(event.endDate)
     inclusive.setDate(inclusive.getDate() - 1)
     if (!isSameDay(event.date, inclusive)) endDate = format(inclusive, 'yyyy-MM-dd')
+  } else if (!event.allDay && event.endDate && !isSameDay(event.date, event.endDate)) {
+    endDate = format(event.endDate, 'yyyy-MM-dd')
   }
   return {
     title: event.title,
@@ -1944,6 +1965,9 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
     }
   }
   const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
+  if (form.endDate && form.endDate < form.date) {
+    throw new Error('End date must be on or after the start date')
+  }
   const endAt = form.endTime
     ? new Date(`${form.endDate || form.date}T${form.endTime}:00`)
     : null
@@ -2037,9 +2061,21 @@ function EventDetailModal({ event, close, save, remove }: {
             <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })}/></label>
             {form.allDay
               ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
-              : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(change) => setForm({ ...form, time: change.target.value })}/></label>}
+              : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(change) => setForm((current) => {
+                const time = change.target.value
+                return {
+                  ...current,
+                  time,
+                  endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
+                    ? defaultEndTimeAfter(time)
+                    : current.endTime,
+                }
+              })}/></label>}
           </div>
-          {!form.allDay && <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })}/></label>}
+          {!form.allDay && <div className="field-row">
+            <label className="field"><span>End date <small>optional</small></span><input type="date" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
+            <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })}/></label>
+          </div>}
           <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>{calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}</select></label>
           <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
           {error && <div className="modal-error" role="alert">{error}</div>}
@@ -2091,7 +2127,7 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
     calendar: HOUSEHOLD_CALENDAR,
     date: format(selectedDate, 'yyyy-MM-dd'),
     time: '09:00',
-    endTime: '',
+    endTime: defaultEndTimeAfter('09:00'),
     endDate: '',
     allDay: false,
     location: '',
@@ -2136,7 +2172,16 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
                 <div className="sheet-row-content">
                   {!form.allDay && (
                     <div className="sheet-time-range">
-                      <input type="time" value={form.time} onChange={(change) => setForm({ ...form, time: change.target.value })} aria-label="Start time" />
+                      <input type="time" value={form.time} onChange={(change) => setForm((current) => {
+                        const time = change.target.value
+                        return {
+                          ...current,
+                          time,
+                          endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
+                            ? defaultEndTimeAfter(time)
+                            : current.endTime,
+                        }
+                      })} aria-label="Start time" />
                       <ChevronRight size={14} />
                       <input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })} aria-label="End time" />
                     </div>
@@ -2146,6 +2191,13 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
                     <ChevronDown size={16} />
                     <input type="date" className="sheet-date-input" value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })} aria-label="Event date" />
                   </label>
+                  {!form.allDay && (
+                    <label className="sheet-value-row sheet-date-label">
+                      <span>End date</span>
+                      <ChevronDown size={16} />
+                      <input type="date" className="sheet-date-input" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} aria-label="End date" />
+                    </label>
+                  )}
                   {form.allDay && (
                     <label className="sheet-value-row sheet-date-label">
                       <span>End date</span>
@@ -2230,9 +2282,21 @@ function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: 
       <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}/></label>
       {form.allDay
         ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}/></label>
-        : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(e) => setForm({ ...form, time: e.target.value })}/></label>}
+        : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(e) => setForm((current) => {
+          const time = e.target.value
+          return {
+            ...current,
+            time,
+            endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
+              ? defaultEndTimeAfter(time)
+              : current.endTime,
+          }
+        })}/></label>}
     </div>
-    {!form.allDay && <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}/></label>}
+    {!form.allDay && <div className="field-row">
+      <label className="field"><span>End date <small>optional</small></span><input type="date" min={form.date} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}/></label>
+      <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}/></label>
+    </div>}
     <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(e) => setForm({ ...form, calendar: e.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Add a place" /></label>
     {error && <div className="modal-error" role="alert">{error}</div>}
