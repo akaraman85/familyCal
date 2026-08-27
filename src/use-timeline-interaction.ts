@@ -83,13 +83,13 @@ export function useTimelineInteraction<T extends GridEvent>({
     const node = containerRef.current
     if (!node) return
     if (event.pointerType === 'mouse' || sessionRef.current?.kind === 'move') {
-      event.preventDefault()
       node.setPointerCapture(event.pointerId)
     }
   }
 
   const startCreate = (event: ReactPointerEvent<HTMLElement>, day: Date, allDay = false) => {
     if (event.button !== 0 || sessionRef.current) return
+    ignoreClickRef.current = false
     const target = resolveTarget(event.clientX, event.clientY, allDay)
     sessionRef.current = {
       kind: 'create',
@@ -107,6 +107,7 @@ export function useTimelineInteraction<T extends GridEvent>({
 
   const startMove = (event: ReactPointerEvent<HTMLElement>, gridEvent: T) => {
     event.stopPropagation()
+    ignoreClickRef.current = false
     if (event.button !== 0 || sessionRef.current || gridEvent.source !== 'saved') return
     sessionRef.current = {
       kind: 'move',
@@ -180,14 +181,22 @@ export function useTimelineInteraction<T extends GridEvent>({
           ))
         }
       }
-    } else if (moved && target) {
-      ignoreClickRef.current = true
-      const bounds = movedEventBounds(
-        session.event,
-        session.allDay ? target.day : dateAtMinutes(target.day, target.minutes),
-        session.allDay,
-      )
-      onMove(session.event, bounds.start, bounds.end, session.allDay)
+    } else if (kind === 'move') {
+      if (moved && target) {
+        ignoreClickRef.current = true
+        const bounds = movedEventBounds(
+          session.event,
+          session.allDay ? target.day : dateAtMinutes(target.day, target.minutes),
+          session.allDay,
+        )
+        onMove(session.event, bounds.start, bounds.end, session.allDay)
+      } else if (!moved) {
+        ignoreClickRef.current = true
+        onSelect(session.event)
+      }
+      window.setTimeout(() => {
+        ignoreClickRef.current = false
+      }, 0)
     }
     clearSession(event.pointerId)
   }

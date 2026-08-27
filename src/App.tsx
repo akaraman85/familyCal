@@ -730,30 +730,34 @@ function AuthenticatedApp({ user, onLogout }: {
       && (event.endDate?.getTime() ?? null) === (end?.getTime() ?? null)
     if (sameTime) return
     const input = movedEventWrite(event, start, end, allDay)
-    const previous = rawEvents
-    const nextEvents = rawEvents.map((item) => (
-      item.id === event.id
-        ? {
-            ...item,
-            startAt: allDay ? format(start, 'yyyy-MM-dd') : start.toISOString(),
-            endAt: allDay
-              ? (end ? format(end, 'yyyy-MM-dd') : null)
-              : end?.toISOString() ?? null,
-            allDay,
-          }
-        : item
-    ))
-    setRawEvents(nextEvents)
-    const cached = eventCacheRef.current.get(rangeKey)
-    eventCacheRef.current.set(rangeKey, {
-      events: nextEvents,
-      sources: cached?.sources ?? eventSources,
+    let previous: CalendarEventData[] = []
+    setRawEvents((current) => {
+      previous = current
+      const nextEvents = current.map((item) => (
+        item.id === event.id
+          ? {
+              ...item,
+              startAt: allDay ? format(start, 'yyyy-MM-dd') : start.toISOString(),
+              endAt: allDay
+                ? (end ? format(end, 'yyyy-MM-dd') : null)
+                : end?.toISOString() ?? null,
+              allDay,
+            }
+          : item
+      ))
+      const cached = eventCacheRef.current.get(rangeKey)
+      eventCacheRef.current.set(rangeKey, {
+        events: nextEvents,
+        sources: cached?.sources ?? eventSources,
+      })
+      return nextEvents
     })
     try {
       await updateCalendarEvent(event.id, input)
       refreshEvents()
     } catch (error) {
       setRawEvents(previous)
+      const cached = eventCacheRef.current.get(rangeKey)
       eventCacheRef.current.set(rangeKey, {
         events: previous,
         sources: cached?.sources ?? eventSources,
