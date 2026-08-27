@@ -228,6 +228,15 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     const sessionId = requestedSessionId
     const revision = context ? context.revision + 1 : 1
     const turnCount = (context?.turnCount ?? 0) + 1
+    console.info('AI calendar proposal ready', {
+      result: result.proposal.result,
+      eventCount: result.proposal.events.length,
+      warningCount: result.proposal.warnings.length,
+      model: result.model,
+      hadImage: Boolean(image),
+      turnCount,
+      usage: result.usage,
+    })
     const workingEvents = result.proposal.events.length
       ? result.proposal.events
       : (context?.events ?? [])

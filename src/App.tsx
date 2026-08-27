@@ -2077,7 +2077,7 @@ function AssistantPanel({ open, close, save }: {
     <div className="assistant-resize" role="separator" aria-orientation="vertical" aria-controls="assistant-panel" aria-label="Resize AI planner" aria-valuemin={MIN_ASSISTANT_PANEL_WIDTH} aria-valuemax={MAX_ASSISTANT_PANEL_WIDTH} aria-valuenow={panelWidth} aria-valuetext={`${panelWidth} pixels`} title="Drag to resize, or use arrow keys" tabIndex={0} {...resizeHandleProps} />
     <div className="sr-only" role="status" aria-live="polite">{processingImage ? 'Processing screenshot' : loading ? 'Preparing calendar response' : proposal?.result === 'needs_clarification' ? `Clarification needed: ${proposal.message}` : proposal?.result === 'calendar_info' ? `Calendar lookup: ${proposal.message}` : proposal ? `${proposal.events.length} proposed events ready for review` : ''}</div>
     <div className="assistant-body">
-      {screenshotEasyActionOpen && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
+      {screenshotEasyActionOpen && <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={16}/></div><div>
         <p>Tell me what you’d like to add. I’ll prepare the dates and details for your review.</p>
         <span>Easy actions</span>
         <div className="planner-easy-actions">
@@ -2103,15 +2103,15 @@ function AssistantPanel({ open, close, save }: {
       </div></div>}
       {turns.map((turn, index) => <div className="planner-turn" key={turn.id}>
         <div className="user-message">{turn.hadImage && <span className="processed-screenshot"><ImagePlus size={14}/>Screenshot processed</span>}<span>{turn.userText}</span></div>
-        <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={14}/></div><div>
+        <div className="ai-message"><div className="assistant-symbol small"><Sparkles size={16}/></div><div>
           <p>{turn.proposal.message}</p>
-          {turn.proposal.events.length > 0 && <div className="proposal-events">{turn.proposal.events.map((event, eventIndex) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${eventIndex}`}><div className="parsed-date"><b>{proposalDatePart(event, turn.timezone, 'day')}</b><span>{proposalDatePart(event, turn.timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={13}/>{proposalTime(event, turn.timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={13}/>{event.location}</span>}</div></div>)}</div>}
+          {turn.proposal.events.length > 0 && <div className="proposal-events"><p className="proposal-event-count">{turn.proposal.events.length} event{turn.proposal.events.length === 1 ? '' : 's'} ready to add</p>{turn.proposal.events.map((event, eventIndex) => <div className="parsed-event" key={`${event.startAt}-${event.title}-${eventIndex}`}><div className="parsed-date"><b>{proposalDatePart(event, turn.timezone, 'day')}</b><span>{proposalDatePart(event, turn.timezone, 'month')}</span></div><div><b>{event.title}</b><span><Clock3 size={15}/>{proposalTime(event, turn.timezone)} · {event.calendar}</span>{event.location && <span><MapPin size={15}/>{event.location}</span>}</div></div>)}</div>}
           {turn.proposal.warnings.length > 0 && <ul className="proposal-warnings">{turn.proposal.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>}
-          {turn.proposal.result === 'proposal' && <div className="chat-actions"><span>{index === turns.length - 1 && !loading ? turn.model.replace('openai/', '') : 'Superseded'}</span>{index === turns.length - 1 && !loading && <button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={15}/>{saving ? 'Adding…' : `Add ${turn.proposal.events.length} event${turn.proposal.events.length === 1 ? '' : 's'}`}</button>}</div>}
+          {turn.proposal.result === 'proposal' && <div className="chat-actions"><span>{index === turns.length - 1 && !loading ? turn.model.replace('openai/', '') : 'Superseded'}</span>{index === turns.length - 1 && !loading && <button className="confirm-chat" disabled={saving} onClick={() => void confirm()}><Check size={16}/>{saving ? 'Adding…' : `Add ${turn.proposal.events.length} event${turn.proposal.events.length === 1 ? '' : 's'}`}</button>}</div>}
         </div></div>
       </div>)}
       {pendingText && <div className="user-message">{pendingHadImage && <span className="processed-screenshot"><ImagePlus size={14}/>Processing screenshot</span>}<span>{pendingText}</span></div>}
-      {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={14}/></div><div><p>Checking the calendar and preparing a response…</p></div></div>}
+      {loading && <div className="ai-message planner-thinking"><div className="assistant-symbol small"><LoaderCircle size={16}/></div><div><p>Checking the calendar and preparing a response…</p></div></div>}
       {error && <div className="assistant-error" role="alert">{error}</div>}
       <div ref={conversationEndRef}/>
     </div>
