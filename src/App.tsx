@@ -26,6 +26,21 @@ import {
   type EventSources,
 } from './events'
 import {
+  applyMovePreview,
+  draftForDate,
+  movedEventWrite,
+  previewStyle,
+  TIMELINE_END_MINUTES,
+  TIMELINE_LABEL_HOURS,
+  TIMELINE_START_MINUTES,
+  timelinePercent,
+  timelinePosition,
+  WEEK_GUTTER_WIDTH,
+  type EventDraft,
+  type MovePreview,
+} from './calendar-slot'
+import { useTimelineInteraction } from './use-timeline-interaction'
+import {
   disconnectGoogleCalendar,
   loadGoogleCalendars,
   updateGoogleCalendarInclusion,
@@ -209,41 +224,6 @@ function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventIt
     color: eventColor(event, members),
     source: event.source,
     google: event.google,
-  }
-}
-
-const TIMELINE_START_MINUTES = 7 * 60
-const TIMELINE_END_MINUTES = 23 * 60
-const TIMELINE_RANGE_MINUTES = TIMELINE_END_MINUTES - TIMELINE_START_MINUTES
-const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
-
-function timelinePercent(minutes: number) {
-  return `${((minutes - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES) * 100}%`
-}
-
-function timelinePosition(event: EventItem) {
-  if (event.allDay) return null
-  const startMinutes = event.date.getHours() * 60 + event.date.getMinutes()
-  const duration = event.endDate
-    ? Math.max(1, (event.endDate.getTime() - event.date.getTime()) / 60_000)
-    : 60
-  const endMinutes = startMinutes + duration
-  if (
-    startMinutes >= TIMELINE_END_MINUTES
-    || endMinutes <= TIMELINE_START_MINUTES
-  ) {
-    return null
-  }
-  const visibleStart = Math.max(startMinutes, TIMELINE_START_MINUTES)
-  const visibleEnd = Math.min(endMinutes, TIMELINE_END_MINUTES)
-  const top = (visibleStart - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES * 100
-  const height = Math.min(
-    (visibleEnd - visibleStart) / TIMELINE_RANGE_MINUTES * 100,
-    100 - top,
-  )
-  return {
-    top: `${top}%`,
-    height: `${height}%`,
   }
 }
 
@@ -592,6 +572,7 @@ function AuthenticatedApp({ user, onLogout }: {
   )
   const revalidateGoogleRef = useRef(false)
   const [modalOpen, setModalOpen] = useState(false)
+  const [eventDraft, setEventDraft] = useState<EventDraft | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
@@ -713,13 +694,76 @@ function AuthenticatedApp({ user, onLogout }: {
   const saveEvent = async (event: NewEventInput) => {
     await saveCalendarEvent(event)
     setModalOpen(false)
+    setEventDraft(null)
     refreshEvents()
+  }
+
+  const openCreate = (draft?: EventDraft) => {
+    setSelectedEvent(null)
+    const next = draft ?? draftForDate(selectedDate)
+    setEventDraft(next)
+    const [year, month, day] = next.date.split('-').map(Number)
+    if (year && month && day) setSelectedDate(new Date(year, month - 1, day))
+    setModalOpen(true)
+  }
+
+  const closeCreate = () => {
+    setModalOpen(false)
+    setEventDraft(null)
   }
 
   const updateEvent = async (id: string, event: NewEventInput) => {
     const result = await updateCalendarEvent(id, event)
     setSelectedEvent(toEventItem(result.event, familyMembers))
     refreshEvents()
+  }
+
+  const moveSavedEvent = async (
+    event: EventItem,
+    start: Date,
+    end: Date | null,
+    allDay: boolean,
+  ) => {
+    if (event.source !== 'saved') return
+    const sameTime = event.allDay === allDay
+      && event.date.getTime() === start.getTime()
+      && (event.endDate?.getTime() ?? null) === (end?.getTime() ?? null)
+    if (sameTime) return
+    const input = movedEventWrite(event, start, end, allDay)
+    let previous: CalendarEventData[] = []
+    setRawEvents((current) => {
+      previous = current
+      const nextEvents = current.map((item) => (
+        item.id === event.id
+          ? {
+              ...item,
+              startAt: allDay ? format(start, 'yyyy-MM-dd') : start.toISOString(),
+              endAt: allDay
+                ? (end ? format(end, 'yyyy-MM-dd') : null)
+                : end?.toISOString() ?? null,
+              allDay,
+            }
+          : item
+      ))
+      const cached = eventCacheRef.current.get(rangeKey)
+      eventCacheRef.current.set(rangeKey, {
+        events: nextEvents,
+        sources: cached?.sources ?? eventSources,
+      })
+      return nextEvents
+    })
+    try {
+      await updateCalendarEvent(event.id, input)
+      refreshEvents()
+    } catch (error) {
+      setRawEvents(previous)
+      const cached = eventCacheRef.current.get(rangeKey)
+      eventCacheRef.current.set(rangeKey, {
+        events: previous,
+        sources: cached?.sources ?? eventSources,
+      })
+      setEventsError(error instanceof Error ? error.message : 'Unable to move event')
+    }
   }
 
   const deleteEvent = async (id: string) => {
@@ -806,7 +850,7 @@ function AuthenticatedApp({ user, onLogout }: {
           <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
           <div className="top-actions">
             <ThemeMenu />
-            <button className="add-btn" onClick={() => setModalOpen(true)}><Plus size={18} />Add event</button>
+            <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>
           </div>
         </header>
         {page !== 'Settings' && <IosInstallHint />}
@@ -830,6 +874,8 @@ function AuthenticatedApp({ user, onLogout }: {
             weekStartsOn={calendarSettings.weekStartsOn}
             showWeekends={calendarSettings.showWeekends}
             selectEvent={setSelectedEvent}
+            createAtSlot={openCreate}
+            moveEvent={moveSavedEvent}
             isMobile={isMobile}
           />
         )}
@@ -839,7 +885,7 @@ function AuthenticatedApp({ user, onLogout }: {
             loading={eventsLoading}
             error={eventsError}
             sources={eventSources}
-            openModal={() => setModalOpen(true)}
+            openModal={() => openCreate()}
             selectEvent={setSelectedEvent}
             openCalendar={(date) => {
               setSelectedDate(date)
@@ -874,7 +920,7 @@ function AuthenticatedApp({ user, onLogout }: {
               className="fab fab-event"
               aria-label="Add event"
               onClick={() => {
-                setModalOpen(true)
+                openCreate()
                 setFabOpen(false)
               }}
             >
@@ -902,10 +948,10 @@ function AuthenticatedApp({ user, onLogout }: {
           remove={selectedEvent.source === 'saved' ? deleteEvent : undefined}
         />
       )}
-      {modalOpen && (
+      {modalOpen && eventDraft && (
         <EventModal
-          selectedDate={selectedDate}
-          close={() => setModalOpen(false)}
+          draft={eventDraft}
+          close={closeCreate}
           save={saveEvent}
         />
       )}
@@ -913,10 +959,45 @@ function AuthenticatedApp({ user, onLogout }: {
   )
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, isMobile }: {
+function labeledMovedEvents(events: EventItem[], preview: MovePreview | null) {
+  return applyMovePreview(events, preview).map((event) => {
+    if (!preview || event.id !== preview.eventId) return event
+    return {
+      ...event,
+      start: event.allDay ? 'All day' : format(event.date, 'h:mm a'),
+      end: event.endDate && !event.allDay ? format(event.endDate, 'h:mm a') : undefined,
+    }
+  })
+}
+
+function SlotGhost({
+  startMinutes,
+  endMinutes,
+  label,
+}: {
+  startMinutes: number
+  endMinutes: number
+  label?: string
+}) {
+  return (
+    <div className="slot-preview" style={previewStyle(startMinutes, endMinutes)}>
+      {label ? <b>{label}</b> : null}
+    </div>
+  )
+}
+
+function slotPreviewLabel(startMinutes: number, endMinutes: number) {
+  const start = new Date(2026, 0, 1, 0, Math.min(startMinutes, endMinutes))
+  const end = new Date(2026, 0, 1, 0, Math.max(startMinutes, endMinutes))
+  return `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
+}
+
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
   loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
+  createAtSlot: (draft: EventDraft) => void
+  moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void
   isMobile: boolean
 }) {
   const selectDay = (day: Date) => {
@@ -949,9 +1030,9 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             </div>
           </div>
         </div>
-        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} />}
-        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} />}
-        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} />}
+        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} />}
+        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} />}
+        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} />}
         {view === 'Year' && <YearView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
       <div className="calendar-footer">
@@ -967,7 +1048,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   )
 }
 
-function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void }) {
+function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, createAtSlot }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void }) {
   const weekStart = weekStartDay(weekStartsOn)
   const days = useMemo(() => eachDayOfInterval({
     start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: weekStart }),
@@ -980,10 +1061,14 @@ function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent }
         {days.map((day) => {
           const dayEvents = events.filter((event) => isSameDay(event.date, day))
           return (
-            <div key={day.toISOString()} className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}>
-              <button type="button" className="day-cell-select" aria-label={`Select ${format(day, 'MMMM d, yyyy')}`} onClick={() => onSelect(day)}><span className="day-number">{format(day, 'd')}</span></button>
+            <div
+              key={day.toISOString()}
+              className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}
+              onClick={() => createAtSlot(draftForDate(day))}
+            >
+              <button type="button" className="day-cell-select" aria-label={`Select ${format(day, 'MMMM d, yyyy')}`} onClick={(click) => { click.stopPropagation(); onSelect(day) }}><span className="day-number">{format(day, 'd')}</span></button>
               <div className="events">
-                {dayEvents.slice(0, 3).map((event) => <button type="button" className={`event-chip ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</button>)}
+                {dayEvents.slice(0, 3).map((event) => <button type="button" className={`event-chip ${event.color}`} title={eventSourceLabel(event)} onClick={(click) => { click.stopPropagation(); selectEvent(event) }} key={event.id}><span>{event.start.replace(':00', '')}</span>{event.title}</button>)}
                 {dayEvents.length > 3 && <small>+{dayEvents.length - 3} more</small>}
               </div>
             </div>
@@ -994,33 +1079,149 @@ function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent }
   )
 }
 
-function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void }) {
+function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void }) {
   const weekStart = weekStartDay(weekStartsOn)
   const days = eachDayOfInterval({
     start: startOfWeek(selectedDate, { weekStartsOn: weekStart }),
     end: endOfWeek(selectedDate, { weekStartsOn: weekStart }),
   }).filter((day) => showWeekends || !isWeekendDate(day))
-  const hasAllDayEvents = events.some((event) => (
-    event.allDay && days.some((day) => isSameDay(event.date, day))
-  ))
+  const {
+    containerRef,
+    slotPreview,
+    movePreview,
+    dragging,
+    onGridPointerMove,
+    onGridPointerUp,
+    onGridPointerCancel,
+    onColumnPointerDown,
+    onColumnPointerUp,
+    onHoverMove,
+    onHoverLeave,
+    eventPointerProps,
+  } = useTimelineInteraction<EventItem>({
+    days,
+    gutterWidth: WEEK_GUTTER_WIDTH,
+    onCreate: createAtSlot,
+    onMove: moveEvent,
+    onSelect: selectEvent,
+  })
+  const displayEvents = labeledMovedEvents(events, movePreview)
+  const timedPreview = slotPreview && !slotPreview.allDay ? slotPreview : null
   return (
-    <div className="week-view" style={{ '--week-days': String(days.length) } as CSSProperties}>
+    <div className={`week-view ${dragging ? 'is-dragging' : ''}`} style={{ '--week-days': String(days.length) } as CSSProperties}>
       <div className="week-head"><div />{days.map((day) => <div className={isSameDay(day, new Date()) ? 'current' : ''} key={day.toISOString()}><span>{format(day, 'EEE')}</span><b>{format(day, 'd')}</b></div>)}</div>
-      {hasAllDayEvents && <div className="week-all-day"><span>All day</span>{days.map((day) => <div key={day.toISOString()}>{events.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div>)}</div>}
-      <div className="week-body">
+      <div className="week-all-day">
+        <span>All day</span>
+        {days.map((day) => {
+          const highlighted = Boolean(
+            slotPreview?.allDay
+            && slotPreview.kind === 'create'
+            && day >= startOfDay(slotPreview.startDay <= slotPreview.endDay ? slotPreview.startDay : slotPreview.endDay)
+            && day <= startOfDay(slotPreview.startDay <= slotPreview.endDay ? slotPreview.endDay : slotPreview.startDay),
+          )
+          return (
+            <div
+              key={day.toISOString()}
+              className={`week-all-day-cell ${highlighted ? 'slot-target' : ''}`}
+              aria-label={`Create all-day event on ${format(day, 'EEEE, MMMM d')}`}
+              onPointerDown={(pointer) => onColumnPointerDown(pointer, day, true)}
+              onPointerUp={onColumnPointerUp}
+            >
+              {displayEvents.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => (
+                <button
+                  type="button"
+                  className={`all-day-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
+                  title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to another day` : eventSourceLabel(event)}
+                  key={event.id}
+                  {...eventPointerProps(event)}
+                >
+                  {event.title}
+                </button>
+              ))}
+            </div>
+          )
+        })}
+      </div>
+      <div
+        className="week-body"
+        ref={containerRef}
+        onPointerMove={onGridPointerMove}
+        onPointerUp={onGridPointerUp}
+        onPointerCancel={onGridPointerCancel}
+        onLostPointerCapture={onGridPointerCancel}
+      >
         <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: timelinePercent(hour * 60) }}>{timelineLabel(hour)}</span>)}</div>
-        {days.map((day) => <div className="week-column" key={day.toISOString()}>{events.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
-          const position = timelinePosition(event)
-          if (!position) return null
-          return <button type="button" className={`week-event ${event.color}`} style={position} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}><b>{event.title}</b><span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span></button>
-        })}</div>)}
+        {days.map((day) => (
+          <div
+            className="week-column"
+            key={day.toISOString()}
+            aria-label={`Create event on ${format(day, 'EEEE, MMMM d')}`}
+            onPointerDown={(pointer) => onColumnPointerDown(pointer, day)}
+            onPointerUp={onColumnPointerUp}
+            onMouseMove={(mouse) => {
+              if ((mouse.target as Element | null)?.closest('[data-calendar-event]')) {
+                onHoverLeave()
+                return
+              }
+              onHoverMove(mouse, day)
+            }}
+            onMouseLeave={onHoverLeave}
+          >
+            {timedPreview && isSameDay(timedPreview.startDay, day) && (
+              <SlotGhost
+                startMinutes={timedPreview.startMinutes}
+                endMinutes={timedPreview.endMinutes}
+                label={timedPreview.kind === 'create' ? slotPreviewLabel(timedPreview.startMinutes, timedPreview.endMinutes) : format(new Date(2026, 0, 1, 0, timedPreview.startMinutes), 'h:mm a')}
+              />
+            )}
+            {displayEvents.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
+              const position = timelinePosition(event)
+              if (!position) return null
+              return (
+                <button
+                  type="button"
+                  className={`week-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
+                  style={position}
+                  title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+                  key={event.id}
+                  {...eventPointerProps(event)}
+                >
+                  <b>{event.title}</b>
+                  <span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span>
+                </button>
+              )
+            })}
+          </div>
+        ))}
       </div>
     </div>
   )
 }
 
-function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void }) {
-  const dayEvents = events.filter((e) => isSameDay(e.date, selectedDate))
+function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void }) {
+  const days = [selectedDate]
+  const {
+    containerRef,
+    slotPreview,
+    movePreview,
+    dragging,
+    onGridPointerMove,
+    onGridPointerUp,
+    onGridPointerCancel,
+    onColumnPointerDown,
+    onColumnPointerUp,
+    onHoverMove,
+    onHoverLeave,
+    eventPointerProps,
+  } = useTimelineInteraction<EventItem>({
+    days,
+    gutterWidth: 0,
+    onCreate: createAtSlot,
+    onMove: moveEvent,
+    onSelect: selectEvent,
+  })
+  const displayEvents = labeledMovedEvents(events, movePreview)
+  const dayEvents = displayEvents.filter((event) => isSameDay(event.date, selectedDate))
   const allDayEvents = dayEvents.filter((event) => event.allDay)
   const timedEvents = dayEvents.filter((event) => !event.allDay)
   const now = new Date()
@@ -1030,19 +1231,63 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
     && nowMinutes >= TIMELINE_START_MINUTES
     && nowMinutes <= TIMELINE_END_MINUTES
   const nowTop = showNowLine ? timelinePercent(nowMinutes) : null
+  const timedPreview = slotPreview && !slotPreview.allDay ? slotPreview : null
   return (
-    <div className="day-view">
-      {allDayEvents.length > 0 && <div className="day-all-day"><span>All day</span><div>{allDayEvents.map((event) => <button type="button" className={`all-day-event ${event.color}`} title={eventSourceLabel(event)} onClick={() => selectEvent(event)} key={event.id}>{event.title}</button>)}</div></div>}
+    <div className={`day-view ${dragging ? 'is-dragging' : ''}`}>
+      <div
+        className={`day-all-day ${slotPreview?.allDay && slotPreview.kind === 'create' ? 'slot-target' : ''}`}
+        onPointerDown={(pointer) => onColumnPointerDown(pointer, selectedDate, true)}
+        onPointerUp={onColumnPointerUp}
+      >
+        <span>All day</span>
+        <div>
+          {allDayEvents.map((event) => (
+            <button
+              type="button"
+              className={`all-day-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
+              title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+              key={event.id}
+              {...eventPointerProps(event)}
+            >
+              {event.title}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="day-timed">
         <div className="day-timeline">
           {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: timelinePercent(hour * 60) }}><span>{timelineLabel(hour)}</span><i /></div>)}
         </div>
-        <div className="day-events">
+        <div
+          className="day-events"
+          ref={containerRef}
+          aria-label={`Create event on ${format(selectedDate, 'EEEE, MMMM d')}`}
+          onPointerDown={(pointer) => onColumnPointerDown(pointer, selectedDate)}
+          onPointerMove={onGridPointerMove}
+          onPointerUp={onGridPointerUp}
+          onPointerCancel={onGridPointerCancel}
+          onLostPointerCapture={onGridPointerCancel}
+          onMouseMove={(mouse) => {
+            if ((mouse.target as Element | null)?.closest('[data-calendar-event]')) {
+              onHoverLeave()
+              return
+            }
+            onHoverMove(mouse, selectedDate)
+          }}
+          onMouseLeave={onHoverLeave}
+        >
           {showNowLine && nowTop && (
             <div className="now-indicator" style={{ top: nowTop }}>
               <span>{format(now, 'h:mm a')}</span>
               <i />
             </div>
+          )}
+          {timedPreview && (
+            <SlotGhost
+              startMinutes={timedPreview.startMinutes}
+              endMinutes={timedPreview.endMinutes}
+              label={timedPreview.kind === 'create' ? slotPreviewLabel(timedPreview.startMinutes, timedPreview.endMinutes) : format(new Date(2026, 0, 1, 0, timedPreview.startMinutes), 'h:mm a')}
+            />
           )}
           {timedEvents.map((event) => {
             const position = timelinePosition(event)
@@ -1050,11 +1295,11 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
             return (
               <button
                 type="button"
-                className={`day-event-card ${event.color}`}
+                className={`day-event-card ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
                 key={event.id}
                 style={position}
-                title={eventSourceLabel(event)}
-                onClick={() => selectEvent(event)}
+                title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+                {...eventPointerProps(event)}
               >
                 <div className="day-event-content">
                   <b>{event.title}</b>
@@ -1064,7 +1309,7 @@ function DayView({ events, selectedDate, selectEvent }: { events: EventItem[]; s
               </button>
             )
           })}
-          {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Enjoy the open space in your day.</span></div>}
+          {!dayEvents.length && <div className="empty-day"><CalendarDays size={28} /><b>No plans yet</b><span>Tap a time slot to add an event.</span></div>}
         </div>
       </div>
     </div>
@@ -2385,17 +2630,17 @@ function EventDetailModal({ event, close, save, remove }: {
   </div>
 }
 
-function EventModal({ selectedDate, close, save }: { selectedDate: Date; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
+function EventModal({ draft, close, save }: { draft: EventDraft; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
   const isMobile = useIsMobile()
   const calendars = useFamilyCalendars()
   const [form, setForm] = useState({
     title: '',
     calendar: HOUSEHOLD_CALENDAR,
-    date: format(selectedDate, 'yyyy-MM-dd'),
-    time: '09:00',
-    endTime: defaultEndTimeAfter('09:00'),
-    endDate: '',
-    allDay: false,
+    date: draft.date,
+    time: draft.time,
+    endTime: draft.endTime || defaultEndTimeAfter(draft.time),
+    endDate: draft.endDate,
+    allDay: draft.allDay,
     location: '',
   })
   const [saving, setSaving] = useState(false)
