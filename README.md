@@ -85,7 +85,7 @@ JPEG before forwarding it to the model.
 
 Planner follow-ups use a bounded rolling state rather than replaying the full
 chat transcript. A signed, one-hour context token carries at most the current
-20 event facts, the latest assistant message, and up to 10 warnings. Each new
+30 event facts, the latest assistant message, and up to 30 warnings. Each new
 turn replaces that state; screenshots and earlier prompts are never resent.
 Sessions allow eight AI turns, follow-ups are capped at 4,000 characters, and
 the in-memory UI history is discarded on refresh or when **New plan** is used.

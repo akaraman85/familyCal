@@ -232,6 +232,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       result: result.proposal.result,
       eventCount: result.proposal.events.length,
       warningCount: result.proposal.warnings.length,
+      duplicateCount: result.duplicateCount,
       model: result.model,
       hadImage: Boolean(image),
       turnCount,
