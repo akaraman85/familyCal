@@ -834,7 +834,7 @@ function AuthenticatedApp({ user, onLogout }: {
             selectEvent={setSelectedEvent}
             openCalendar={(date) => {
               setSelectedDate(date)
-              if (isMobile) changeView('Day')
+              changeView('Day')
               setPage('Calendar')
             }}
           />
