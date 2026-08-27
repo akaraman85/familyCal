@@ -8,7 +8,7 @@ import {
   AlertTriangle, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutDashboard, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
-  Pencil, Plus, Repeat, Settings, Sparkles, Trash2, Users, Video, WandSparkles, X,
+  Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
@@ -65,6 +65,11 @@ import {
   type CalendarView,
   type WeekStart,
 } from './calendar-settings'
+import {
+  THEME_OPTIONS,
+  useTheme,
+  type ThemePreference,
+} from './theme'
 
 type View = CalendarView
 type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
@@ -354,6 +359,87 @@ function eventSourceLabel(event: EventItem) {
   return `${event.google.calendar.name} · ${calendarTypeLabel(event.google.calendar.type)}${via}`
 }
 
+function ThemeIcon({ preference, size }: { preference: ThemePreference; size: number }) {
+  if (preference === 'dark') return <Moon size={size} />
+  if (preference === 'light') return <Sun size={size} />
+  return <Monitor size={size} />
+}
+
+function ThemePicker() {
+  const { preference, setPreference } = useTheme()
+  return (
+    <div className="theme-options" role="radiogroup" aria-label="Theme">
+      {THEME_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={preference === option.value}
+          className={preference === option.value ? 'active' : ''}
+          title={option.hint}
+          onClick={() => setPreference(option.value)}
+        >
+          <ThemeIcon preference={option.value} size={14} />
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function ThemeMenu() {
+  const { preference, setPreference } = useTheme()
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const current = THEME_OPTIONS.find((option) => option.value === preference) ?? THEME_OPTIONS[0]
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <div className="view-dropdown" ref={menuRef}>
+      <button
+        type="button"
+        className="theme-menu-trigger"
+        aria-label={`Theme: ${current.label}`}
+        title={`Theme: ${current.label}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        <ThemeIcon preference={preference} size={16} />
+      </button>
+      {open && (
+        <div className="glass-menu view-dropdown-menu theme-menu" role="menu">
+          {THEME_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={preference === option.value}
+              className={preference === option.value ? 'active' : ''}
+              title={option.hint}
+              onClick={() => {
+                setPreference(option.value)
+                setOpen(false)
+              }}
+            >
+              <ThemeIcon preference={option.value} size={16} />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function App() {
   const [user, setUser] = useState<SessionUser | null>()
   const [sessionError, setSessionError] = useState<string | null>(null)
@@ -410,6 +496,7 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
   }
 
   return <main className="login-page">
+    <div className="login-theme"><ThemeMenu /></div>
     <div className="login-stack">
       <IosInstallHint />
       <form className="login-card" onSubmit={submit}>
@@ -675,6 +762,7 @@ function AuthenticatedApp({ user, onLogout }: {
         <header className="topbar">
           <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
           <div className="top-actions">
+            <ThemeMenu />
             <button className="add-btn" onClick={() => setModalOpen(true)}><Plus size={18} />Add event</button>
           </div>
         </header>
@@ -1289,17 +1377,32 @@ function SettingsPage({ onCalendarSettingsSaved }: {
       <button disabled>Notifications</button><button disabled>Privacy</button><button disabled>Account</button>
     </div>
     {tab === 'general'
-      ? <div className="settings-content"><h2>Calendar preferences</h2><p>Choose how dates and events appear for everyone.</p>
-        {!calendar && !calendarError && <div className="integration-loading"><LoaderCircle size={16}/>Loading calendar preferences</div>}
-        {calendar && <>
-          <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select value={calendar.defaultView} onChange={(event) => { setCalendar({ ...calendar, defaultView: event.target.value as CalendarView }); setCalendarSaved(false) }}>{CALENDAR_VIEWS.map((view) => <option key={view} value={view}>{view}</option>)}</select></label>
-          <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select value={calendar.weekStartsOn} onChange={(event) => { setCalendar({ ...calendar, weekStartsOn: event.target.value as WeekStart }); setCalendarSaved(false) }}><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
-          <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" role="switch" aria-checked={calendar.showWeekends} className={`toggle ${calendar.showWeekends ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, showWeekends: !calendar.showWeekends }); setCalendarSaved(false) }}><i/></button></label>
-          <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" role="switch" aria-checked={calendar.dailyAgendaEmail} className={`toggle ${calendar.dailyAgendaEmail ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, dailyAgendaEmail: !calendar.dailyAgendaEmail }); setCalendarSaved(false) }}><i/></button></label>
-          <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <span><Check size={14}/>Saved</span>}</div>
-        </>}
-        {calendarError && <div className="modal-error" role="alert">{calendarError}</div>}
-        <IosInstallGuide />
+      ? <div className="settings-content">
+        <div className="settings-section">
+          <h2>Appearance</h2>
+          <p>This device follows your system theme unless you choose Light or Dark. The choice stays on this device.</p>
+          <label>
+            <span>
+              <b>Theme</b>
+              <small>Device is the default. Light and Dark override it locally.</small>
+            </span>
+            <ThemePicker />
+          </label>
+        </div>
+        <div className="settings-section">
+          <h2>Calendar preferences</h2>
+          <p>Choose how dates and events appear for everyone.</p>
+          {!calendar && !calendarError && <div className="integration-loading"><LoaderCircle size={16}/>Loading calendar preferences</div>}
+          {calendar && <>
+            <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select value={calendar.defaultView} onChange={(event) => { setCalendar({ ...calendar, defaultView: event.target.value as CalendarView }); setCalendarSaved(false) }}>{CALENDAR_VIEWS.map((view) => <option key={view} value={view}>{view}</option>)}</select></label>
+            <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select value={calendar.weekStartsOn} onChange={(event) => { setCalendar({ ...calendar, weekStartsOn: event.target.value as WeekStart }); setCalendarSaved(false) }}><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
+            <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" role="switch" aria-checked={calendar.showWeekends} className={`toggle ${calendar.showWeekends ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, showWeekends: !calendar.showWeekends }); setCalendarSaved(false) }}><i/></button></label>
+            <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" role="switch" aria-checked={calendar.dailyAgendaEmail} className={`toggle ${calendar.dailyAgendaEmail ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, dailyAgendaEmail: !calendar.dailyAgendaEmail }); setCalendarSaved(false) }}><i/></button></label>
+            <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <span><Check size={14}/>Saved</span>}</div>
+          </>}
+          {calendarError && <div className="modal-error" role="alert">{calendarError}</div>}
+          <IosInstallGuide />
+        </div>
       </div>
       : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
