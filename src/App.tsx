@@ -51,6 +51,8 @@ import {
 } from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
 import { IosInstallGuide, IosInstallHint } from './install-app'
+import { consumeSettingsTab, syncPushSubscription } from './notifications'
+import { NotificationOptInHint, NotificationsSettings } from './notifications-settings'
 import {
   CALENDAR_VIEWS,
   DEFAULT_CALENDAR_SETTINGS,
@@ -607,6 +609,10 @@ function AuthenticatedApp({ user, onLogout }: {
       .catch(() => undefined)
   }, [isMobile])
 
+  useEffect(() => {
+    void syncPushSubscription()
+  }, [])
+
   const changeView = (next: View) => {
     userChangedView.current = true
     setView(next)
@@ -804,6 +810,9 @@ function AuthenticatedApp({ user, onLogout }: {
           </div>
         </header>
         {page !== 'Settings' && <IosInstallHint />}
+        {page !== 'Settings' && (
+          <NotificationOptInHint onOpen={() => setPage('Settings')} />
+        )}
 
         {page === 'Calendar' && (
           <CalendarPage
@@ -1462,7 +1471,7 @@ function FamilyMemberModal({ member, close, save }: {
 function SettingsPage({ onCalendarSettingsSaved }: {
   onCalendarSettingsSaved: (settings: CalendarSettings) => void
 }) {
-  const [tab, setTab] = useState<'general' | 'planner'>('general')
+  const [tab, setTab] = useState<'general' | 'planner' | 'notifications'>(consumeSettingsTab)
   const [calendar, setCalendar] = useState<CalendarSettings | null>(null)
   const [calendarError, setCalendarError] = useState<string | null>(null)
   const [savingCalendar, setSavingCalendar] = useState(false)
@@ -1523,10 +1532,13 @@ function SettingsPage({ onCalendarSettingsSaved }: {
     <section className="settings-panel"><div className="settings-nav">
       <button className={tab === 'general' ? 'active' : ''} onClick={() => setTab('general')}>General</button>
       <button className={tab === 'planner' ? 'active' : ''} onClick={() => setTab('planner')}>AI Planner</button>
-      <button disabled>Notifications</button><button disabled>Privacy</button><button disabled>Account</button>
+      <button className={tab === 'notifications' ? 'active' : ''} onClick={() => setTab('notifications')}>Notifications</button>
+      <button disabled>Privacy</button><button disabled>Account</button>
     </div>
-    {tab === 'general'
-      ? <div className="settings-content">
+    {tab === 'notifications' ? (
+      <NotificationsSettings />
+    ) : tab === 'general' ? (
+      <div className="settings-content">
         <div className="settings-section">
           <h2>Appearance</h2>
           <p>This device follows your system theme unless you choose Light or Dark. The choice stays on this device.</p>
@@ -1553,7 +1565,8 @@ function SettingsPage({ onCalendarSettingsSaved }: {
           <IosInstallGuide />
         </div>
       </div>
-      : <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
+    ) : (
+      <div className="settings-content planner-settings"><h2>AI Planner</h2><p>Vercel AI Gateway prepares structured event proposals from text or screenshots. Attachments are resized and stripped of file metadata first. Nothing is added until you confirm it.</p>
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
         {!planner && !plannerError && <div className="integration-loading"><LoaderCircle size={16}/>Loading planner settings</div>}
         {planner && <>
@@ -1564,7 +1577,8 @@ function SettingsPage({ onCalendarSettingsSaved }: {
           <div className="settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
         </>}
         {plannerError && <div className="modal-error" role="alert">{plannerError}</div>}
-      </div>}
+      </div>
+    )}
     </section>
   </div>
 }

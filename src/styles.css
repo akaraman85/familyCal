@@ -372,7 +372,11 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
 .toggle { width:36px;height:20px;border:0;border-radius:12px;background:var(--toggle-off);padding:2px;cursor:pointer;transition:.2s; }.toggle i { display:block;width:16px;height:16px;background:var(--knob);border-radius:50%;transition:.2s;box-shadow:0 1px 3px light-dark(#999,#111); }.toggle.on { background:var(--green); }.toggle.on i { transform:translateX(16px); }
 .gateway-status { display:flex;gap:10px;align-items:center;background:var(--gateway-bg);border:1px solid var(--gateway-border);border-radius:9px;padding:12px;margin-bottom:12px;color:var(--gateway-text); }
 .gateway-status span,.gateway-status b,.gateway-status small { display:block; }.gateway-status b { font-size:9px;margin-bottom:3px; }.gateway-status small { color:var(--gateway-muted);font-size:8px;line-height:1.45; }
-.settings-actions { display:flex;align-items:center;gap:10px;margin-top:18px; }.settings-actions button { border:0;border-radius:8px;background:var(--orange);color:white;height:36px;padding:0 14px;font-size:9px;font-weight:700;cursor:pointer; }.settings-actions button:disabled { opacity:.6;cursor:wait; }.settings-actions span { display:flex;align-items:center;gap:4px;color:var(--green);font-size:8px;font-weight:700; }
+.settings-actions { display:flex;align-items:center;gap:10px;margin-top:18px;flex-wrap:wrap; }.settings-actions button { border:0;border-radius:8px;background:var(--orange);color:white;height:36px;padding:0 14px;font-size:9px;font-weight:700;cursor:pointer; }.settings-actions button:disabled { opacity:.6;cursor:wait; }.settings-actions span { display:flex;align-items:center;gap:4px;color:var(--green);font-size:8px;font-weight:700; }
+.settings-actions .secondary { background:var(--panel);color:var(--ink);border:1px solid var(--line); }
+.settings-actions .secondary:disabled { cursor:not-allowed; }
+.notification-devices { margin:12px 0 0;padding:0;list-style:none;color:var(--text-tertiary);font-size:10px; }
+.notification-devices li { padding:6px 0;border-top:1px solid var(--line); }
 
 .chat-fab { position:fixed;right:25px;bottom:24px;width:45px;height:45px;border:0;border-radius:50%;display:grid;place-items:center;background:var(--forest);color:var(--forest-gold);box-shadow:0 7px 25px light-dark(rgba(40,55,50,.27), rgba(0,0,0,.45));cursor:pointer;z-index:21; }
 .fab-stack { position:fixed; right:18px; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); display:none; flex-direction:column; align-items:center; gap:12px; z-index:22; }
@@ -505,6 +509,8 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .ios-install-hint svg { flex:none;margin-top:1px; }
 .ios-install-hint-dismiss { border:0;background:transparent;color:var(--ios-text);padding:4px;border-radius:7px;display:grid;place-items:center;cursor:pointer;flex:none; }
 .ios-install-hint-dismiss:hover { background:var(--ios-hover); }
+.ios-install-hint-action { border:1px solid var(--ios-border);background:transparent;color:var(--ios-text);border-radius:8px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;flex:none; }
+.ios-install-hint-action:hover { background:var(--ios-hover); }
 .login-stack .ios-install-hint { margin:0; }
 .install-guide { margin-top:28px;padding-top:22px;border-top:1px solid var(--line); }
 .install-guide h2 { font:600 16px Manrope;margin:0 0 6px; }

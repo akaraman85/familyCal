@@ -7,6 +7,12 @@
       "main": true
     }
   },
+  "crons": [
+    {
+      "path": "/api/notifications/dispatch",
+      "schedule": "*/5 * * * *"
+    }
+  ],
   "functions": {
     "api/planner/propose.ts": {
       "maxDuration": 60
