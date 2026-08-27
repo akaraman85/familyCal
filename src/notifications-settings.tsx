@@ -269,7 +269,7 @@ export function NotificationsSettings() {
             role="switch"
             aria-checked={settings.eventReminders}
             className={`toggle ${settings.eventReminders ? 'on' : ''}`}
-            disabled={saving}
+            disabled={loading || saving}
             onClick={() => {
               const next = { ...settings, eventReminders: !settings.eventReminders }
               setSettings(next)
@@ -287,7 +287,7 @@ export function NotificationsSettings() {
           </span>
           <select
             value={settings.reminderMinutes}
-            disabled={saving || !settings.eventReminders}
+            disabled={loading || saving || !settings.eventReminders}
             onChange={(event) => {
               const next = {
                 ...settings,

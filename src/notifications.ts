@@ -115,7 +115,8 @@ export async function enablePushNotifications(publicKey: string) {
   }
   const serviceWorker = await registration()
   const existing = await serviceWorker.pushManager.getSubscription()
-  const subscription = existing ?? await serviceWorker.pushManager.subscribe({
+  if (existing) await existing.unsubscribe()
+  const subscription = await serviceWorker.pushManager.subscribe({
     userVisibleOnly: true,
     applicationServerKey: urlBase64ToUint8Array(publicKey),
   })
