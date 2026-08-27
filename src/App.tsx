@@ -5,8 +5,8 @@ import {
 } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  AlertTriangle, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutDashboard, LayoutGrid,
+  AlertTriangle, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
   Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
@@ -72,7 +72,7 @@ import {
 } from './theme'
 
 type View = CalendarView
-type Page = 'Calendar' | 'Overview' | 'Integrations' | 'Family' | 'Settings'
+type Page = 'Calendar' | 'Agenda' | 'Integrations' | 'Family' | 'Settings'
 type EventColor = 'coral' | 'blue' | 'green' | 'gold'
 type EventItem = {
   id: string
@@ -96,6 +96,7 @@ type NewEventInput = CalendarEventWrite
 
 const HOUSEHOLD_CALENDAR = 'Family'
 const HOUSEHOLD_EVENT_COLOR: EventColor = 'green'
+const AGENDA_DAYS = 8
 const EVENT_COLORS = new Set<EventColor>(['coral', 'blue', 'green', 'gold'])
 const GOOGLE_CALENDAR_TYPE_RANK = {
   'read-only': 0,
@@ -440,6 +441,38 @@ function ThemeMenu() {
   )
 }
 
+function compareAgendaEvents(left: EventItem, right: EventItem) {
+  const byStart = left.date.getTime() - right.date.getTime()
+  if (byStart !== 0) return byStart
+  if (left.allDay !== right.allDay) return left.allDay ? -1 : 1
+  return left.title.localeCompare(right.title)
+}
+
+function isAgendaEventHappening(event: EventItem, now: Date) {
+  if (event.allDay) return false
+  const end = event.endDate ?? new Date(event.date.getTime() + 60 * 60 * 1000)
+  return event.date.getTime() <= now.getTime() && now.getTime() < end.getTime()
+}
+
+function nextAgendaHighlight(events: EventItem[], now: Date) {
+  const sorted = [...events].sort(compareAgendaEvents)
+  const happening = sorted.find((event) => isAgendaEventHappening(event, now))
+  if (happening) return { event: happening, kind: 'now' as const }
+  const upcoming = sorted.find((event) => (
+    event.allDay
+      ? startOfDay(event.date).getTime() > startOfDay(now).getTime()
+      : event.date.getTime() > now.getTime()
+  ))
+  if (upcoming) return { event: upcoming, kind: 'next' as const }
+  return null
+}
+
+function agendaDayLabel(day: Date, today: Date) {
+  if (isSameDay(day, today)) return 'Today'
+  if (isSameDay(day, addDays(today, 1))) return 'Tomorrow'
+  return format(day, 'EEEE')
+}
+
 function App() {
   const [user, setUser] = useState<SessionUser | null>()
   const [sessionError, setSessionError] = useState<string | null>(null)
@@ -580,6 +613,10 @@ function AuthenticatedApp({ user, onLogout }: {
   }
 
   const eventRange = useMemo(() => {
+    if (page === 'Agenda') {
+      const start = startOfDay(new Date())
+      return { start, end: addDays(start, AGENDA_DAYS) }
+    }
     if (view === 'Year') {
       return {
         start: new Date(selectedDate.getFullYear(), 0, 1),
@@ -598,7 +635,7 @@ function AuthenticatedApp({ user, onLogout }: {
     }
     const start = startOfDay(selectedDate)
     return { start, end: addDays(start, 1) }
-  }, [selectedDate, view, weekStartsOn])
+  }, [page, selectedDate, view, weekStartsOn])
   const rangeKey = `${eventRange.start.toISOString()}|${eventRange.end.toISOString()}`
 
   const refreshEvents = (revalidateGoogle = false) => {
@@ -719,7 +756,7 @@ function AuthenticatedApp({ user, onLogout }: {
 
   const navItems: { icon: typeof CalendarDays; label: Page }[] = [
     { icon: CalendarDays, label: 'Calendar' },
-    { icon: LayoutDashboard, label: 'Overview' },
+    { icon: CalendarClock, label: 'Agenda' },
     { icon: Link2, label: 'Integrations' },
     { icon: Users, label: 'Family' },
   ]
@@ -787,7 +824,21 @@ function AuthenticatedApp({ user, onLogout }: {
             isMobile={isMobile}
           />
         )}
-        {page === 'Overview' && <OverviewPage events={events} openModal={() => setModalOpen(true)} selectEvent={setSelectedEvent} />}
+        {page === 'Agenda' && (
+          <AgendaPage
+            events={events}
+            loading={eventsLoading}
+            error={eventsError}
+            sources={eventSources}
+            openModal={() => setModalOpen(true)}
+            selectEvent={setSelectedEvent}
+            openCalendar={(date) => {
+              setSelectedDate(date)
+              changeView('Day')
+              setPage('Calendar')
+            }}
+          />
+        )}
         {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => refreshEvents(true)} />}
         {page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
         {page === 'Settings' && (
@@ -1021,25 +1072,123 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
   })}</div>
 }
 
-function OverviewPage({ events, openModal, selectEvent }: { events: EventItem[]; openModal: () => void; selectEvent: (event: EventItem) => void }) {
-  const savedCount = events.filter((event) => event.source === 'saved').length
-  const googleCount = events.filter((event) => event.source === 'google').length
-  return <div className="page overview-page">
-    <div className="page-heading"><div><p className="eyebrow">Family command center</p><h1>Overview</h1><p>Everything important, all in one place.</p></div><button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button></div>
-    <div className="stat-grid">
-      <div className="stat-card coral-stat"><div><span>Current view</span><b>{events.length}</b><small>events scheduled</small></div><CalendarDays /></div>
-      <div className="stat-card blue-stat"><div><span>Google Calendar</span><b>{googleCount}</b><small>integrated events</small></div><Link2 /></div>
-      <div className="stat-card green-stat"><div><span>Saved here</span><b>{savedCount}</b><small>family events</small></div><Check /></div>
-    </div>
-    <div className="overview-grid">
-      <section className="panel"><div className="panel-title"><div><h2>Coming up</h2><p>Your next family moments</p></div><button>View calendar <ChevronRight size={15} /></button></div>
-        <div className="agenda-list">{events.slice(0,5).map((e) => <button type="button" className="agenda-item" onClick={() => selectEvent(e)} key={e.id}><div className="agenda-date"><b>{format(e.date, 'd')}</b><span>{format(e.date, 'MMM')}</span></div><i className={e.color}/><div className="agenda-info"><b>{e.title}</b><span><Clock3 size={13} />{e.start}{e.location && <><MapPin size={13} />{e.location}</>}</span></div><div className={`tiny-avatar ${e.color}`}>{e.calendar.slice(0, 1).toUpperCase()}</div></button>)}
-          {!events.length && <div className="agenda-empty">No events in the current calendar view.</div>}
+function AgendaPage({ events, loading, error, sources, openModal, selectEvent, openCalendar }: {
+  events: EventItem[]
+  loading: boolean
+  error: string | null
+  sources: EventSources
+  openModal: () => void
+  selectEvent: (event: EventItem) => void
+  openCalendar: (date: Date) => void
+}) {
+  const now = new Date()
+  const today = startOfDay(now)
+  const windowEnd = addDays(today, AGENDA_DAYS)
+  const sortedEvents = events
+    .filter((event) => event.date.getTime() >= today.getTime() && event.date.getTime() < windowEnd.getTime())
+    .sort(compareAgendaEvents)
+  const highlight = nextAgendaHighlight(sortedEvents, now)
+  const upcomingDays = Array.from({ length: AGENDA_DAYS }, (_, index) => {
+    const date = addDays(today, index)
+    return { date, events: sortedEvents.filter((event) => isSameDay(event.date, date)) }
+  }).filter((group, index) => index === 0 || group.events.length > 0)
+  const hasEvents = sortedEvents.length > 0
+
+  return (
+    <div className="page agenda-page">
+      <div className="page-heading">
+        <div>
+          <p className="eyebrow">Family agenda</p>
+          <h1>Today and the week ahead</h1>
+          <p>A list of what is happening now. Use Calendar when you want the date grid.</p>
         </div>
-      </section>
-      <section className="panel insight-panel"><div className="sparkle-orb"><Sparkles /></div><p className="eyebrow">Calendar snapshot</p><h2>{events.length ? `${events.length} event${events.length === 1 ? '' : 's'} in view` : 'Your calendar is open'}</h2><p>{googleCount ? `${googleCount} come from Google Calendar and ${savedCount} are saved directly in Karaman.` : savedCount ? 'These plans are saved directly in Karaman.' : 'Connect Google Calendar or add an event to get started.'}</p><div className="insight-bars"><i/><i/><i/><i/><i/><i/><i/></div></section>
+        <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>
+      </div>
+      {error && <div className="calendar-source-error" role="alert">{error}</div>}
+      {!error && sources.google === 'error' && (
+        <div className="calendar-source-error" role="status">
+          {events.some((event) => event.source === 'google')
+            ? 'Google Calendar could not be refreshed. Showing the last loaded events.'
+            : 'Saved events are shown, but Google Calendar could not be reached.'}
+        </div>
+      )}
+      {highlight && (
+        <button
+          type="button"
+          className={`agenda-highlight ${highlight.kind}`}
+          onClick={() => selectEvent(highlight.event)}
+        >
+          <span>{highlight.kind === 'now' ? 'Happening now' : 'Up next'}</span>
+          <b>{highlight.event.title}</b>
+          <small>
+            {highlight.kind === 'next' && !isSameDay(highlight.event.date, today)
+              ? `${format(highlight.event.date, 'EEE, MMM d')} · `
+              : ''}
+            {highlight.event.start}
+            {highlight.event.end ? ` – ${highlight.event.end}` : ''}
+            {highlight.event.calendar ? ` · ${highlight.event.calendar}` : ''}
+          </small>
+        </button>
+      )}
+      <div className="agenda-days">
+        {upcomingDays.map((group) => (
+          <section className="panel agenda-day" key={group.date.toISOString()}>
+            <div className="panel-title">
+              <div>
+                <h2>{agendaDayLabel(group.date, today)}</h2>
+                <p>{format(group.date, 'MMMM d')}</p>
+              </div>
+              <button type="button" onClick={() => openCalendar(group.date)}>
+                Open in calendar <ChevronRight size={15} />
+              </button>
+            </div>
+            {group.events.length
+              ? (
+                <div className="agenda-list">
+                  {group.events.map((event) => (
+                    <button
+                      type="button"
+                      className={`agenda-item ${isAgendaEventHappening(event, now) ? 'happening' : ''}`}
+                      onClick={() => selectEvent(event)}
+                      key={event.id}
+                    >
+                      <div className="agenda-date">
+                        <b>{event.allDay ? 'All' : format(event.date, 'h:mm')}</b>
+                        <span>{event.allDay ? 'day' : format(event.date, 'a')}</span>
+                      </div>
+                      <i className={event.color} />
+                      <div className="agenda-info">
+                        <b>{event.title}</b>
+                        <span>
+                          <Clock3 size={13} />
+                          {event.start}
+                          {event.end ? ` – ${event.end}` : ''}
+                          {event.location && <><MapPin size={13} />{event.location}</>}
+                        </span>
+                      </div>
+                      <div className={`tiny-avatar ${event.color}`}>{event.calendar.slice(0, 1).toUpperCase()}</div>
+                    </button>
+                  ))}
+                </div>
+              )
+              : (
+                <div className="agenda-empty">
+                  {loading
+                    ? <span className="calendar-loading"><LoaderCircle size={16} />Loading today's plans</span>
+                    : 'Nothing on the calendar today. Enjoy the open space, or add an event.'}
+                </div>
+              )}
+          </section>
+        ))}
+        {loading && hasEvents && (
+          <p className="agenda-hint calendar-loading"><LoaderCircle size={16} />Updating the week ahead</p>
+        )}
+        {!hasEvents && !loading && sources.google === 'disconnected' && (
+          <p className="agenda-hint">Connect Google Calendar in Integrations, or add a family event to fill this list.</p>
+        )}
+      </div>
     </div>
-  </div>
+  )
 }
 
 function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => void }) {
