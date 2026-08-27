@@ -1,0 +1,2 @@
+export const MAX_PROPOSED_EVENTS = 30
+export const MAX_PLANNER_WARNINGS = 30

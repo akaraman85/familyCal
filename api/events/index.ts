@@ -13,6 +13,7 @@ import {
 } from '../_lib/event-search.js'
 import { integrationEnv } from '../_lib/env.js'
 import { verifyPlannerProposal } from '../_lib/planner-confirmation.js'
+import { MAX_PROPOSED_EVENTS } from '../_lib/planner-limits.js'
 import {
   errorMessage,
   readJsonBody,
@@ -168,8 +169,8 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     }
     const body = rawBody as Record<string, unknown>
     if (Array.isArray(body.events)) {
-      if (!body.events.length || body.events.length > 20) {
-        throw new ValidationError('Create between 1 and 20 events at a time')
+      if (!body.events.length || body.events.length > MAX_PROPOSED_EVENTS) {
+        throw new ValidationError(`Create between 1 and ${MAX_PROPOSED_EVENTS} events at a time`)
       }
       const events = body.events.map((item) => {
         if (!item || typeof item !== 'object' || Array.isArray(item)) {
