@@ -1,5 +1,9 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 import type { PlannerConfirmationEvent } from './planner-confirmation.js'
+import {
+  MAX_PLANNER_WARNINGS,
+  MAX_PROPOSED_EVENTS,
+} from './planner-limits.js'
 
 const MAX_CONTEXT_TOKEN_LENGTH = 48_000
 const MAX_TURNS = 8
@@ -66,9 +70,9 @@ export function readPlannerContext(token: string, ownerId: string) {
       || !['proposal', 'needs_clarification', 'calendar_info'].includes(state.status)
       || typeof state.assistantMessage !== 'string'
       || !Array.isArray(state.events)
-      || state.events.length > 20
+      || state.events.length > MAX_PROPOSED_EVENTS
       || !Array.isArray(state.warnings)
-      || state.warnings.length > 10
+      || state.warnings.length > MAX_PLANNER_WARNINGS
     ) {
       return null
     }
