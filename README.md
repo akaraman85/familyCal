@@ -16,6 +16,7 @@ calendar views.
 - Family member and preference administration
 - Responsive desktop and mobile layouts
 - Installable progressive web app on iPhone, iPad, and desktop
+- Web push event reminders on installed devices
 
 ## Development
 
@@ -38,7 +39,21 @@ The production site is a progressive web app. After deploying over HTTPS:
 2. Tap **Share**, then **Add to Home Screen**, then **Add**.
 3. Open **Karaman** from the Home Screen. It launches full screen, without Safari’s toolbar.
 
-Safari is required for Home Screen install on iOS. Settings includes the same steps, and iPhone/iPad Safari shows a dismissible install hint until the app is added. Regenerating app icons: `npm run icons`.
+Safari is required for Home Screen install on iOS. Settings includes the same steps, and iPhone/iPad Safari shows a dismissible install hint until the app is added. After installing, open **Settings → Notifications** from the Home Screen app and allow notifications so event reminders can appear. Regenerating app icons: `npm run icons`.
+
+## Event reminders
+
+Installed devices can receive native OS notifications through Web Push. The
+permission prompt must be accepted from the Home Screen app on iPhone and iPad.
+
+Timed family and Google Calendar events send a reminder 15, 30, or 60 minutes
+before they start. All-day events send at 8:00 AM in the household timezone from
+AI Planner settings. A Vercel Cron job checks due reminders every five minutes;
+that frequency requires a Vercel plan that allows sub-daily crons.
+
+Generate VAPID keys with `npm run vapid` and store them only as server
+environment variables. Subscription keys are encrypted with
+`INTEGRATION_ENCRYPTION_KEY` before they are written to Postgres.
 
 ## Deployment policy
 
@@ -143,6 +158,8 @@ Before deployment, provision:
 | Token encryption | Set server-only `INTEGRATION_ENCRYPTION_KEY` to the output of `openssl rand -base64 32`. Back it up securely; changing it invalidates stored grants. |
 | Canonical URL | Set `PUBLIC_APP_URL` to the exact public origin, without a trailing slash. |
 | Integration owner | Set `INTEGRATION_OWNER_ID` to a stable, non-secret identifier for this family deployment. |
+| Web Push | Run `npm run vapid` and set server-only `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. |
+| Reminder cron | Set server-only `CRON_SECRET` to `openssl rand -base64 32`. Vercel Cron sends it as a bearer token to `/api/notifications/dispatch` every five minutes. |
 
 The current product is a single-family deployment with one shared temporary
 login, not a multi-user identity system. Vercel Deployment Protection remains

@@ -60,7 +60,10 @@ export function IosInstallGuide() {
     <div className="install-guide">
       <h2>Install on iPhone &amp; iPad</h2>
       {installed ? (
-        <p>Karaman is installed on this device. Open it from the Home Screen anytime, without Safari’s toolbar.</p>
+        <>
+          <p>Karaman is installed on this device. Open it from the Home Screen anytime, without Safari’s toolbar.</p>
+          <p className="install-guide-note">Event reminders: open Settings → Notifications and allow notifications from this Home Screen app.</p>
+        </>
       ) : (
         <>
           <p>Add the family calendar to your Home Screen so it opens full screen, like a native app.</p>
