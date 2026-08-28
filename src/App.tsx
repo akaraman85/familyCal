@@ -28,6 +28,7 @@ import {
 import {
   applyMovePreview,
   draftForDate,
+  layoutGridTimedEvents,
   movedEventWrite,
   previewStyle,
   TIMELINE_END_MINUTES,
@@ -35,9 +36,11 @@ import {
   TIMELINE_START_MINUTES,
   timelinePercent,
   timelinePosition,
+  timedOverlapStyleVars,
   WEEK_GUTTER_WIDTH,
   type EventDraft,
   type MovePreview,
+  type TimedOverlapLayout,
 } from './calendar-slot'
 import { useTimelineInteraction } from './use-timeline-interaction'
 import {
@@ -970,6 +973,27 @@ function labeledMovedEvents(events: EventItem[], preview: MovePreview | null) {
   })
 }
 
+function timedBlockStyle(event: EventItem, layout: TimedOverlapLayout | undefined): CSSProperties | null {
+  const position = timelinePosition(event)
+  if (!position) return null
+  return { ...position, ...timedOverlapStyleVars(layout) }
+}
+
+function timedEventClassName(
+  base: 'week-event' | 'day-event-card',
+  event: EventItem,
+  movePreview: MovePreview | null,
+  layout: TimedOverlapLayout | undefined,
+) {
+  return [
+    base,
+    event.color,
+    event.source === 'saved' ? 'movable' : '',
+    movePreview?.eventId === event.id ? 'dragging' : '',
+    (layout?.columnCount ?? 1) > 1 ? 'is-split' : '',
+  ].filter(Boolean).join(' ')
+}
+
 function SlotGhost({
   startMinutes,
   endMinutes,
@@ -1151,48 +1175,53 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
         onLostPointerCapture={onGridPointerCancel}
       >
         <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: timelinePercent(hour * 60) }}>{timelineLabel(hour)}</span>)}</div>
-        {days.map((day) => (
-          <div
-            className="week-column"
-            key={day.toISOString()}
-            aria-label={`Create event on ${format(day, 'EEEE, MMMM d')}`}
-            onPointerDown={(pointer) => onColumnPointerDown(pointer, day)}
-            onPointerUp={onColumnPointerUp}
-            onMouseMove={(mouse) => {
-              if ((mouse.target as Element | null)?.closest('[data-calendar-event]')) {
-                onHoverLeave()
-                return
-              }
-              onHoverMove(mouse, day)
-            }}
-            onMouseLeave={onHoverLeave}
-          >
-            {timedPreview && isSameDay(timedPreview.startDay, day) && (
-              <SlotGhost
-                startMinutes={timedPreview.startMinutes}
-                endMinutes={timedPreview.endMinutes}
-                label={timedPreview.kind === 'create' ? slotPreviewLabel(timedPreview.startMinutes, timedPreview.endMinutes) : format(new Date(2026, 0, 1, 0, timedPreview.startMinutes), 'h:mm a')}
-              />
-            )}
-            {displayEvents.filter((event) => !event.allDay && isSameDay(event.date, day)).map((event) => {
-              const position = timelinePosition(event)
-              if (!position) return null
-              return (
-                <button
-                  type="button"
-                  className={`week-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
-                  style={position}
-                  title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
-                  key={event.id}
-                  {...eventPointerProps(event)}
-                >
-                  <b>{event.title}</b>
-                  <span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span>
-                </button>
-              )
-            })}
-          </div>
-        ))}
+        {days.map((day) => {
+          const dayTimed = displayEvents.filter((event) => !event.allDay && isSameDay(event.date, day))
+          const layouts = layoutGridTimedEvents(dayTimed)
+          return (
+            <div
+              className="week-column"
+              key={day.toISOString()}
+              aria-label={`Create event on ${format(day, 'EEEE, MMMM d')}`}
+              onPointerDown={(pointer) => onColumnPointerDown(pointer, day)}
+              onPointerUp={onColumnPointerUp}
+              onMouseMove={(mouse) => {
+                if ((mouse.target as Element | null)?.closest('[data-calendar-event]')) {
+                  onHoverLeave()
+                  return
+                }
+                onHoverMove(mouse, day)
+              }}
+              onMouseLeave={onHoverLeave}
+            >
+              {timedPreview && isSameDay(timedPreview.startDay, day) && (
+                <SlotGhost
+                  startMinutes={timedPreview.startMinutes}
+                  endMinutes={timedPreview.endMinutes}
+                  label={timedPreview.kind === 'create' ? slotPreviewLabel(timedPreview.startMinutes, timedPreview.endMinutes) : format(new Date(2026, 0, 1, 0, timedPreview.startMinutes), 'h:mm a')}
+                />
+              )}
+              {dayTimed.map((event) => {
+                const layout = layouts.get(event.id)
+                const style = timedBlockStyle(event, layout)
+                if (!style) return null
+                return (
+                  <button
+                    type="button"
+                    className={timedEventClassName('week-event', event, movePreview, layout)}
+                    style={style}
+                    title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+                    key={event.id}
+                    {...eventPointerProps(event)}
+                  >
+                    <b>{event.title}</b>
+                    <span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span>
+                  </button>
+                )
+              })}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -1232,6 +1261,7 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent }:
     && nowMinutes <= TIMELINE_END_MINUTES
   const nowTop = showNowLine ? timelinePercent(nowMinutes) : null
   const timedPreview = slotPreview && !slotPreview.allDay ? slotPreview : null
+  const timedLayouts = layoutGridTimedEvents(timedEvents)
   return (
     <div className={`day-view ${dragging ? 'is-dragging' : ''}`}>
       <div
@@ -1290,14 +1320,15 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent }:
             />
           )}
           {timedEvents.map((event) => {
-            const position = timelinePosition(event)
-            if (!position) return null
+            const layout = timedLayouts.get(event.id)
+            const style = timedBlockStyle(event, layout)
+            if (!style) return null
             return (
               <button
                 type="button"
-                className={`day-event-card ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
+                className={timedEventClassName('day-event-card', event, movePreview, layout)}
                 key={event.id}
-                style={position}
+                style={style}
                 title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
                 {...eventPointerProps(event)}
               >
