@@ -26,13 +26,13 @@ registerRoute(({ url }) => url.pathname.startsWith('/api/'), new NetworkOnly())
 try {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-      denylist: [/^\/api\//],
+      denylist: [/^\/api\//, /^\/privacy(?:\.html)?\/?$/],
     }),
   )
 } catch {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('index.html'), {
-      denylist: [/^\/api\//],
+      denylist: [/^\/api\//, /^\/privacy(?:\.html)?\/?$/],
     }),
   )
 }
