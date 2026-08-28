@@ -47,7 +47,7 @@ export async function loadGoogleCalendars() {
     headers: { Accept: 'application/json' },
     credentials: 'same-origin',
   })
-  return responseJson<{ calendars: GoogleCalendar[] }>(response)
+  return responseJson<{ calendars: GoogleCalendar[]; reconnectAccountIds?: string[] }>(response)
 }
 
 export async function updateGoogleCalendarInclusion(

@@ -76,7 +76,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       : undefined
     const credentials = credentialsFromGoogleToken(
       token,
-      existingCredentials?.refreshToken,
+      existing?.status === 'connected' ? existingCredentials?.refreshToken : undefined,
     )
 
     await upsertIntegrationAccount(env.databaseUrl, {

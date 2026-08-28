@@ -36,7 +36,7 @@ export type CalendarEventData = {
 
 export type EventSources = {
   saved: 'ok'
-  google: 'ok' | 'disconnected' | 'error'
+  google: 'ok' | 'disconnected' | 'error' | 'reconnect'
 }
 
 async function readResponse<T>(response: Response) {

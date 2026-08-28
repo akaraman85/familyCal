@@ -1,6 +1,7 @@
 import {
   listCalendarExclusions,
   listIntegrationAccountsWithCredentials,
+  updateIntegrationAccountStatus,
   type IntegrationAccountRow,
 } from './db.js'
 import type { CalendarEvent } from './events.js'
@@ -19,6 +20,7 @@ import {
   getGoogleAccessToken,
   GOOGLE_CALENDAR_PROVIDER_ID,
   hasGoogleCalendarReadScope,
+  isGoogleAuthRevokedError,
   listAllGoogleEvents,
 } from './providers/google-calendar.js'
 
@@ -29,7 +31,50 @@ const CALENDAR_TYPE_RANK = {
   primary: 3,
 } as const
 
+export type ConnectedGoogleStatus = 'ok' | 'disconnected' | 'error' | 'reconnect'
+
 const inflightFetches = new Map<string, Promise<CalendarEvent[]>>()
+
+export function retainInflight<T>(
+  map: Map<string, Promise<T>>,
+  key: string,
+  start: () => Promise<T>,
+): Promise<T> {
+  const existing = map.get(key)
+  if (existing) return existing
+  const pending = start()
+  map.set(key, pending)
+  // Settle the cleanup chain so a rejected fetch cannot become an unhandled
+  // rejection after the caller has already caught the original promise.
+  void pending.then(
+    () => undefined,
+    () => undefined,
+  ).finally(() => {
+    if (map.get(key) === pending) map.delete(key)
+  })
+  return pending
+}
+
+async function markGoogleAccountNeedsReconnect(
+  databaseUrl: string,
+  ownerId: string,
+  externalAccountId: string,
+) {
+  try {
+    await updateIntegrationAccountStatus(
+      databaseUrl,
+      ownerId,
+      GOOGLE_CALENDAR_PROVIDER_ID,
+      externalAccountId,
+      'error',
+    )
+  } catch (error) {
+    console.error(
+      `Unable to mark Google account ${externalAccountId} as needing reconnect`,
+      error,
+    )
+  }
+}
 
 export async function invalidateConnectedCalendarCache(
   databaseUrl: string,
@@ -99,8 +144,7 @@ async function fetchAccountEvents(config: {
     fingerprint,
   ].join(':')
 
-  const existing = inflightFetches.get(fetchKey)
-  const fetchEvents = existing ?? (async () => {
+  const fetchEvents = retainInflight(inflightFetches, fetchKey, async () => {
     const accessToken = await getGoogleAccessToken({
       databaseUrl: config.databaseUrl,
       encryptionKey: config.encryptionKey,
@@ -125,16 +169,7 @@ async function fetchAccountEvents(config: {
       fingerprint,
     )
     return events
-  })()
-
-  if (!existing) {
-    inflightFetches.set(fetchKey, fetchEvents)
-    fetchEvents.finally(() => {
-      if (inflightFetches.get(fetchKey) === fetchEvents) {
-        inflightFetches.delete(fetchKey)
-      }
-    })
-  }
+  })
 
   const events = await fetchEvents
   return events.filter((event) => eventOverlapsRange(event, config.timeMin, config.timeMax))
@@ -171,6 +206,12 @@ export async function loadConnectedGoogleEvents(config: {
   if (!readableAccounts.length) {
     return { events: [] as CalendarEvent[], status: 'error' as const, stale: false }
   }
+  const liveAccounts = readableAccounts.filter((account) => account.status !== 'error')
+  const reconnectAccountIds = new Set(
+    readableAccounts
+      .filter((account) => account.status === 'error')
+      .map((account) => account.external_account_id),
+  )
 
   const months = monthStartsOverlapping(config.timeMin, config.timeMax)
   const accountIds = readableAccounts.map((account) => account.external_account_id)
@@ -198,18 +239,25 @@ export async function loadConnectedGoogleEvents(config: {
     fingerprints,
   )
   const stale = !freshness.complete || !freshness.fresh
-
+  const cachedStatus: ConnectedGoogleStatus = reconnectAccountIds.size ? 'reconnect' : 'ok'
   if (!config.revalidate && freshness.complete) {
-    return { events: cachedEvents, status: 'ok' as const, stale }
+    return { events: cachedEvents, status: cachedStatus, stale }
   }
   if (!config.revalidate) {
-    return { events: cachedEvents, status: 'ok' as const, stale: true }
+    return { events: cachedEvents, status: cachedStatus, stale: true }
+  }
+  if (!liveAccounts.length) {
+    return {
+      events: cachedEvents,
+      status: 'reconnect' as const,
+      stale: !freshness.complete || !freshness.fresh,
+    }
   }
 
   const eventsById = new Map<string, CalendarEvent>()
-  let status: 'ok' | 'error' = 'ok'
-  const failedAccounts = new Set<string>()
-  for (const account of readableAccounts) {
+  let status: ConnectedGoogleStatus = reconnectAccountIds.size ? 'reconnect' : 'ok'
+  const fallbackAccountIds = new Set(reconnectAccountIds)
+  for (const account of liveAccounts) {
     try {
       const accountEvents = await fetchAccountEvents({
         ...config,
@@ -222,17 +270,31 @@ export async function loadConnectedGoogleEvents(config: {
       })
       for (const event of accountEvents) mergeGoogleEvent(eventsById, event)
     } catch (error) {
-      status = 'error'
-      failedAccounts.add(account.external_account_id)
-      console.error(
-        `Unable to load Google Calendar events for ${account.external_account_id}`,
-        error,
-      )
+      fallbackAccountIds.add(account.external_account_id)
+      if (isGoogleAuthRevokedError(error)) {
+        reconnectAccountIds.add(account.external_account_id)
+        if (status === 'ok') status = 'reconnect'
+        console.error(
+          `Google Calendar grant revoked for ${account.external_account_id}`,
+          error,
+        )
+        await markGoogleAccountNeedsReconnect(
+          config.databaseUrl,
+          config.ownerId,
+          account.external_account_id,
+        )
+      } else {
+        status = 'error'
+        console.error(
+          `Unable to load Google Calendar events for ${account.external_account_id}`,
+          error,
+        )
+      }
     }
   }
-  if (failedAccounts.size) {
+  if (fallbackAccountIds.size) {
     for (const row of cacheRows) {
-      if (!failedAccounts.has(row.external_account_id)) continue
+      if (!fallbackAccountIds.has(row.external_account_id)) continue
       if (row.exclusion_fingerprint !== fingerprints.get(row.external_account_id)) continue
       for (const event of row.events) {
         if (eventOverlapsRange(event, config.timeMin, config.timeMax)) {

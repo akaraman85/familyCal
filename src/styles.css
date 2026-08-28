@@ -211,7 +211,8 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
 .calendar-legend span { display:flex; align-items:center; gap:5px; }
 .calendar-loading { display:flex;align-items:center;gap:5px; }
 .calendar-loading svg { animation:spin 1s linear infinite; }
-.calendar-source-error { border:1px solid var(--error-border);background:var(--orange-soft);color:var(--error-text);border-radius:9px;padding:10px 13px;font-size:9px;margin-bottom:12px; }
+.calendar-source-error { border:1px solid var(--error-border);background:var(--orange-soft);color:var(--error-text);border-radius:9px;padding:10px 13px;font-size:9px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;gap:10px; }
+.calendar-source-error button { border:0;background:none;color:inherit;font-size:9px;font-weight:700;cursor:pointer;white-space:nowrap; }
 .dot { width:6px; height:6px; border-radius:50%; display:inline-block; }
 .dot.family, .dot.green { background:var(--green); }.dot.alex, .dot.blue { background:var(--blue); }.dot.maya, .dot.coral { background:var(--orange); }.dot.gold { background:var(--gold); }
 

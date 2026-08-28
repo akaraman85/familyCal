@@ -35,6 +35,52 @@ type GoogleTokenResponse = {
   error_description?: string
 }
 
+export class GoogleAuthRevokedError extends Error {
+  readonly code = 'google_auth_revoked' as const
+
+  constructor() {
+    super('Google Calendar access was revoked. Reconnect the account.')
+    this.name = 'GoogleAuthRevokedError'
+  }
+}
+
+export function isRevokedGoogleGrant(
+  error?: string | null,
+  description?: string | null,
+) {
+  const code = (error ?? '').toLowerCase()
+  const text = (description ?? '').toLowerCase()
+  return (
+    code === 'invalid_grant'
+    || text.includes('invalid_grant')
+    || text.includes('expired or revoked')
+    || text.includes('token has been expired')
+    || /\brevoked\b/.test(text)
+  )
+}
+
+export function isGoogleAuthRevokedError(error: unknown): error is GoogleAuthRevokedError {
+  if (error instanceof GoogleAuthRevokedError) return true
+  if (!(error instanceof Error)) return false
+  if (error.name === 'GoogleAuthRevokedError') return true
+  return isRevokedGoogleGrant(undefined, error.message)
+}
+
+export function parseGoogleTokenResponse(token: GoogleTokenResponse, responseOk: boolean) {
+  if (
+    responseOk
+    && !token.error
+    && token.access_token
+    && token.expires_in
+  ) {
+    return token
+  }
+  if (isRevokedGoogleGrant(token.error, token.error_description)) {
+    throw new GoogleAuthRevokedError()
+  }
+  throw new Error(token.error_description || token.error || 'Google token exchange failed')
+}
+
 export type GoogleUserInfo = {
   sub: string
   email?: string
@@ -105,15 +151,7 @@ async function tokenRequest(body: URLSearchParams) {
     body,
   })
   const token = await response.json() as GoogleTokenResponse
-  if (
-    !response.ok
-    || token.error
-    || !token.access_token
-    || !token.expires_in
-  ) {
-    throw new Error(token.error_description || token.error || 'Google token exchange failed')
-  }
-  return token
+  return parseGoogleTokenResponse(token, response.ok)
 }
 
 export async function exchangeGoogleCode(config: GoogleProviderConfig, code: string) {
@@ -161,7 +199,7 @@ export async function getGoogleAccessToken(config: {
     config.encryptionKey,
   )
   if (credentials.expiresAt > Date.now() + 60_000) return credentials.accessToken
-  if (!credentials.refreshToken) throw new Error('Google refresh token is unavailable')
+  if (!credentials.refreshToken) throw new GoogleAuthRevokedError()
 
   const token = await tokenRequest(new URLSearchParams({
     refresh_token: credentials.refreshToken,
@@ -193,6 +231,7 @@ export async function listGoogleCalendars(accessToken: string) {
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
+    if (response.status === 401) throw new GoogleAuthRevokedError()
     if (!response.ok) throw new Error('Unable to read Google calendars')
     const page = await response.json() as GoogleCalendarList
     calendars.push(...(page.items ?? []))
@@ -250,6 +289,7 @@ async function listGoogleCalendarEvents(
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
+    if (response.status === 401) throw new GoogleAuthRevokedError()
     if (!response.ok) {
       throw new Error(`Unable to read events from ${calendar.summary}`)
     }
