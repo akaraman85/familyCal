@@ -23,7 +23,7 @@ export type EventSearchConfig = {
 
 export type EventSearchSources = {
   saved: 'ok' | 'skipped'
-  google: 'ok' | 'disconnected' | 'error' | 'skipped'
+  google: 'ok' | 'disconnected' | 'error' | 'skipped' | 'reconnect'
 }
 
 export type EventSearchResult = {

@@ -170,6 +170,22 @@ export async function upsertIntegrationAccount(
   )
 }
 
+export async function updateIntegrationAccountStatus(
+  databaseUrl: string,
+  ownerId: string,
+  provider: string,
+  externalAccountId: string,
+  status: IntegrationAccountRow['status'],
+) {
+  const sql = database(databaseUrl)
+  await sql.query(
+    `UPDATE integration_accounts
+        SET status = $4, updated_at = NOW()
+      WHERE owner_id = $1 AND provider = $2 AND external_account_id = $3`,
+    [ownerId, provider, externalAccountId, status],
+  )
+}
+
 export async function updateEncryptedCredentials(
   databaseUrl: string,
   ownerId: string,

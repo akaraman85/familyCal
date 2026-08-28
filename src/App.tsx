@@ -192,6 +192,26 @@ function hasGoogleCalendarPermission(scopes: string[]) {
   return scopes.includes(GOOGLE_CALENDAR_READ_SCOPE)
 }
 
+function isGoogleReconnectMessage(message: string) {
+  return /invalid_grant|expired or revoked|token has been expired|\brevoked\b|reconnect the account/i.test(
+    message,
+  )
+}
+
+function googleSourceNotice(sources: EventSources, hasGoogleEvents: boolean) {
+  if (sources.google === 'reconnect') {
+    return hasGoogleEvents
+      ? 'A Google account needs to be reconnected. Showing the last loaded Google events plus family events.'
+      : 'A Google account needs to be reconnected. Family events are still shown.'
+  }
+  if (sources.google === 'error') {
+    return hasGoogleEvents
+      ? 'Google Calendar could not be refreshed. Showing the last loaded events.'
+      : 'Saved events are shown, but Google Calendar could not be reached.'
+  }
+  return null
+}
+
 function eventDate(event: CalendarEventData) {
   if (!event.allDay) return new Date(event.startAt)
   const [year, month, day] = event.startAt.split('-').map(Number)
@@ -877,6 +897,7 @@ function AuthenticatedApp({ user, onLogout }: {
             createAtSlot={openCreate}
             moveEvent={moveSavedEvent}
             isMobile={isMobile}
+            openIntegrations={() => setPage('Integrations')}
           />
         )}
         {page === 'Agenda' && (
@@ -887,6 +908,7 @@ function AuthenticatedApp({ user, onLogout }: {
             sources={eventSources}
             openModal={() => openCreate()}
             selectEvent={setSelectedEvent}
+            openIntegrations={() => setPage('Integrations')}
             openCalendar={(date) => {
               setSelectedDate(date)
               changeView('Day')
@@ -992,22 +1014,34 @@ function slotPreviewLabel(startMinutes: number, endMinutes: number) {
   return `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile, openIntegrations }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
   loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
   createAtSlot: (draft: EventDraft) => void
   moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void
   isMobile: boolean
+  openIntegrations: () => void
 }) {
   const selectDay = (day: Date) => {
     setSelectedDate(day)
     if (isMobile && view !== 'Day') setView('Day')
   }
+  const sourceNotice = googleSourceNotice(
+    sources,
+    events.some((event) => event.source === 'google'),
+  )
   return (
     <div className="page calendar-page">
       {error && <div className="calendar-source-error" role="alert">{error}</div>}
-      {!error && sources.google === 'error' && <div className="calendar-source-error" role="status">{events.some((event) => event.source === 'google') ? 'Google Calendar could not be refreshed. Showing the last loaded events.' : 'Saved events are shown, but Google Calendar could not be reached.'}</div>}
+      {!error && sourceNotice && (
+        <div className="calendar-source-error" role="status">
+          <span>{sourceNotice}</span>
+          {sources.google === 'reconnect' && (
+            <button type="button" onClick={openIntegrations}>Open Integrations</button>
+          )}
+        </div>
+      )}
       <section className="calendar-card">
         <div className="mobile-calendar-header mobile-only">
           <div className="mobile-calendar-top">
@@ -1326,7 +1360,7 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
   })}</div>
 }
 
-function AgendaPage({ events, loading, error, sources, openModal, selectEvent, openCalendar }: {
+function AgendaPage({ events, loading, error, sources, openModal, selectEvent, openCalendar, openIntegrations }: {
   events: EventItem[]
   loading: boolean
   error: string | null
@@ -1334,6 +1368,7 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
   openModal: () => void
   selectEvent: (event: EventItem) => void
   openCalendar: (date: Date) => void
+  openIntegrations: () => void
 }) {
   const now = new Date()
   const today = startOfDay(now)
@@ -1347,6 +1382,10 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
     return { date, events: sortedEvents.filter((event) => isSameDay(event.date, date)) }
   }).filter((group, index) => index === 0 || group.events.length > 0)
   const hasEvents = sortedEvents.length > 0
+  const sourceNotice = googleSourceNotice(
+    sources,
+    events.some((event) => event.source === 'google'),
+  )
 
   return (
     <div className="page agenda-page">
@@ -1359,11 +1398,12 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
         <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>
       </div>
       {error && <div className="calendar-source-error" role="alert">{error}</div>}
-      {!error && sources.google === 'error' && (
+      {!error && sourceNotice && (
         <div className="calendar-source-error" role="status">
-          {events.some((event) => event.source === 'google')
-            ? 'Google Calendar could not be refreshed. Showing the last loaded events.'
-            : 'Saved events are shown, but Google Calendar could not be reached.'}
+          <span>{sourceNotice}</span>
+          {sources.google === 'reconnect' && (
+            <button type="button" onClick={openIntegrations}>Open Integrations</button>
+          )}
         </div>
       )}
       {highlight && (
@@ -1448,6 +1488,7 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
 function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => void }) {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [calendars, setCalendars] = useState<GoogleCalendar[]>([])
+  const [reconnectAccountIds, setReconnectAccountIds] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [workingAccountId, setWorkingAccountId] = useState<string | null>(null)
   const [workingCalendar, setWorkingCalendar] = useState<string | null>(null)
@@ -1462,20 +1503,38 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
     try {
       const data = await loadFamilyMembers()
       setMembers(data.members)
-      const hasReadableGoogleAccount = data.members.some((member) => (
+      const reconnectFromStatus = data.members.flatMap((member) => (
+        member.integrations
+          .filter((account) => (
+            account.provider === 'google-calendar' && account.status === 'error'
+          ))
+          .map((account) => account.id)
+      ))
+      setReconnectAccountIds(reconnectFromStatus)
+      const hasLiveReadableGoogleAccount = data.members.some((member) => (
         member.integrations.some((account) => (
           account.provider === 'google-calendar'
+          && account.status !== 'error'
           && hasGoogleCalendarPermission(account.scopes)
         ))
       ))
-      if (hasReadableGoogleAccount) {
+      if (hasLiveReadableGoogleAccount) {
         const calendarData = await loadGoogleCalendars()
         setCalendars(calendarData.calendars)
+        setReconnectAccountIds([
+          ...new Set([
+            ...reconnectFromStatus,
+            ...(calendarData.reconnectAccountIds ?? []),
+          ]),
+        ])
       } else {
         setCalendars([])
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to load integrations')
+      const message = requestError instanceof Error
+        ? requestError.message
+        : 'Unable to load integrations'
+      setError(message)
     } finally {
       setLoading(false)
     }
@@ -1523,10 +1582,21 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
     }
   }
 
+  const reconnectError = Boolean(error && isGoogleReconnectMessage(error))
+  const showReconnectBanner = !error && reconnectAccountIds.length > 0
+
   return <div className="page">
     <div className="page-heading"><div><p className="eyebrow">Admin dashboard</p><h1>Integrations</h1><p>Manage calendar accounts under each family member.</p></div></div>
     <div className="integration-notice"><div><Sparkles size={19}/><span><b>Secure by design</b> Provider credentials and OAuth tokens stay on the server and are never sent to this browser.</span></div></div>
-    {error && <div className="integration-error" role="alert">{error}<button onClick={() => { setError(null); void refresh() }}>Retry</button></div>}
+    {error && <div className="integration-error" role="alert">
+      {reconnectError
+        ? 'Google Calendar access was revoked or expired. Reconnect the affected account below.'
+        : error}
+      {!reconnectError && <button onClick={() => { setError(null); void refresh() }}>Retry</button>}
+    </div>}
+    {showReconnectBanner && <div className="integration-error" role="status">
+      Google Calendar access was revoked or expired for one or more accounts. Reconnect below — retry cannot restore a revoked grant.
+    </div>}
     {loading && !members.length
       ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family calendars</div>
       : <div className="member-integration-list">
@@ -1553,23 +1623,29 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
                 ))
               const includedCount = accountCalendars.filter((calendar) => calendar.included).length
               const hasCalendarPermission = hasGoogleCalendarPermission(account.scopes)
+              const needsReconnect = account.status === 'error'
+                || reconnectAccountIds.includes(account.id)
               return <div className="member-integration-account-group" key={account.id}>
                 <div className="member-integration-account">
                   <div className="integration-icon google">G</div>
                   <div>
                     <b>{accountName}</b>
-                    {hasCalendarPermission
-                      ? <span>{loading ? 'Checking calendars…' : `${includedCount} of ${accountCalendars.length} calendars included`}</span>
-                      : <span className="permission-help">Your Google profile is connected, but Calendar permission is missing. Reconnect and approve “See all your calendars.” A work account may require approval from its Google Workspace administrator.</span>}
+                    {needsReconnect
+                      ? <span className="permission-help">Google Calendar access was revoked or expired. Reconnect this account to load events again.</span>
+                      : hasCalendarPermission
+                        ? <span>{loading ? 'Checking calendars…' : `${includedCount} of ${accountCalendars.length} calendars included`}</span>
+                        : <span className="permission-help">Your Google profile is connected, but Calendar permission is missing. Reconnect and approve “See all your calendars.” A work account may require approval from its Google Workspace administrator.</span>}
                   </div>
-                  {hasCalendarPermission
-                    ? <span className="connected"><Check size={13}/>Connected</span>
-                    : <span className="permission-missing"><AlertTriangle size={13}/>Permission missing</span>}
+                  {needsReconnect
+                    ? <span className="permission-missing"><AlertTriangle size={13}/>Reconnect required</span>
+                    : hasCalendarPermission
+                      ? <span className="connected"><Check size={13}/>Connected</span>
+                      : <span className="permission-missing"><AlertTriangle size={13}/>Permission missing</span>}
                   <div className="integration-account-actions">
-                    {!hasCalendarPermission && <a
+                    {(needsReconnect || !hasCalendarPermission) && <a
                       className="reconnect-btn"
                       href={`/api/integrations/google/authorize?memberId=${encodeURIComponent(member.id)}`}
-                    >Grant access</a>}
+                    >{needsReconnect ? 'Reconnect' : 'Grant access'}</a>}
                     <button
                       className="disconnect-btn"
                       disabled={workingAccountId !== null}
@@ -1577,7 +1653,7 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
                     >{workingAccountId === account.id ? 'Disconnecting…' : 'Disconnect'}</button>
                   </div>
                 </div>
-                {hasCalendarPermission && accountCalendars.length > 0 && <div className="account-calendar-list">
+                {hasCalendarPermission && !needsReconnect && accountCalendars.length > 0 && <div className="account-calendar-list">
                   {accountCalendars.map((calendar) => {
                     const key = `${calendar.accountId}:${calendar.id}`
                     return <div className="account-calendar-row" key={calendar.id}>
