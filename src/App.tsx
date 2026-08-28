@@ -68,8 +68,8 @@ import {
   type PlannerSettings,
 } from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
-import { isPublicPrivacyPath } from './privacy-content'
-import { PrivacyPage } from './privacy-page'
+import { publicLegalDocument } from './legal'
+import { PrivacyPage, TermsPage } from './legal-page'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
 import { NotificationOptInHint, NotificationsSettings } from './notifications-settings'
@@ -483,19 +483,20 @@ function agendaDayLabel(day: Date, today: Date) {
 function App() {
   const [user, setUser] = useState<SessionUser | null>()
   const [sessionError, setSessionError] = useState<string | null>(null)
-  const publicPrivacy = isPublicPrivacyPath(window.location.pathname)
+  const legalDocument = publicLegalDocument(window.location.pathname)
 
   useEffect(() => {
-    if (publicPrivacy) return
+    if (legalDocument) return
     loadSession()
       .then(setUser)
       .catch((error: unknown) => {
         setSessionError(error instanceof Error ? error.message : 'Authentication is unavailable')
         setUser(null)
       })
-  }, [publicPrivacy])
+  }, [legalDocument])
 
-  if (publicPrivacy) return <PrivacyPage />
+  if (legalDocument === 'privacy') return <PrivacyPage />
+  if (legalDocument === 'terms') return <TermsPage />
 
   if (user === undefined) {
     return <div className="auth-loading"><LoaderCircle size={24}/><span>Checking access…</span></div>
@@ -561,7 +562,11 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
           {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
         </button>
       </form>
-      <p className="login-privacy"><a href="/privacy">Privacy policy</a></p>
+      <p className="login-privacy">
+        <a href="/privacy">Privacy policy</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/terms">Terms of service</a>
+      </p>
     </div>
   </main>
 }
@@ -1893,6 +1898,7 @@ function SettingsPage({ onCalendarSettingsSaved }: {
       <button className={tab === 'planner' ? 'active' : ''} onClick={() => setTab('planner')}>AI Planner</button>
       <button className={tab === 'notifications' ? 'active' : ''} onClick={() => setTab('notifications')}>Notifications</button>
       <a href="/privacy">Privacy</a>
+      <a href="/terms">Terms</a>
       <button disabled>Account</button>
     </div>
     {tab === 'notifications' ? (

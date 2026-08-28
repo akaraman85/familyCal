@@ -14,6 +14,7 @@ assert.match(html, /alexkaraman85@gmail.com/)
 assert.match(html, /calendar\.readonly/)
 assert.match(html, /AES-256-GCM/)
 assert.match(html, /Vercel AI Gateway/)
+assert.match(html, /href="\/terms"/)
 assert.doesNotMatch(html, /APP_PASSWORD/)
 assert.doesNotMatch(html, /GOOGLE_CLIENT_SECRET/)
 

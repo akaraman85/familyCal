@@ -546,6 +546,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .login-privacy { margin:2px 0 0;text-align:center; }
 .login-privacy a { color:var(--text-dim);font-size:11px;text-decoration:none; }
 .login-privacy a:hover { color:var(--ink);text-decoration:underline; }
+.login-privacy span { color:var(--text-faint); }
 
 .privacy-page { margin-left:0;min-height:100vh;min-height:100dvh;display:flex;justify-content:center;padding:max(32px,env(safe-area-inset-top,0px)) 24px max(48px,env(safe-area-inset-bottom,0px));background:radial-gradient(circle at 50% 10%,var(--panel) 0,var(--bg) 58%); }
 .privacy-card { width:min(720px,100%);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:34px;box-shadow:var(--login-shadow); }
@@ -556,6 +557,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .privacy-card section p { color:var(--ink);font-size:14px;line-height:1.65;margin:0 0 10px; }
 .privacy-home { margin:28px 0 0;font-size:13px; }
 .privacy-home a { color:var(--orange); }
+.privacy-home span { color:var(--muted); }
 
 
 .theme-options { display:flex; background:var(--inset); padding:3px; border-radius:8px; }
