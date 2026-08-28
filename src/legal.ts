@@ -1,11 +1,49 @@
-<!doctype html>
+export const LEGAL_CONTACT_EMAIL = 'alexkaraman85@gmail.com'
+
+export type LegalSection = {
+  heading: string
+  paragraphs: string[]
+}
+
+export type LegalDocument = {
+  title: string
+  description: string
+  heading: string
+  updated: string
+  sections: LegalSection[]
+  otherHref: string
+  otherLabel: string
+}
+
+export function publicLegalDocument(pathname: string): 'privacy' | 'terms' | null {
+  const path = pathname.replace(/\/+$/, '') || '/'
+  if (path === '/privacy' || path === '/privacy.html') return 'privacy'
+  if (path === '/terms' || path === '/terms.html') return 'terms'
+  return null
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+}
+
+export function renderLegalHtml(document: LegalDocument) {
+  const sections = document.sections.map((section) => `
+      <section>
+        <h2>${escapeHtml(section.heading)}</h2>
+        ${section.paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph)}</p>`).join('\n        ')}
+      </section>`).join('\n')
+
+  return `<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="theme-color" content="#f5f4f0" />
     <meta name="color-scheme" content="light dark" />
-    <meta name="description" content="Privacy policy for Karaman Calendar, a private household calendar dashboard." />
+    <meta name="description" content="${escapeHtml(document.description)}" />
     <script>
       (function () {
         try {
@@ -23,7 +61,7 @@
       })()
     </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <title>Privacy policy · Karaman Calendar</title>
+    <title>${escapeHtml(document.title)}</title>
     <style>
       @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@600;700&display=swap');
       :root {
@@ -97,62 +135,13 @@
       <article>
         <div class="brand" aria-hidden="true">K</div>
         <p class="eyebrow">Karaman Calendar</p>
-        <h1>Privacy policy</h1>
-        <p class="updated">Last updated August 28, 2026</p>
-        
-      <section>
-        <h2>Who this is for</h2>
-        <p>Karaman Calendar (also called Family Calendar) is a private household calendar dashboard for a single family. It is not a public or multi-family product.</p>
-      </section>
-
-      <section>
-        <h2>Sign-in</h2>
-        <p>Calendars, family data, and Google connections require a shared household login. That session is kept in an HTTP-only cookie for 12 hours. This privacy policy is public and does not require that login.</p>
-      </section>
-
-      <section>
-        <h2>Google Calendar</h2>
-        <p>Connecting Google Calendar requests only openid, email, profile, and read-only Calendar access (https://www.googleapis.com/auth/calendar.readonly). The app cannot create, change, or delete Google events.</p>
-        <p>Google events are displayed on the household dashboard. They are not imported as family events.</p>
-      </section>
-
-      <section>
-        <h2>Where Google credentials are stored</h2>
-        <p>Google access and refresh tokens are encrypted with AES-256-GCM and stored in Postgres. The browser never receives those provider credentials. It only receives the event details needed to draw the calendar.</p>
-        <p>A short server-side cache of Google events may be kept so the calendar loads quickly. That cache is not an import into the family calendar, and it is deleted when the Google account is disconnected.</p>
-      </section>
-
-      <section>
-        <h2>Household data</h2>
-        <p>Family events, family members, and preferences (calendar views and AI Planner settings) are stored in Postgres for this single-family deployment.</p>
-      </section>
-
-      <section>
-        <h2>Notifications</h2>
-        <p>If Web Push reminders are enabled on an installed device, the push subscription is stored encrypted in Postgres.</p>
-      </section>
-
-      <section>
-        <h2>AI Planner</h2>
-        <p>When an authenticated user submits a planning request, scheduling text and any attached calendar screenshots may be sent to the selected model through Vercel AI Gateway. That happens only for that request. The planner does not save events until the user confirms the proposals.</p>
-      </section>
-
-      <section>
-        <h2>Selling and sharing</h2>
-        <p>We do not sell this data. We do not use it for advertising.</p>
-      </section>
-
-      <section>
-        <h2>Disconnecting Google</h2>
-        <p>Disconnecting a Google account revokes the Google grant and deletes the stored encrypted credentials for that account.</p>
-      </section>
-
-      <section>
-        <h2>Contact</h2>
-        <p>Questions about this policy: alexkaraman85@gmail.com.</p>
-      </section>
-        <p class="home"><a href="/">Back to Karaman Calendar</a><span> · </span><a href="/terms">Terms of service</a></p>
+        <h1>${escapeHtml(document.heading)}</h1>
+        <p class="updated">Last updated ${escapeHtml(document.updated)}</p>
+        ${sections}
+        <p class="home"><a href="/">Back to Karaman Calendar</a><span> · </span><a href="${escapeHtml(document.otherHref)}">${escapeHtml(document.otherLabel)}</a></p>
       </article>
     </main>
   </body>
 </html>
+`
+}
