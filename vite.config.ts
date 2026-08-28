@@ -2,8 +2,30 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
+function rewritePrivacyPath(request: { url?: string }) {
+  const [pathname, search = ''] = (request.url ?? '').split('?')
+  if (pathname === '/privacy' || pathname === '/privacy/') {
+    request.url = `/privacy.html${search ? `?${search}` : ''}`
+  }
+}
+
 export default defineConfig({
   plugins: [
+    {
+      name: 'privacy-policy-path',
+      configureServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          rewritePrivacyPath(request)
+          next()
+        })
+      },
+      configurePreviewServer(server) {
+        server.middlewares.use((request, _response, next) => {
+          rewritePrivacyPath(request)
+          next()
+        })
+      },
+    },
     react(),
     VitePWA({
       strategies: 'injectManifest',
