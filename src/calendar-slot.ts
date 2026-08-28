@@ -154,13 +154,29 @@ export function previewStyle(startMinutes: number, endMinutes: number) {
   }
 }
 
-export function timelinePosition(event: { allDay: boolean; date: Date; endDate?: Date }) {
+export type TimedRange = {
+  startMinutes: number
+  endMinutes: number
+}
+
+export type TimedOverlapLayout = {
+  column: number
+  columnCount: number
+}
+
+export function timedEventRange(event: { allDay: boolean; date: Date; endDate?: Date }): TimedRange | null {
   if (event.allDay) return null
   const startMinutes = event.date.getHours() * 60 + event.date.getMinutes()
   const duration = event.endDate
     ? Math.max(1, (event.endDate.getTime() - event.date.getTime()) / 60_000)
     : DEFAULT_EVENT_MINUTES
-  const endMinutes = startMinutes + duration
+  return { startMinutes, endMinutes: startMinutes + duration }
+}
+
+export function timelinePosition(event: { allDay: boolean; date: Date; endDate?: Date }) {
+  const range = timedEventRange(event)
+  if (!range) return null
+  const { startMinutes, endMinutes } = range
   if (
     startMinutes >= TIMELINE_END_MINUTES
     || endMinutes <= TIMELINE_START_MINUTES
@@ -177,6 +193,76 @@ export function timelinePosition(event: { allDay: boolean; date: Date; endDate?:
   return {
     top: `${top}%`,
     height: `${height}%`,
+  }
+}
+
+export function layoutOverlappingTimedEvents(
+  events: Array<{ id: string } & TimedRange>,
+): Map<string, TimedOverlapLayout> {
+  const layouts = new Map<string, TimedOverlapLayout>()
+  if (!events.length) return layouts
+
+  const sorted = [...events].sort((left, right) => {
+    if (left.startMinutes !== right.startMinutes) return left.startMinutes - right.startMinutes
+    if (left.endMinutes !== right.endMinutes) return right.endMinutes - left.endMinutes
+    return left.id.localeCompare(right.id)
+  })
+
+  const clusters: Array<typeof sorted> = []
+  let cluster: typeof sorted = []
+  let clusterEnd = Number.NEGATIVE_INFINITY
+  for (const event of sorted) {
+    if (cluster.length && event.startMinutes >= clusterEnd) {
+      clusters.push(cluster)
+      cluster = []
+      clusterEnd = Number.NEGATIVE_INFINITY
+    }
+    cluster.push(event)
+    clusterEnd = Math.max(clusterEnd, event.endMinutes)
+  }
+  if (cluster.length) clusters.push(cluster)
+
+  for (const group of clusters) {
+    const columnEnds: number[] = []
+    const columns = new Map<string, number>()
+    for (const event of group) {
+      let column = columnEnds.findIndex((end) => end <= event.startMinutes)
+      if (column === -1) {
+        column = columnEnds.length
+        columnEnds.push(event.endMinutes)
+      } else {
+        columnEnds[column] = event.endMinutes
+      }
+      columns.set(event.id, column)
+    }
+    const columnCount = columnEnds.length
+    for (const event of group) {
+      layouts.set(event.id, {
+        column: columns.get(event.id) ?? 0,
+        columnCount,
+      })
+    }
+  }
+
+  return layouts
+}
+
+export function layoutGridTimedEvents<T extends GridEvent>(events: T[]) {
+  const ranged: Array<{ id: string } & TimedRange> = []
+  for (const event of events) {
+    const range = timedEventRange(event)
+    if (range) ranged.push({ id: event.id, ...range })
+  }
+  return layoutOverlappingTimedEvents(ranged)
+}
+
+export function timedOverlapStyleVars(layout: TimedOverlapLayout | undefined) {
+  const column = layout?.column ?? 0
+  const columnCount = Math.max(1, layout?.columnCount ?? 1)
+  return {
+    '--event-col': String(column),
+    '--event-cols': String(columnCount),
+    '--event-not-last': column + 1 < columnCount ? '1' : '0',
   }
 }
 

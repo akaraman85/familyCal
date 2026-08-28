@@ -5,6 +5,8 @@ import {
   dayIndexFromClientX,
   DEFAULT_EVENT_MINUTES,
   draftForDate,
+  layoutGridTimedEvents,
+  layoutOverlappingTimedEvents,
   minutesFromClientY,
   movedEventBounds,
   movedEventWrite,
@@ -13,6 +15,8 @@ import {
   slotToDraft,
   TIMELINE_END_MINUTES,
   TIMELINE_START_MINUTES,
+  timedEventRange,
+  timedOverlapStyleVars,
 } from './calendar-slot.ts'
 
 assert.equal(snapMinutes(8 * 60 + 7), 8 * 60)
@@ -79,5 +83,95 @@ const allDayMove = movedEventBounds(allDayEvent, new Date(2026, 8, 1), true)
 assert.equal(allDayMove.start.toISOString(), new Date(2026, 8, 1).toISOString())
 assert.equal(allDayMove.end?.toISOString(), new Date(2026, 8, 3).toISOString())
 assert.equal(DEFAULT_EVENT_MINUTES, 60)
+
+const solo = layoutOverlappingTimedEvents([
+  { id: 'a', startMinutes: 9 * 60, endMinutes: 10 * 60 },
+])
+assert.deepEqual(solo.get('a'), { column: 0, columnCount: 1 })
+
+const identical = layoutOverlappingTimedEvents([
+  { id: 'a', startMinutes: 9 * 60, endMinutes: 10 * 60 },
+  { id: 'b', startMinutes: 9 * 60, endMinutes: 10 * 60 },
+])
+assert.deepEqual(identical.get('a'), { column: 0, columnCount: 2 })
+assert.deepEqual(identical.get('b'), { column: 1, columnCount: 2 })
+
+const partial = layoutOverlappingTimedEvents([
+  { id: 'long', startMinutes: 9 * 60, endMinutes: 12 * 60 },
+  { id: 'short', startMinutes: 10 * 60, endMinutes: 11 * 60 },
+])
+assert.deepEqual(partial.get('long'), { column: 0, columnCount: 2 })
+assert.deepEqual(partial.get('short'), { column: 1, columnCount: 2 })
+
+const touching = layoutOverlappingTimedEvents([
+  { id: 'first', startMinutes: 9 * 60, endMinutes: 10 * 60 },
+  { id: 'second', startMinutes: 10 * 60, endMinutes: 11 * 60 },
+])
+assert.deepEqual(touching.get('first'), { column: 0, columnCount: 1 })
+assert.deepEqual(touching.get('second'), { column: 0, columnCount: 1 })
+
+const chain = layoutOverlappingTimedEvents([
+  { id: 'a', startMinutes: 9 * 60, endMinutes: 10 * 60 + 30 },
+  { id: 'b', startMinutes: 10 * 60, endMinutes: 11 * 60 + 30 },
+  { id: 'c', startMinutes: 11 * 60, endMinutes: 12 * 60 },
+])
+assert.deepEqual(chain.get('a'), { column: 0, columnCount: 2 })
+assert.deepEqual(chain.get('b'), { column: 1, columnCount: 2 })
+assert.deepEqual(chain.get('c'), { column: 0, columnCount: 2 })
+
+const triple = layoutOverlappingTimedEvents([
+  { id: 'a', startMinutes: 14 * 60, endMinutes: 15 * 60 },
+  { id: 'b', startMinutes: 14 * 60, endMinutes: 15 * 60 },
+  { id: 'c', startMinutes: 14 * 60, endMinutes: 15 * 60 },
+])
+assert.equal(triple.get('a')?.columnCount, 3)
+assert.deepEqual([...triple.values()].map((item) => item.column).sort(), [0, 1, 2])
+
+const separateDays = layoutOverlappingTimedEvents([
+  { id: 'morning', startMinutes: 8 * 60, endMinutes: 9 * 60 },
+  { id: 'afternoon', startMinutes: 15 * 60, endMinutes: 16 * 60 },
+])
+assert.deepEqual(separateDays.get('morning'), { column: 0, columnCount: 1 })
+assert.deepEqual(separateDays.get('afternoon'), { column: 0, columnCount: 1 })
+
+const gridEvents = layoutGridTimedEvents([
+  {
+    id: 'saved:1',
+    source: 'saved',
+    date: dateAtMinutes(day, 9 * 60),
+    endDate: dateAtMinutes(day, 10 * 60),
+    allDay: false,
+    title: 'Pickup',
+    calendar: 'Family',
+  },
+  {
+    id: 'google:1',
+    source: 'google',
+    date: dateAtMinutes(day, 9 * 60),
+    endDate: dateAtMinutes(day, 10 * 60),
+    allDay: false,
+    title: 'School',
+    calendar: 'Maya',
+  },
+  {
+    id: 'saved:all-day',
+    source: 'saved',
+    date: day,
+    allDay: true,
+    title: 'Holiday',
+    calendar: 'Family',
+  },
+])
+assert.equal(gridEvents.size, 2)
+assert.deepEqual(gridEvents.get('google:1'), { column: 0, columnCount: 2 })
+assert.deepEqual(gridEvents.get('saved:1'), { column: 1, columnCount: 2 })
+assert.equal(timedEventRange({ allDay: true, date: day }), null)
+
+const splitVars = timedOverlapStyleVars({ column: 1, columnCount: 3 })
+assert.equal(splitVars['--event-col'], '1')
+assert.equal(splitVars['--event-cols'], '3')
+assert.equal(splitVars['--event-not-last'], '1')
+const lastVars = timedOverlapStyleVars({ column: 2, columnCount: 3 })
+assert.equal(lastVars['--event-not-last'], '0')
 
 console.log('calendar-slot tests passed')
