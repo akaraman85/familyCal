@@ -1,4 +1,6 @@
-export const LEGAL_CONTACT_EMAIL = 'alexkaraman85@gmail.com'
+import { APP_PUBLIC_NAME, APP_SUPPORT_EMAIL } from './branding'
+
+export const LEGAL_CONTACT_EMAIL = APP_SUPPORT_EMAIL
 
 export type LegalSection = {
   heading: string
@@ -134,11 +136,11 @@ export function renderLegalHtml(document: LegalDocument) {
     <main>
       <article>
         <div class="brand" aria-hidden="true">K</div>
-        <p class="eyebrow">Karaman Calendar</p>
+        <p class="eyebrow">${APP_PUBLIC_NAME}</p>
         <h1>${escapeHtml(document.heading)}</h1>
         <p class="updated">Last updated ${escapeHtml(document.updated)}</p>
         ${sections}
-        <p class="home"><a href="/">Back to Karaman Calendar</a><span> · </span><a href="${escapeHtml(document.otherHref)}">${escapeHtml(document.otherLabel)}</a></p>
+        <p class="home"><a href="/">Back to ${APP_PUBLIC_NAME}</a><span> · </span><a href="${escapeHtml(document.otherHref)}">${escapeHtml(document.otherLabel)}</a></p>
       </article>
     </main>
   </body>

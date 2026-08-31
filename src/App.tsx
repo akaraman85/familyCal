@@ -68,6 +68,7 @@ import {
   type PlannerSettings,
 } from './planner'
 import { loadSession, login, logout, type SessionUser } from './auth'
+import { APP_PUBLIC_NAME } from './branding'
 import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
 import { IosInstallGuide, IosInstallHint } from './install-app'
@@ -546,7 +547,7 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
       <IosInstallHint />
       <form className="login-card" onSubmit={submit}>
         <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
-        <p className="eyebrow">Private family calendar</p>
+        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
         <h1>Welcome back</h1>
         <p>Sign in to view calendars, integrations, and saved events.</p>
         <label className="field">

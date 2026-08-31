@@ -43,9 +43,9 @@ export default defineConfig({
       ],
       manifest: {
         id: '/',
-        name: 'Karaman Calendar',
-        short_name: 'Karaman',
-        description: 'The Karaman family calendar',
+        name: 'Family Calendar',
+        short_name: 'Family Calendar',
+        description: 'A private household calendar dashboard with Google Calendar integration, family events, and AI planning.',
         lang: 'en',
         dir: 'ltr',
         start_url: '/',

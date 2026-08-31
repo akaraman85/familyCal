@@ -1,4 +1,5 @@
 import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal'
+import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const PRIVACY_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
 export const PRIVACY_UPDATED = 'August 28, 2026'
@@ -9,7 +10,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Who this is for',
     paragraphs: [
-      'Karaman Calendar (also called Family Calendar) is a private household calendar dashboard for a single family. It is not a public or multi-family product.',
+      `${APP_PUBLIC_NAME} (also known as ${APP_INTERNAL_NAME}) is a private household calendar dashboard for a single family. It is not a public or multi-family product.`,
     ],
   },
   {
@@ -77,8 +78,8 @@ export function isPublicPrivacyPath(pathname: string) {
 
 export function renderPrivacyHtml() {
   return renderLegalHtml({
-    title: 'Privacy policy · Karaman Calendar',
-    description: 'Privacy policy for Karaman Calendar, a private household calendar dashboard.',
+    title: `Privacy policy · ${APP_PUBLIC_NAME}`,
+    description: `Privacy policy for ${APP_PUBLIC_NAME}, a private household calendar dashboard.`,
     heading: 'Privacy policy',
     updated: PRIVACY_UPDATED,
     sections: PRIVACY_SECTIONS,

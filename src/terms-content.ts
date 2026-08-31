@@ -1,4 +1,5 @@
 import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal'
+import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const TERMS_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
 export const TERMS_UPDATED = 'August 28, 2026'
@@ -7,7 +8,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: 'Who this is for',
     paragraphs: [
-      'Karaman Calendar (also called Family Calendar) is a private household calendar dashboard for a single family. It is not a multi-tenant public product.',
+      `${APP_PUBLIC_NAME} (also known as ${APP_INTERNAL_NAME}) is a private household calendar dashboard for a single family. It is not a multi-tenant public product.`,
     ],
   },
   {
@@ -68,8 +69,8 @@ export function isPublicTermsPath(pathname: string) {
 
 export function renderTermsHtml() {
   return renderLegalHtml({
-    title: 'Terms of service · Karaman Calendar',
-    description: 'Terms of service for Karaman Calendar, a private household calendar dashboard.',
+    title: `Terms of service · ${APP_PUBLIC_NAME}`,
+    description: `Terms of service for ${APP_PUBLIC_NAME}, a private household calendar dashboard.`,
     heading: 'Terms of service',
     updated: TERMS_UPDATED,
     sections: TERMS_SECTIONS,
