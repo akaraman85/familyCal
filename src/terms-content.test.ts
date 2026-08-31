@@ -13,7 +13,7 @@ assert.equal(publicLegalDocument('/privacy'), 'privacy')
 assert.equal(publicLegalDocument('/'), null)
 
 const html = renderTermsHtml()
-assert.match(html, /<title>Terms of service · Karaman Calendar<\/title>/)
+assert.match(html, /<title>Terms of service · Family Calendar<\/title>/)
 assert.match(html, /alexkaraman85@gmail.com/)
 assert.match(html, /read-only/)
 assert.match(html, /Vercel AI Gateway/)

@@ -195,3 +195,46 @@ activity is stored or displayed.
 
 See [ADR 0002](docs/adr/0002-google-event-cache.md) for why the cache lives in
 Postgres and is not an import of Google events.
+
+## Google OAuth branding verification
+
+Google shows your app name and logo on the OAuth consent screen only after
+**brand verification** passes. The production deployment exposes the pages and
+copy Google expects:
+
+| Google Cloud field | Production URL |
+| --- | --- |
+| App name | `Family Calendar` |
+| Application home page | `https://familycal-self.vercel.app/` |
+| Privacy policy | `https://familycal-self.vercel.app/privacy` |
+| Terms of service | `https://familycal-self.vercel.app/terms` |
+| Authorized redirect URI | `https://familycal-self.vercel.app/api/integrations/google/callback` |
+| User support email | `alexkaraman85@gmail.com` |
+
+The home page includes a public description of the app and links to the privacy
+policy and terms of service before JavaScript loads, so Google's review can read
+them without signing in.
+
+### Console checklist
+
+1. In **Google Auth Platform → Branding**, set the app name to **Family Calendar**
+   and upload a square logo (at least 120×120 px; the PWA icons in `public/`
+   work).
+2. Set the home page, privacy policy, and terms URLs to the production URLs in
+   the table above. `PUBLIC_APP_URL` must match that origin exactly.
+3. In **Authorized domains**, list only the host you own and can verify in
+   [Google Search Console](https://search.google.com/search-console). Google
+   requires verification of the registrable domain (for example `example.com`,
+   not `vercel.app`). A `*.vercel.app` preview URL cannot be verified as a
+   domain you own; attach a custom domain in Vercel first if branding
+   verification fails on domain ownership.
+4. Add the Search Console verification HTML file or meta tag to `public/`, or
+   verify via DNS on the custom domain.
+5. Click **Verify Branding** on the Branding page. If issues remain, use
+   **View issues** for the specific failed checks, fix them, and re-verify.
+6. After branding shows **Ready to publish**, click **Publish branding**. If
+   you also use sensitive scopes (`calendar.readonly`), complete **Data access**
+   verification in the Verification Center.
+
+The privacy policy describes how Google user data is accessed, used, stored, and
+shared, as required for OAuth apps.

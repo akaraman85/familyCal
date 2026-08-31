@@ -9,7 +9,7 @@ assert.equal(isPublicPrivacyPath('/'), false)
 assert.equal(isPublicPrivacyPath('/settings'), false)
 
 const html = renderPrivacyHtml()
-assert.match(html, /<title>Privacy policy · Karaman Calendar<\/title>/)
+assert.match(html, /<title>Privacy policy · Family Calendar<\/title>/)
 assert.match(html, /alexkaraman85@gmail.com/)
 assert.match(html, /calendar\.readonly/)
 assert.match(html, /AES-256-GCM/)

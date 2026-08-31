@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { CalendarDays } from 'lucide-react'
 import type { LegalSection } from './legal'
+import { APP_PUBLIC_NAME } from './branding'
 import { PRIVACY_SECTIONS, PRIVACY_UPDATED } from './privacy-content'
 import { TERMS_SECTIONS, TERMS_UPDATED } from './terms-content'
 
@@ -31,7 +32,7 @@ function LegalPage({
     <main className="privacy-page">
       <article className="privacy-card">
         <div className="brand-mark privacy-mark"><CalendarDays size={22} /></div>
-        <p className="eyebrow">Karaman Calendar</p>
+        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
         <h1>{heading}</h1>
         <p className="privacy-updated">Last updated {updated}</p>
         {sections.map((section) => (
@@ -43,7 +44,7 @@ function LegalPage({
           </section>
         ))}
         <p className="privacy-home">
-          <a href="/">Back to Karaman Calendar</a>
+          <a href="/">Back to {APP_PUBLIC_NAME}</a>
           <span> · </span>
           <a href={otherHref}>{otherLabel}</a>
         </p>
@@ -55,7 +56,7 @@ function LegalPage({
 export function PrivacyPage() {
   return (
     <LegalPage
-      title="Privacy policy · Karaman Calendar"
+      title={`Privacy policy · ${APP_PUBLIC_NAME}`}
       heading="Privacy policy"
       updated={PRIVACY_UPDATED}
       sections={PRIVACY_SECTIONS}
@@ -68,7 +69,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <LegalPage
-      title="Terms of service · Karaman Calendar"
+      title={`Terms of service · ${APP_PUBLIC_NAME}`}
       heading="Terms of service"
       updated={TERMS_UPDATED}
       sections={TERMS_SECTIONS}
