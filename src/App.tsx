@@ -74,6 +74,7 @@ import { PrivacyPage, TermsPage } from './legal-page'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
 import { NotificationOptInHint, NotificationsSettings } from './notifications-settings'
+import { TopbarNotice } from './topbar-notice'
 import {
   CALENDAR_VIEWS,
   DEFAULT_CALENDAR_SETTINGS,
@@ -614,6 +615,10 @@ function AuthenticatedApp({ user, onLogout }: {
   const [mobileNav, setMobileNav] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
   const weekStartsOn = weekStartDay(calendarSettings.weekStartsOn)
+  const showEventNotices = page === 'Calendar' || page === 'Agenda'
+  const eventSourceNotice = showEventNotices
+    ? googleSourceNotice(eventSources, events.some((event) => event.source === 'google'))
+    : null
 
   useEffect(() => {
     loadCalendarSettings()
@@ -882,17 +887,35 @@ function AuthenticatedApp({ user, onLogout }: {
       {mobileNav && <div className="nav-scrim" onClick={() => setMobileNav(false)} />}
 
       <main>
-        <header className="topbar">
-          <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
-          <div className="top-actions">
-            <ThemeMenu />
-            <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>
-          </div>
-        </header>
-        {page !== 'Settings' && <IosInstallHint />}
-        {page !== 'Settings' && (
-          <NotificationOptInHint onOpen={() => setPage('Settings')} />
-        )}
+        <div className="topbar-shell">
+          <header className="topbar">
+            <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
+            <div className="topbar-notices">
+              {page !== 'Settings' && <IosInstallHint variant="topbar" />}
+              {page !== 'Settings' && (
+                <NotificationOptInHint variant="topbar" onOpen={() => setPage('Settings')} />
+              )}
+              {showEventNotices && eventsError && (
+                <TopbarNotice tone="warning" role="alert">{eventsError}</TopbarNotice>
+              )}
+              {showEventNotices && !eventsError && eventSourceNotice && (
+                <TopbarNotice
+                  tone="warning"
+                  icon={<AlertTriangle size={15} />}
+                  action={eventSources.google === 'reconnect'
+                    ? { label: 'Integrations', onClick: () => setPage('Integrations') }
+                    : undefined}
+                >
+                  {eventSourceNotice}
+                </TopbarNotice>
+              )}
+            </div>
+            <div className="top-actions">
+              <ThemeMenu />
+              <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>
+            </div>
+          </header>
+        </div>
 
         {page === 'Calendar' && (
           <CalendarPage
@@ -904,7 +927,6 @@ function AuthenticatedApp({ user, onLogout }: {
             dateTitle={dateTitle}
             moveDate={moveDate}
             loading={eventsLoading}
-            error={eventsError}
             sources={eventSources}
             members={familyMembers}
             weekStartsOn={calendarSettings.weekStartsOn}
@@ -913,18 +935,15 @@ function AuthenticatedApp({ user, onLogout }: {
             createAtSlot={openCreate}
             moveEvent={moveSavedEvent}
             isMobile={isMobile}
-            openIntegrations={() => setPage('Integrations')}
           />
         )}
         {page === 'Agenda' && (
           <AgendaPage
             events={events}
             loading={eventsLoading}
-            error={eventsError}
-            sources={eventSources}
+            googleDisconnected={eventSources.google === 'disconnected'}
             openModal={() => openCreate()}
             selectEvent={setSelectedEvent}
-            openIntegrations={() => setPage('Integrations')}
             openCalendar={(date) => {
               setSelectedDate(date)
               changeView('Day')
@@ -1051,34 +1070,20 @@ function slotPreviewLabel(startMinutes: number, endMinutes: number) {
   return `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, error, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile, openIntegrations }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
-  loading: boolean; error: string | null; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
+  loading: boolean; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
   createAtSlot: (draft: EventDraft) => void
   moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void
   isMobile: boolean
-  openIntegrations: () => void
 }) {
   const selectDay = (day: Date) => {
     setSelectedDate(day)
     if (isMobile && view !== 'Day') setView('Day')
   }
-  const sourceNotice = googleSourceNotice(
-    sources,
-    events.some((event) => event.source === 'google'),
-  )
   return (
     <div className="page calendar-page">
-      {error && <div className="calendar-source-error" role="alert">{error}</div>}
-      {!error && sourceNotice && (
-        <div className="calendar-source-error" role="status">
-          <span>{sourceNotice}</span>
-          {sources.google === 'reconnect' && (
-            <button type="button" onClick={openIntegrations}>Open Integrations</button>
-          )}
-        </div>
-      )}
       <section className="calendar-card">
         <div className="mobile-calendar-header mobile-only">
           <div className="mobile-calendar-top">
@@ -1404,15 +1409,13 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
   })}</div>
 }
 
-function AgendaPage({ events, loading, error, sources, openModal, selectEvent, openCalendar, openIntegrations }: {
+function AgendaPage({ events, loading, googleDisconnected, openModal, selectEvent, openCalendar }: {
   events: EventItem[]
   loading: boolean
-  error: string | null
-  sources: EventSources
+  googleDisconnected: boolean
   openModal: () => void
   selectEvent: (event: EventItem) => void
   openCalendar: (date: Date) => void
-  openIntegrations: () => void
 }) {
   const now = new Date()
   const today = startOfDay(now)
@@ -1426,10 +1429,6 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
     return { date, events: sortedEvents.filter((event) => isSameDay(event.date, date)) }
   }).filter((group, index) => index === 0 || group.events.length > 0)
   const hasEvents = sortedEvents.length > 0
-  const sourceNotice = googleSourceNotice(
-    sources,
-    events.some((event) => event.source === 'google'),
-  )
 
   return (
     <div className="page agenda-page">
@@ -1441,15 +1440,6 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
         </div>
         <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>
       </div>
-      {error && <div className="calendar-source-error" role="alert">{error}</div>}
-      {!error && sourceNotice && (
-        <div className="calendar-source-error" role="status">
-          <span>{sourceNotice}</span>
-          {sources.google === 'reconnect' && (
-            <button type="button" onClick={openIntegrations}>Open Integrations</button>
-          )}
-        </div>
-      )}
       {highlight && (
         <button
           type="button"
@@ -1521,7 +1511,7 @@ function AgendaPage({ events, loading, error, sources, openModal, selectEvent, o
         {loading && hasEvents && (
           <p className="agenda-hint calendar-loading"><LoaderCircle size={16} />Updating the week ahead</p>
         )}
-        {!hasEvents && !loading && sources.google === 'disconnected' && (
+        {!hasEvents && !loading && googleDisconnected && (
           <p className="agenda-hint">Connect Google Calendar in Integrations, or add a family event to fill this list.</p>
         )}
       </div>

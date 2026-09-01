@@ -151,7 +151,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile-logout:hover { background:var(--hover-warm);color:var(--orange); }
 
 main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-.topbar { flex:none; height: 56px; padding: 0 32px; display:flex; align-items:center; border-bottom: 1px solid var(--line); background: var(--glass-bg); backdrop-filter: blur(12px); position: sticky; top:0; z-index:20; }
+.topbar-shell { flex:none; position: sticky; top:0; z-index:20; border-bottom: 1px solid var(--line); background: var(--glass-bg); backdrop-filter: blur(12px); }
+.topbar { min-height: 56px; padding: 8px 32px; display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px; border-bottom:0; background:transparent; backdrop-filter:none; position:static; }
+.topbar-notices { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.topbar-notice { display:flex; align-items:center; gap:8px; padding:5px 10px; border-radius:8px; font-size:11px; line-height:1.35; color:var(--ios-text); background:var(--planner-bg); border:1px solid var(--ios-border); }
+.topbar-notice-warning { color:var(--error-text); background:var(--orange-soft); border-color:var(--error-border); }
+.topbar-notice p { margin:0; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.topbar-notice-icon { display:grid; place-items:center; flex:none; }
+.topbar-notice-action { border:1px solid currentColor; background:transparent; color:inherit; border-radius:7px; padding:4px 8px; font-size:10px; font-weight:700; cursor:pointer; flex:none; white-space:nowrap; }
+.topbar-notice-action:hover { background:var(--ios-hover); }
+.topbar-notice-dismiss { border:0; background:transparent; color:inherit; padding:2px; border-radius:6px; display:grid; place-items:center; cursor:pointer; flex:none; }
+.topbar-notice-dismiss:hover { background:var(--ios-hover); }
 .mobile-menu { display:none; border:0; background:none; }
 .top-actions { margin-left:auto; display:flex; align-items:center; gap:12px; }
 .weather { display:flex; gap:8px; align-items:center; padding-right:17px; margin-right:2px; border-right:1px solid var(--line); color:var(--weather); }
@@ -167,7 +177,6 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
   .calendar-page { max-width: none; padding: 16px 24px 42px; }
 }
 .calendar-page .calendar-footer,
-.calendar-page .calendar-source-error,
 .calendar-page .calendar-toolbar { flex: none; }
 .calendar-page .calendar-card { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .page-heading { display:flex; justify-content:space-between; align-items:flex-end; margin-bottom:24px; }
@@ -579,7 +588,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 }
 @media (max-width: 760px) {
   .sidebar { transform:translateX(-100%);transition:.25s;width:248px;box-shadow:10px 0 30px rgba(0,0,0,.12); }.sidebar.open { transform:translateX(0); }.mobile-close,.mobile-menu { display:grid;place-items:center; }.nav-scrim { position:fixed;inset:0;background:var(--nav-scrim);z-index:25; }
-  main { margin-left:0; }.topbar { padding:0 15px;height:52px;gap:10px; }.weather { display:none; }.top-actions { gap:7px; }.top-actions .add-btn { display:none; }
+  main { margin-left:0; }.topbar { padding:8px 15px;min-height:52px;gap:8px; }.topbar-notices { flex-basis:100%; }.weather { display:none; }.top-actions { gap:7px;margin-left:auto; }.top-actions .add-btn { display:none; }
   .ios-install-hint { margin:12px 15px 0; }
   .page { padding:22px 15px 35px; }.page-heading { align-items:center; }.page-heading h1 { font-size:20px; }
   .mobile-only { display:block; }
