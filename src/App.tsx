@@ -199,6 +199,16 @@ function hasGoogleCalendarPermission(scopes: string[]) {
   return scopes.includes(GOOGLE_CALENDAR_READ_SCOPE)
 }
 
+function hasIntegrationAttention(members: FamilyMember[], sources: EventSources) {
+  const accountIssue = members.some((member) => (
+    member.integrations.some((account) => (
+      account.provider === 'google-calendar'
+      && (account.status === 'error' || !hasGoogleCalendarPermission(account.scopes))
+    ))
+  ))
+  return accountIssue || sources.google === 'reconnect' || sources.google === 'error'
+}
+
 function isGoogleReconnectMessage(message: string) {
   return /invalid_grant|expired or revoked|token has been expired|\brevoked\b|reconnect the account/i.test(
     message,
@@ -619,6 +629,10 @@ function AuthenticatedApp({ user, onLogout }: {
   const eventSourceNotice = showEventNotices
     ? googleSourceNotice(eventSources, events.some((event) => event.source === 'google'))
     : null
+  const integrationsAttention = useMemo(
+    () => hasIntegrationAttention(familyMembers, eventSources),
+    [familyMembers, eventSources],
+  )
 
   useEffect(() => {
     loadCalendarSettings()
@@ -864,8 +878,21 @@ function AuthenticatedApp({ user, onLogout }: {
         <nav>
           <div className="nav-label">Workspace</div>
           {navItems.map(({ icon: Icon, label }) => (
-            <button key={label} className={page === label ? 'active' : ''} onClick={() => { setPage(label); setMobileNav(false) }}>
-              <Icon size={18} /><span>{label}</span>
+            <button
+              key={label}
+              className={page === label ? 'active' : ''}
+              onClick={() => { setPage(label); setMobileNav(false) }}
+              aria-label={label === 'Integrations' && integrationsAttention
+                ? 'Integrations (needs attention)'
+                : label}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+              {label === 'Integrations' && integrationsAttention ? (
+                <span className="nav-warning" title="An integration needs attention">
+                  <AlertTriangle size={14} aria-hidden="true" />
+                </span>
+              ) : null}
             </button>
           ))}
           <div className="nav-label second">Tools</div>
@@ -939,7 +966,12 @@ function AuthenticatedApp({ user, onLogout }: {
             }}
           />
         )}
-        {page === 'Integrations' && <IntegrationsPage onCalendarsChanged={() => refreshEvents(true)} />}
+        {page === 'Integrations' && (
+          <IntegrationsPage onCalendarsChanged={() => {
+            refreshEvents(true)
+            refreshMembers()
+          }} />
+        )}
         {page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
         {page === 'Settings' && (
           <SettingsPage onCalendarSettingsSaved={setCalendarSettings} />

@@ -140,6 +140,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .sidebar nav button:hover, .sidebar-bottom > button:hover { background: var(--hover); color: var(--ink); }
 .sidebar nav button.active, .sidebar-bottom > button.active { background: var(--active-fill); color: var(--active-text); font-weight: 600; }
 .nav-count { margin-left: auto; background: var(--nav-count-bg); color: var(--nav-count-text); border-radius: 10px; min-width: 20px; padding: 2px 5px; font-size: 10px; }
+.nav-warning { margin-left: auto; display: grid; place-items: center; color: var(--orange); flex: none; }
+.sidebar nav button.active .nav-warning { color: var(--error-text); }
 .new-pill { margin-left: auto; color: var(--active-text); font-size: 9px; padding: 3px 6px; border: 1px solid var(--pill-border); border-radius: 8px; text-transform: uppercase; letter-spacing: .5px; }
 .sidebar-bottom { margin-top: auto; }
 .profile { border-top: 1px solid var(--line); margin-top: 15px; padding: 19px 4px 0; display: flex; align-items:center; gap: 10px; }
