@@ -16,6 +16,23 @@ export function sendJson(response: ApiResponse, status: number, body: unknown) {
   response.end(JSON.stringify(body))
 }
 
+export function sendText(
+  response: ApiResponse,
+  status: number,
+  contentType: string,
+  body: string,
+  options?: { cacheControl?: string; includeBody?: boolean },
+) {
+  response.statusCode = status
+  response.setHeader('Content-Type', contentType)
+  response.setHeader('Cache-Control', options?.cacheControl ?? 'public, max-age=3600, s-maxage=86400')
+  if (options?.includeBody === false) {
+    response.end()
+    return
+  }
+  response.end(body)
+}
+
 export function redirect(response: ApiResponse, location: string) {
   response.statusCode = 302
   response.setHeader('Cache-Control', 'no-store')

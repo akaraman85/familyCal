@@ -16,15 +16,18 @@ function required(name: string) {
   return value
 }
 
-export function appEnv(): AppEnv {
+export function publicAppUrl() {
   const appUrl = required('PUBLIC_APP_URL').replace(/\/$/, '')
   const parsedUrl = new URL(appUrl)
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
     throw new Error('PUBLIC_APP_URL must use http or https')
   }
+  return appUrl
+}
 
+export function appEnv(): AppEnv {
   return {
-    appUrl,
+    appUrl: publicAppUrl(),
     databaseUrl: required('DATABASE_URL'),
     ownerId: required('INTEGRATION_OWNER_ID'),
   }
