@@ -1,4 +1,13 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, Bell, Share, X } from 'lucide-react'
 import {
   isAppleTouchDevice,
@@ -11,6 +20,9 @@ import {
 } from './notifications'
 
 const IOS_INSTALL_DISMISS_KEY = 'karaman-ios-install-hint-dismissed'
+const MENU_WIDTH = 360
+const VIEWPORT_MARGIN = 12
+const MENU_GAP = 8
 
 type NotificationTone = 'info' | 'warning'
 
@@ -37,6 +49,38 @@ function shouldShowReminderHint() {
   return Notification.permission !== 'granted'
 }
 
+function anchorNotificationsMenu(
+  trigger: HTMLElement,
+  panel: HTMLElement,
+): CSSProperties {
+  const margin = VIEWPORT_MARGIN
+  const gap = MENU_GAP
+  const rect = trigger.getBoundingClientRect()
+  const width = Math.min(MENU_WIDTH, window.innerWidth - margin * 2)
+  const height = panel.getBoundingClientRect().height
+
+  let top = rect.bottom + gap
+  const spaceBelow = window.innerHeight - rect.bottom - margin
+  const spaceAbove = rect.top - margin
+
+  if (height > spaceBelow && spaceAbove > spaceBelow) {
+    top = rect.top - gap - height
+  }
+
+  top = Math.max(margin, Math.min(top, window.innerHeight - margin - height))
+
+  let left = rect.right - width
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+
+  return {
+    position: 'fixed',
+    top,
+    left,
+    width,
+    maxHeight: window.innerHeight - top - margin,
+  }
+}
+
 export function TopbarNotifications({
   showHints,
   eventsError,
@@ -55,7 +99,10 @@ export function TopbarNotifications({
   const [open, setOpen] = useState(false)
   const [installVisible, setInstallVisible] = useState(false)
   const [reminderVisible, setReminderVisible] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
+  const [menuStyle, setMenuStyle] = useState<CSSProperties>({})
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     setInstallVisible(shouldShowInstallHint())
@@ -65,11 +112,34 @@ export function TopbarNotifications({
   useEffect(() => {
     if (!open) return
     const close = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false)
+      const target = event.target as Node
+      if (rootRef.current?.contains(target)) return
+      if (panelRef.current?.contains(target)) return
+      setOpen(false)
     }
     document.addEventListener('mousedown', close)
     return () => document.removeEventListener('mousedown', close)
   }, [open])
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current || !panelRef.current) return
+
+    const updatePosition = () => {
+      if (!triggerRef.current || !panelRef.current) return
+      setMenuStyle(anchorNotificationsMenu(triggerRef.current, panelRef.current))
+    }
+
+    updatePosition()
+    const frame = window.requestAnimationFrame(updatePosition)
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [open, installVisible, reminderVisible, eventsError, eventSourceNotice])
 
   const notifications = useMemo(() => {
     const items: AppNotification[] = []
@@ -158,19 +228,27 @@ export function TopbarNotifications({
   if (!notifications.length) return null
 
   return (
-    <div className="view-dropdown notifications-dropdown" ref={menuRef}>
+    <div className="notifications-dropdown" ref={rootRef}>
       <button
+        ref={triggerRef}
         type="button"
         className="notifications-trigger"
         aria-expanded={open}
+        aria-haspopup="menu"
         aria-label={`${notifications.length} notification${notifications.length === 1 ? '' : 's'}`}
         onClick={() => setOpen((current) => !current)}
       >
         <Bell size={17} />
         <span className="notifications-badge" aria-hidden="true">{notifications.length}</span>
       </button>
-      {open && (
-        <div className="glass-menu notifications-menu" role="menu" aria-label="Notifications">
+      {open && createPortal(
+        <div
+          ref={panelRef}
+          className="glass-menu notifications-menu"
+          style={menuStyle}
+          role="menu"
+          aria-label="Notifications"
+        >
           <div className="notifications-menu-header">
             <b>Notifications</b>
             <span>{notifications.length}</span>
@@ -212,7 +290,8 @@ export function TopbarNotifications({
               </article>
             ))}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

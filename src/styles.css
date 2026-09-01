@@ -151,15 +151,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .profile-logout:hover { background:var(--hover-warm);color:var(--orange); }
 
 main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-.topbar-shell { flex:none; position: sticky; top:0; z-index:20; border-bottom: 1px solid var(--line); background: var(--glass-bg); backdrop-filter: blur(12px); }
-.topbar { height: 56px; padding: 0 32px; display:flex; align-items:center; gap:12px; border-bottom:0; background:transparent; backdrop-filter:none; position:static; }
+.topbar-shell { flex:none; position: sticky; top:0; z-index:20; border-bottom: 1px solid var(--line); background: var(--glass-bg); backdrop-filter: blur(12px); overflow: visible; }
+.topbar { height: 56px; padding: 0 32px; display:flex; align-items:center; gap:12px; border-bottom:0; background:transparent; backdrop-filter:none; position:static; overflow: visible; }
+.notifications-dropdown { position:relative; }
 .notifications-trigger { position:relative; width:35px; height:35px; border:1px solid var(--line); border-radius:8px; background:var(--panel); display:grid; place-items:center; cursor:pointer; color:var(--ink); }
 .notifications-badge { position:absolute; top:-5px; right:-5px; min-width:16px; height:16px; padding:0 4px; border-radius:999px; background:var(--orange); color:white; font-size:9px; font-weight:700; line-height:16px; text-align:center; box-shadow:0 0 0 2px var(--glass-bg); }
-.notifications-menu { width:min(360px, calc(100vw - 30px)); padding:8px; }
-.notifications-menu-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px 10px; }
+.notifications-menu { z-index:60; display:flex; flex-direction:column; overflow:hidden; padding:8px; }
+.notifications-menu-header { display:flex; align-items:center; justify-content:space-between; gap:8px; padding:6px 8px 10px; flex:none; }
 .notifications-menu-header b { font:600 13px Manrope; }
 .notifications-menu-header span { min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--orange-soft); color:var(--orange); font-size:10px; font-weight:700; display:grid; place-items:center; }
-.notifications-menu-list { display:flex; flex-direction:column; gap:6px; max-height:min(420px, calc(100vh - 120px)); overflow:auto; }
+.notifications-menu-list { display:flex; flex-direction:column; gap:6px; flex:1; min-height:0; overflow:auto; }
 .notification-item { border:1px solid var(--line); border-radius:12px; padding:10px 12px; background:var(--panel); }
 .notification-item-info { border-color:var(--ios-border); background:var(--planner-bg); }
 .notification-item-warning { border-color:var(--error-border); background:var(--orange-soft); }
