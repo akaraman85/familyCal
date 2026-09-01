@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Share, X } from 'lucide-react'
+import { TopbarNotice } from './topbar-notice'
 
 const DISMISS_KEY = 'karaman-ios-install-hint-dismissed'
 
@@ -16,7 +17,7 @@ export function isAppleTouchDevice() {
   return navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1
 }
 
-export function IosInstallHint() {
+export function IosInstallHint({ variant = 'banner' }: { variant?: 'banner' | 'topbar' }) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -26,6 +27,23 @@ export function IosInstallHint() {
   }, [])
 
   if (!visible) return null
+
+  const dismiss = () => {
+    window.localStorage.setItem(DISMISS_KEY, '1')
+    setVisible(false)
+  }
+
+  if (variant === 'topbar') {
+    return (
+      <TopbarNotice
+        icon={<Share size={15} />}
+        onDismiss={dismiss}
+      >
+        <strong>Install Karaman.</strong>
+        {' '}Tap Share, then Add to Home Screen.
+      </TopbarNotice>
+    )
+  }
 
   return (
     <div className="ios-install-hint" role="status">
@@ -38,10 +56,7 @@ export function IosInstallHint() {
         type="button"
         className="ios-install-hint-dismiss"
         aria-label="Dismiss install hint"
-        onClick={() => {
-          window.localStorage.setItem(DISMISS_KEY, '1')
-          setVisible(false)
-        }}
+        onClick={dismiss}
       >
         <X size={16} />
       </button>
