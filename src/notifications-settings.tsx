@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Bell, Check, LoaderCircle, Share, X } from 'lucide-react'
 import { IosInstallGuide, isStandaloneApp } from './install-app'
-import { TopbarNotice } from './topbar-notice'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
   NOTIFICATION_HINT_KEY,
@@ -21,13 +20,7 @@ import {
   type ReminderMinutes,
 } from './notifications'
 
-export function NotificationOptInHint({
-  onOpen,
-  variant = 'banner',
-}: {
-  onOpen: () => void
-  variant?: 'banner' | 'topbar'
-}) {
+export function NotificationOptInHint({ onOpen }: { onOpen: () => void }) {
   const [visible, setVisible] = useState(false)
 
   useEffect(() => {
@@ -42,25 +35,6 @@ export function NotificationOptInHint({
   const dismiss = () => {
     window.localStorage.setItem(NOTIFICATION_HINT_KEY, '1')
     setVisible(false)
-  }
-
-  if (variant === 'topbar') {
-    return (
-      <TopbarNotice
-        icon={<Bell size={15} />}
-        action={{
-          label: 'Settings',
-          onClick: () => {
-            openNotificationSettings()
-            onOpen()
-          },
-        }}
-        onDismiss={dismiss}
-      >
-        <strong>Turn on event reminders.</strong>
-        {' '}Allow notifications in Settings.
-      </TopbarNotice>
-    )
   }
 
   return (
