@@ -11,5 +11,6 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["api"]
+  "include": ["api"],
+  "exclude": ["api/**/*.test.ts"]
 }

@@ -1,6 +1,13 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { renderRobots, renderSitemap } from './api/_lib/crawler-files.ts'
+
+function publicAppUrlForDev() {
+  const configured = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, '')
+  if (configured) return configured
+  return 'http://localhost:5173'
+}
 
 function rewritePublicLegalPath(request: { url?: string }) {
   const [pathname, search = ''] = (request.url ?? '').split('?')
@@ -17,13 +24,39 @@ export default defineConfig({
     {
       name: 'public-legal-paths',
       configureServer(server) {
-        server.middlewares.use((request, _response, next) => {
+        server.middlewares.use((request, response, next) => {
+          const pathname = request.url?.split('?')[0] ?? ''
+          if (pathname === '/sitemap.xml') {
+            response.statusCode = 200
+            response.setHeader('Content-Type', 'application/xml; charset=utf-8')
+            response.end(renderSitemap(publicAppUrlForDev()))
+            return
+          }
+          if (pathname === '/robots.txt') {
+            response.statusCode = 200
+            response.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            response.end(renderRobots(publicAppUrlForDev()))
+            return
+          }
           rewritePublicLegalPath(request)
           next()
         })
       },
       configurePreviewServer(server) {
-        server.middlewares.use((request, _response, next) => {
+        server.middlewares.use((request, response, next) => {
+          const pathname = request.url?.split('?')[0] ?? ''
+          if (pathname === '/sitemap.xml') {
+            response.statusCode = 200
+            response.setHeader('Content-Type', 'application/xml; charset=utf-8')
+            response.end(renderSitemap(publicAppUrlForDev()))
+            return
+          }
+          if (pathname === '/robots.txt') {
+            response.statusCode = 200
+            response.setHeader('Content-Type', 'text/plain; charset=utf-8')
+            response.end(renderRobots(publicAppUrlForDev()))
+            return
+          }
           rewritePublicLegalPath(request)
           next()
         })
