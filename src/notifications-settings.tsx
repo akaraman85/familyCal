@@ -82,6 +82,30 @@ export function NotificationsSettings() {
   const [tested, setTested] = useState(false)
   const homeScreenRequired = iosNeedsHomeScreen()
   const canEnable = canRequestPushPermission() && Boolean(status?.configured && status.publicKey)
+  const configurationMessage = (() => {
+    switch (status?.configurationIssue) {
+      case 'public_key_is_private':
+        return {
+          title: 'VAPID keys look swapped',
+          detail: 'VAPID_PUBLIC_KEY must be the longer key from npm run vapid. VAPID_PRIVATE_KEY is the shorter one.',
+        }
+      case 'invalid_public_key':
+        return {
+          title: 'VAPID public key is invalid',
+          detail: 'Regenerate keys with npm run vapid, then paste only the key value into Vercel without quotes or the variable name.',
+        }
+      case 'invalid_private_key':
+        return {
+          title: 'VAPID private key is invalid',
+          detail: 'Regenerate keys with npm run vapid and update VAPID_PRIVATE_KEY on the deployment.',
+        }
+      default:
+        return {
+          title: 'Server delivery is not configured',
+          detail: 'Set VAPID keys on the deployment, then return here to allow this device.',
+        }
+    }
+  })()
 
   const refresh = async () => {
     const next = await loadNotificationStatus()
@@ -197,8 +221,8 @@ export function NotificationsSettings() {
           <div className="gateway-status">
             <Bell size={17} />
             <span>
-              <b>Server delivery is not configured</b>
-              <small>Set VAPID keys on the deployment, then return here to allow this device.</small>
+              <b>{configurationMessage.title}</b>
+              <small>{configurationMessage.detail}</small>
             </span>
           </div>
         )}
