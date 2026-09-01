@@ -73,8 +73,8 @@ import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
-import { NotificationOptInHint, NotificationsSettings } from './notifications-settings'
-import { TopbarNotice } from './topbar-notice'
+import { NotificationsSettings } from './notifications-settings'
+import { TopbarNotifications } from './topbar-notifications'
 import {
   CALENDAR_VIEWS,
   DEFAULT_CALENDAR_SETTINGS,
@@ -890,27 +890,15 @@ function AuthenticatedApp({ user, onLogout }: {
         <div className="topbar-shell">
           <header className="topbar">
             <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
-            <div className="topbar-notices">
-              {page !== 'Settings' && <IosInstallHint variant="topbar" />}
-              {page !== 'Settings' && (
-                <NotificationOptInHint variant="topbar" onOpen={() => setPage('Settings')} />
-              )}
-              {showEventNotices && eventsError && (
-                <TopbarNotice tone="warning" role="alert">{eventsError}</TopbarNotice>
-              )}
-              {showEventNotices && !eventsError && eventSourceNotice && (
-                <TopbarNotice
-                  tone="warning"
-                  icon={<AlertTriangle size={15} />}
-                  action={eventSources.google === 'reconnect'
-                    ? { label: 'Integrations', onClick: () => setPage('Integrations') }
-                    : undefined}
-                >
-                  {eventSourceNotice}
-                </TopbarNotice>
-              )}
-            </div>
             <div className="top-actions">
+              <TopbarNotifications
+                showHints={page !== 'Settings'}
+                eventsError={showEventNotices ? eventsError : null}
+                eventSourceNotice={showEventNotices && !eventsError ? eventSourceNotice : null}
+                googleReconnect={eventSources.google === 'reconnect'}
+                onOpenSettings={() => setPage('Settings')}
+                onOpenIntegrations={() => setPage('Integrations')}
+              />
               <ThemeMenu />
               <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>
             </div>
