@@ -71,6 +71,8 @@ import { loadSession, login, logout, type SessionUser } from './auth'
 import { APP_PUBLIC_NAME } from './branding'
 import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
+import { PublicHomePage } from './public-home-page'
+import { isLoginPath, isPublicHomePath } from './routes'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
 import { NotificationsSettings } from './notifications-settings'
@@ -495,17 +497,25 @@ function agendaDayLabel(day: Date, today: Date) {
 function App() {
   const [user, setUser] = useState<SessionUser | null>()
   const [sessionError, setSessionError] = useState<string | null>(null)
-  const legalDocument = publicLegalDocument(window.location.pathname)
+  const pathname = window.location.pathname
+  const legalDocument = publicLegalDocument(pathname)
+  const loginPath = isLoginPath(pathname)
+  const publicHomePath = isPublicHomePath(pathname)
 
   useEffect(() => {
     if (legalDocument) return
     loadSession()
-      .then(setUser)
+      .then((sessionUser) => {
+        setUser(sessionUser)
+        if (sessionUser && loginPath) {
+          window.history.replaceState(null, '', '/')
+        }
+      })
       .catch((error: unknown) => {
         setSessionError(error instanceof Error ? error.message : 'Authentication is unavailable')
         setUser(null)
       })
-  }, [legalDocument])
+  }, [legalDocument, loginPath])
 
   if (legalDocument === 'privacy') return <PrivacyPage />
   if (legalDocument === 'terms') return <TermsPage />
@@ -513,22 +523,31 @@ function App() {
   if (user === undefined) {
     return <div className="auth-loading"><LoaderCircle size={24}/><span>Checking access…</span></div>
   }
-  if (!user) {
+  if (user) {
+    return <AuthenticatedApp
+      user={user}
+      onLogout={async () => {
+        await logout()
+        setUser(null)
+        window.history.replaceState(null, '', '/')
+      }}
+    />
+  }
+  if (loginPath) {
     return <LoginScreen
       error={sessionError}
       onAuthenticated={(authenticatedUser) => {
         setSessionError(null)
         setUser(authenticatedUser)
+        window.history.replaceState(null, '', '/')
       }}
     />
   }
-  return <AuthenticatedApp
-    user={user}
-    onLogout={async () => {
-      await logout()
-      setUser(null)
-    }}
-  />
+  if (publicHomePath) {
+    return <PublicHomePage />
+  }
+  window.history.replaceState(null, '', '/')
+  return <PublicHomePage />
 }
 
 function LoginScreen({ error: initialError, onAuthenticated }: {
@@ -575,6 +594,8 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
         </button>
       </form>
       <p className="login-privacy">
+        <a href="/">Back to {APP_PUBLIC_NAME}</a>
+        <span aria-hidden="true"> · </span>
         <a href="/privacy">Privacy policy</a>
         <span aria-hidden="true"> · </span>
         <a href="/terms">Terms of service</a>

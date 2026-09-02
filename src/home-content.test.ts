@@ -7,6 +7,7 @@ const fallback = renderPublicHomeFallback()
 assert.match(fallback, new RegExp(`<h1>${APP_PUBLIC_NAME}</h1>`))
 assert.match(fallback, /href="\/privacy"/)
 assert.match(fallback, /href="\/terms"/)
+assert.match(fallback, /href="\/login"/)
 assert.match(fallback, /Google Calendar/)
 
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
