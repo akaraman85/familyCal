@@ -154,6 +154,21 @@
         gap: 18px;
         flex-wrap: wrap;
       }
+      .public-home-footer {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 0 28px 48px;
+        font-size: 13px;
+        line-height: 1.6;
+        color: #7d817f;
+      }
+      .public-home-footer nav {
+        margin-top: 8px;
+      }
+      .public-home-footer a {
+        color: #555555;
+        text-decoration: none;
+      }
       @media (prefers-color-scheme: dark) {
         .public-home-shell {
           color: #eceae4;
@@ -166,6 +181,10 @@
         }
         .public-home-body,
         .public-home-logo-text span {
+          color: #9a9892;
+        }
+        .public-home-footer,
+        .public-home-footer a {
           color: #9a9892;
         }
       }
@@ -198,6 +217,16 @@
             </div>
           </section>
         </main>
+        <footer class="public-home-footer">
+          <p>This page is public. Sign in is only required to view calendars and saved household data.</p>
+          <nav aria-label="Legal">
+            <a href="/privacy">Privacy policy</a>
+            <span aria-hidden="true"> · </span>
+            <a href="/terms">Terms of service</a>
+            <span aria-hidden="true"> · </span>
+            <a href="mailto:alexkaraman85@gmail.com">Contact</a>
+          </nav>
+        </footer>
       </div>
     </div>
     <script type="module" src="/src/main.tsx"></script>

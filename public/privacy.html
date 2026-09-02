@@ -98,7 +98,7 @@
         <div class="brand" aria-hidden="true">K</div>
         <p class="eyebrow">Family Calendar</p>
         <h1>Privacy policy</h1>
-        <p class="updated">Last updated August 28, 2026</p>
+        <p class="updated">Last updated September 2, 2026</p>
         
       <section>
         <h2>Who this is for</h2>
@@ -138,8 +138,33 @@
       </section>
 
       <section>
-        <h2>Selling and sharing</h2>
-        <p>We do not sell this data. We do not use it for advertising.</p>
+        <h2>Sharing, transfer, and disclosure of Google user data</h2>
+        <p>Google user data is shared only with the service providers and parties listed below, and only as needed to operate this household calendar. We do not sell Google user data. We do not share it with advertisers, data brokers, or unrelated third parties.</p>
+        <p>Google: OAuth sign-in and read-only Calendar API calls to fetch events for display.</p>
+        <p>Neon (Postgres hosting): encrypted Google OAuth tokens, a short-lived server-side cache of Google events, and other household calendar data are stored in a managed Postgres database.</p>
+        <p>Vercel (application hosting): the app and its API routes run on Vercel infrastructure. Google user data passes through these servers only to provide calendar features.</p>
+        <p>Vercel AI Gateway (optional AI Planner): when an authenticated user submits a planning request, scheduling text and any attached calendar screenshots may be sent to the selected model through Vercel AI Gateway for that request only.</p>
+        <p>Household members: anyone who signs in with the shared household login can view Google events displayed on the dashboard. There is no public or multi-tenant sharing.</p>
+      </section>
+
+      <section>
+        <h2>Data protection for sensitive data</h2>
+        <p>All traffic between your browser and this app uses HTTPS (TLS) in transit.</p>
+        <p>Google OAuth access and refresh tokens are encrypted at rest with AES-256-GCM before storage in Postgres. The browser never receives those provider credentials.</p>
+        <p>Web Push subscription keys, when enabled, are also encrypted at rest with AES-256-GCM.</p>
+        <p>Household sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Calendar and integration APIs require that session.</p>
+        <p>Google Calendar access is read-only. Disconnecting a Google account revokes the grant and deletes stored encrypted credentials and cached events for that account.</p>
+      </section>
+
+      <section>
+        <h2>Limited use of Google user data</h2>
+        <p>The use of raw or derived user data received from Google APIs will adhere to the Google User Data Policy, including the Limited Use requirements.</p>
+        <p>Google user data is used only to provide or improve user-facing calendar and planning features in this app. It is not used to create, train, or improve generalized or foundational AI or machine learning models.</p>
+      </section>
+
+      <section>
+        <h2>Selling and advertising</h2>
+        <p>We do not sell Google user data or other household data. We do not use it for advertising.</p>
       </section>
 
       <section>

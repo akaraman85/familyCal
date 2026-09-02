@@ -23,6 +23,7 @@ function run(command, args) {
 
 // Build first so compilation failures cannot mutate the production database.
 await run('npm', ['run', 'build'])
+await run('npx', ['tsx', 'scripts/write-privacy-html.ts'])
 
 if (process.env.VERCEL_ENV === 'production') {
   await run('npm', ['run', 'db:migrate'])

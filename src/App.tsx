@@ -495,12 +495,14 @@ function agendaDayLabel(day: Date, today: Date) {
 }
 
 function App() {
-  const [user, setUser] = useState<SessionUser | null>()
-  const [sessionError, setSessionError] = useState<string | null>(null)
   const pathname = window.location.pathname
   const legalDocument = publicLegalDocument(pathname)
   const loginPath = isLoginPath(pathname)
   const publicHomePath = isPublicHomePath(pathname)
+  const [user, setUser] = useState<SessionUser | null | undefined>(
+    () => (publicHomePath ? null : undefined),
+  )
+  const [sessionError, setSessionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (legalDocument) return
@@ -520,9 +522,6 @@ function App() {
   if (legalDocument === 'privacy') return <PrivacyPage />
   if (legalDocument === 'terms') return <TermsPage />
 
-  if (user === undefined) {
-    return <div className="auth-loading"><LoaderCircle size={24}/><span>Checking access…</span></div>
-  }
   if (user) {
     return <AuthenticatedApp
       user={user}
@@ -532,6 +531,9 @@ function App() {
         window.history.replaceState(null, '', '/')
       }}
     />
+  }
+  if (user === undefined) {
+    return <div className="auth-loading"><LoaderCircle size={24}/><span>Checking access…</span></div>
   }
   if (loginPath) {
     return <LoginScreen

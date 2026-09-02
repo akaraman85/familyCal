@@ -10,6 +10,8 @@ assert.match(fallback, /href="\/terms"/)
 assert.match(fallback, /href="\/login"/)
 assert.match(fallback, /Family calendar <span>dashboard<\/span>/)
 assert.match(fallback, /Google Calendar/)
+assert.match(fallback, /This page is public/)
+assert.match(fallback, /Privacy policy/)
 
 const indexHtml = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
 for (const value of Object.values(PUBLIC_HOME_FALLBACK_MARKERS)) {
