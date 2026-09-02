@@ -12,6 +12,7 @@ export function renderPublicHomeFallback() {
       <h1>${APP_PUBLIC_NAME}</h1>
       <p>${APP_DESCRIPTION}</p>
       <p>Family Calendar lets a single household view shared events, connect Google Calendars read-only, and plan with AI. Sign in to access calendars, integrations, and saved events.</p>
+      <p class="public-home-actions"><a href="/login" class="public-home-signin">Sign in</a></p>
       <p class="public-home-links">
         <a href="/privacy">Privacy policy</a>
         <span aria-hidden="true"> · </span>
