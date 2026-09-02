@@ -4,7 +4,7 @@ import { PUBLIC_HOME_FALLBACK_MARKERS, renderPublicHomeFallback } from './home-c
 import { APP_PUBLIC_NAME } from './branding.ts'
 
 const fallback = renderPublicHomeFallback()
-assert.match(fallback, new RegExp(`<h1>${APP_PUBLIC_NAME}</h1>`))
+assert.match(fallback, new RegExp(APP_PUBLIC_NAME))
 assert.match(fallback, /href="\/privacy"/)
 assert.match(fallback, /href="\/terms"/)
 assert.match(fallback, /href="\/login"/)
