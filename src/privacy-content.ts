@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const PRIVACY_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const PRIVACY_UPDATED = 'August 28, 2026'
+export const PRIVACY_UPDATED = 'September 2, 2026'
 
 export type PrivacySection = LegalSection
 
@@ -52,9 +52,37 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
     ],
   },
   {
-    heading: 'Selling and sharing',
+    heading: 'Sharing, transfer, and disclosure of Google user data',
     paragraphs: [
-      'We do not sell this data. We do not use it for advertising.',
+      'Google user data is shared only with the service providers and parties listed below, and only as needed to operate this household calendar. We do not sell Google user data. We do not share it with advertisers, data brokers, or unrelated third parties.',
+      'Google: OAuth sign-in and read-only Calendar API calls to fetch events for display.',
+      'Neon (Postgres hosting): encrypted Google OAuth tokens, a short-lived server-side cache of Google events, and other household calendar data are stored in a managed Postgres database.',
+      'Vercel (application hosting): the app and its API routes run on Vercel infrastructure. Google user data passes through these servers only to provide calendar features.',
+      'Vercel AI Gateway (optional AI Planner): when an authenticated user submits a planning request, scheduling text and any attached calendar screenshots may be sent to the selected model through Vercel AI Gateway for that request only.',
+      'Household members: anyone who signs in with the shared household login can view Google events displayed on the dashboard. There is no public or multi-tenant sharing.',
+    ],
+  },
+  {
+    heading: 'Data protection for sensitive data',
+    paragraphs: [
+      'All traffic between your browser and this app uses HTTPS (TLS) in transit.',
+      'Google OAuth access and refresh tokens are encrypted at rest with AES-256-GCM before storage in Postgres. The browser never receives those provider credentials.',
+      'Web Push subscription keys, when enabled, are also encrypted at rest with AES-256-GCM.',
+      'Household sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Calendar and integration APIs require that session.',
+      'Google Calendar access is read-only. Disconnecting a Google account revokes the grant and deletes stored encrypted credentials and cached events for that account.',
+    ],
+  },
+  {
+    heading: 'Limited use of Google user data',
+    paragraphs: [
+      'The use of raw or derived user data received from Google APIs will adhere to the Google User Data Policy, including the Limited Use requirements.',
+      'Google user data is used only to provide or improve user-facing calendar and planning features in this app. It is not used to create, train, or improve generalized or foundational AI or machine learning models.',
+    ],
+  },
+  {
+    heading: 'Selling and advertising',
+    paragraphs: [
+      'We do not sell Google user data or other household data. We do not use it for advertising.',
     ],
   },
   {

@@ -616,6 +616,10 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .public-home-stat-divider { position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:1px;height:34px;background:rgba(255,255,255,.28); }
 .public-home-visual-caption { margin:16px 0 0;font-size:12px;color:rgba(255,255,255,.88); }
 .public-home-visual-caption a { color:white;font-weight:700;text-decoration:underline; }
+.public-home-footer { max-width:1180px;width:100%;margin:0 auto;padding:0 max(28px,env(safe-area-inset-right,0px)) max(40px,env(safe-area-inset-bottom,0px)) max(28px,env(safe-area-inset-left,0px));font-size:13px;line-height:1.6;color:var(--muted); }
+.public-home-footer nav { margin-top:8px; }
+.public-home-footer a { color:var(--text-mid);text-decoration:none; }
+.public-home-footer a:hover { color:var(--ink);text-decoration:underline; }
 
 @media (min-width: 760px) {
   .public-home-nav { display:flex; }

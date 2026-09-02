@@ -31,6 +31,16 @@ export function renderPublicHomeFallback() {
         </div>
       </section>
     </main>
+    <footer class="public-home-footer">
+      <p>This page is public. Sign in is only required to view calendars and saved household data.</p>
+      <nav aria-label="Legal">
+        <a href="/privacy">Privacy policy</a>
+        <span aria-hidden="true"> · </span>
+        <a href="/terms">Terms of service</a>
+        <span aria-hidden="true"> · </span>
+        <a href="mailto:${APP_SUPPORT_EMAIL}">Contact</a>
+      </nav>
+    </footer>
   </div>`
 }
 
