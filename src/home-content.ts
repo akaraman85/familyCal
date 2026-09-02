@@ -1,26 +1,37 @@
 import {
   APP_DESCRIPTION,
   APP_PUBLIC_NAME,
+  APP_SHORT_NAME,
   APP_SUPPORT_EMAIL,
 } from './branding'
 
 export function renderPublicHomeFallback() {
-  return `<main class="public-home-fallback" aria-label="${APP_PUBLIC_NAME}">
-    <div class="public-home-card">
-      <div class="public-home-mark" aria-hidden="true">FC</div>
-      <p class="public-home-eyebrow">Private household calendar</p>
-      <h1>${APP_PUBLIC_NAME}</h1>
-      <p>${APP_DESCRIPTION}</p>
-      <p>Family Calendar lets a single household view shared events, connect Google Calendars read-only, and plan with AI. Sign in to access calendars, integrations, and saved events.</p>
-      <p class="public-home-actions"><a href="/login" class="public-home-signin">Sign in</a></p>
-      <p class="public-home-links">
-        <a href="/privacy">Privacy policy</a>
-        <span aria-hidden="true"> · </span>
-        <a href="/terms">Terms of service</a>
-      </p>
-      <p class="public-home-contact">Support: <a href="mailto:${APP_SUPPORT_EMAIL}">${APP_SUPPORT_EMAIL}</a></p>
-    </div>
-  </main>`
+  return `<div class="public-home-shell">
+    <header class="public-home-header">
+      <a class="public-home-logo" href="/" aria-label="${APP_PUBLIC_NAME}">
+        <span class="public-home-logo-mark" aria-hidden="true">FC</span>
+        <span class="public-home-logo-text"><strong>${APP_SHORT_NAME}</strong><span>Calendar</span></span>
+      </a>
+      <nav class="public-home-nav" aria-label="Site">
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="mailto:${APP_SUPPORT_EMAIL}">Contact</a>
+      </nav>
+      <a class="public-home-header-login" href="/login">Sign in</a>
+    </header>
+    <main class="public-home-hero">
+      <section class="public-home-copy">
+        <p class="public-home-eyebrow">Private household calendar</p>
+        <h1>Family calendar <span>dashboard</span></h1>
+        <p class="public-home-lead">${APP_DESCRIPTION}</p>
+        <p class="public-home-body">View shared events, connect Google Calendars read-only, and plan together with AI. Sign in to access calendars, integrations, and saved events.</p>
+        <div class="public-home-cta-row">
+          <a class="public-home-signin" href="/login">Sign in</a>
+          <a class="public-home-secondary-link" href="/login">I have an account</a>
+        </div>
+      </section>
+    </main>
+  </div>`
 }
 
 export const PUBLIC_HOME_FALLBACK_MARKERS = {
