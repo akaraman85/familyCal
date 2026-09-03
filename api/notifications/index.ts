@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../_lib/auth.js'
+import { requireAdmin } from '../_lib/auth.js'
 import { appEnv } from '../_lib/env.js'
 import {
   getNotificationSettings,
@@ -20,7 +20,7 @@ class ValidationError extends Error {}
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET', 'PUT'])) return
-  if (!requireAuthentication(request, response)) return
+  if (!await requireAdmin(request, response)) return
 
   try {
     const env = appEnv()

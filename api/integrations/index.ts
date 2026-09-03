@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../_lib/auth.js'
+import { requireAdmin } from '../_lib/auth.js'
 import { listIntegrationAccounts } from '../_lib/db.js'
 import { integrationEnv } from '../_lib/env.js'
 import { errorMessage, requireMethod, sendJson, type ApiRequest, type ApiResponse } from '../_lib/http.js'
@@ -6,7 +6,7 @@ import { integrationProviders } from '../_lib/integrations.js'
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
-  if (!requireAuthentication(request, response)) return
+  if (!await requireAdmin(request, response)) return
 
   try {
     const env = integrationEnv()

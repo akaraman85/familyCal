@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../../_lib/auth.js'
+import { requireAdmin } from '../../_lib/auth.js'
 import { invalidateConnectedCalendarCache } from '../../_lib/connected-events.js'
 import {
   getIntegrationAccount,
@@ -19,7 +19,7 @@ class ValidationError extends Error {}
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['PATCH'])) return
-  if (!requireAuthentication(request, response)) return
+  if (!await requireAdmin(request, response)) return
 
   try {
     const env = integrationEnv()

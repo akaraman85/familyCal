@@ -40,12 +40,14 @@ export function useTimelineInteraction<T extends GridEvent>({
   onCreate,
   onMove,
   onSelect,
+  readOnly = false,
 }: {
   days: Date[]
   gutterWidth?: number
   onCreate: (draft: EventDraft) => void
   onMove: (event: T, start: Date, end: Date | null, allDay: boolean) => void
   onSelect: (event: T) => void
+  readOnly?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const daysRef = useRef(days)
@@ -88,7 +90,7 @@ export function useTimelineInteraction<T extends GridEvent>({
   }
 
   const startCreate = (event: ReactPointerEvent<HTMLElement>, day: Date, allDay = false) => {
-    if (event.button !== 0 || sessionRef.current) return
+    if (readOnly || event.button !== 0 || sessionRef.current) return
     ignoreClickRef.current = false
     const target = resolveTarget(event.clientX, event.clientY, allDay)
     sessionRef.current = {
@@ -108,7 +110,7 @@ export function useTimelineInteraction<T extends GridEvent>({
   const startMove = (event: ReactPointerEvent<HTMLElement>, gridEvent: T) => {
     event.stopPropagation()
     ignoreClickRef.current = false
-    if (event.button !== 0 || sessionRef.current || gridEvent.source !== 'saved') return
+    if (readOnly || event.button !== 0 || sessionRef.current || gridEvent.source !== 'saved') return
     sessionRef.current = {
       kind: 'move',
       allDay: gridEvent.allDay,
@@ -225,7 +227,7 @@ export function useTimelineInteraction<T extends GridEvent>({
   }
 
   const onHoverMove = (event: ReactPointerEvent<HTMLElement> | { clientX: number; clientY: number }, day: Date) => {
-    if (sessionRef.current) return
+    if (readOnly || sessionRef.current) return
     const target = resolveTarget(event.clientX, event.clientY, false)
     if (!target) return
     setSlotPreview({

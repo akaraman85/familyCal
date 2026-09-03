@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../_lib/auth.js'
+import { requireAdmin } from '../_lib/auth.js'
 import {
   createFamilyMember,
   deleteFamilyMember,
@@ -58,7 +58,7 @@ function memberJson(member: {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET', 'POST', 'PATCH', 'DELETE'])) return
-  if (!requireAuthentication(request, response)) return
+  if (!await requireAdmin(request, response)) return
 
   try {
     const env = integrationEnv()

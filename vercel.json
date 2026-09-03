@@ -42,6 +42,10 @@
     {
       "source": "/robots.txt",
       "destination": "/api/robots.txt"
+    },
+    {
+      "source": "/guest/:token",
+      "destination": "/index.html"
     }
   ],
   "headers": [

@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const PRIVACY_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const PRIVACY_UPDATED = 'September 2, 2026'
+export const PRIVACY_UPDATED = 'September 3, 2026'
 
 export type PrivacySection = LegalSection
 
@@ -16,7 +16,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Sign-in',
     paragraphs: [
-      'Calendars, family data, and Google connections require a shared household login. That session is kept in an HTTP-only cookie for 12 hours. This privacy policy is public and does not require that login.',
+      'Calendars, family data, and Google connections require a household administrator login or a time-limited guest invite link. Those sessions are kept in an HTTP-only cookie for up to 12 hours, or until a guest invite expires or is revoked. This privacy policy is public and does not require that login.',
     ],
   },
   {
@@ -36,7 +36,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Household data',
     paragraphs: [
-      'Family events, family members, and preferences (calendar views and AI Planner settings) are stored in Postgres for this single-family deployment.',
+      'Family events, family members, guest invite records, and preferences (calendar views and AI Planner settings) are stored in Postgres for this single-family deployment.',
     ],
   },
   {
@@ -59,7 +59,8 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
       'Neon (Postgres hosting): encrypted Google OAuth tokens, a short-lived server-side cache of Google events, and other household calendar data are stored in a managed Postgres database.',
       'Vercel (application hosting): the app and its API routes run on Vercel infrastructure. Google user data passes through these servers only to provide calendar features.',
       'Vercel AI Gateway (optional AI Planner): when an authenticated user submits a planning request, scheduling text and any attached calendar screenshots may be sent to the selected model through Vercel AI Gateway for that request only.',
-      'Household members: anyone who signs in with the shared household login can view Google events displayed on the dashboard. There is no public or multi-tenant sharing.',
+      'Household members: anyone who signs in with the household administrator login can view Google events displayed on the dashboard.',
+      'Invited guests: a household administrator can create a time-limited, revocable link for a friend. Guests see only busy times for the family-member calendars the administrator selected. Event titles, descriptions, locations, attendees, and conference links are removed on the server before the calendar is shown. Guests cannot create, change, or delete events, and they cannot open integrations, family settings, or the AI Planner.',
     ],
   },
   {
@@ -68,7 +69,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
       'All traffic between your browser and this app uses HTTPS (TLS) in transit.',
       'Google OAuth access and refresh tokens are encrypted at rest with AES-256-GCM before storage in Postgres. The browser never receives those provider credentials.',
       'Web Push subscription keys, when enabled, are also encrypted at rest with AES-256-GCM.',
-      'Household sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Calendar and integration APIs require that session.',
+      'Household and guest sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Guest access is also checked against the stored invite on each request so it can be revoked immediately. Calendar and integration APIs require a valid session.',
       'Google Calendar access is read-only. Disconnecting a Google account revokes the grant and deletes stored encrypted credentials and cached events for that account.',
     ],
   },

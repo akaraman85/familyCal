@@ -398,6 +398,35 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
 .member-divider { border-top:1px solid var(--line);margin:22px 0 14px; }.member-meta { display:flex;align-items:center;justify-content:space-between;gap:6px;color:var(--text-soft);font-size:8px; }.member-meta > span { display:flex;align-items:center;gap:5px; }.member-meta > div { display:flex;gap:4px; }.member-meta button { border:0;background:none;color:var(--text-tertiary);font-size:8px;cursor:pointer;padding:3px; }
 .family-empty { min-height:285px;border:1px dashed var(--line);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-tertiary);text-align:center;padding:24px; }
 .family-empty b { color:var(--text-mid);font-size:11px; }.family-empty span { max-width:165px;font-size:8px;line-height:1.5; }
+.guest-access { margin-top:36px; }
+.guest-access .page-heading h2 { font:700 22px/1.2 Manrope;margin:0 0 6px; }
+.guest-link-banner { display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 16px;padding:14px 16px;border:1px solid var(--gateway-border);background:var(--gateway-bg);border-radius:12px; }
+.guest-link-banner b, .guest-link-banner span { display:block; }
+.guest-link-banner b { font-size:11px;margin-bottom:4px; }
+.guest-link-banner span { color:var(--text-tertiary);font-size:9px;word-break:break-all; }
+.guest-link-banner button { flex:none;display:flex;align-items:center;gap:6px;border:0;border-radius:8px;background:var(--orange);color:#fff;height:36px;padding:0 12px;font-size:9px;font-weight:700;cursor:pointer; }
+.guest-list { display:grid;gap:10px; }
+.guest-card { display:flex;align-items:flex-start;justify-content:space-between;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px; }
+.guest-card.revoked { opacity:.62; }
+.guest-card h3 { font:600 13px Manrope;margin:0 0 4px; }
+.guest-card p { color:var(--text-tertiary);font-size:9px;margin:0 0 8px; }
+.guest-card span { font-size:8px;background:var(--inset);color:var(--text-dim);padding:5px 8px;border-radius:8px; }
+.guest-card small { display:block;margin-top:8px;color:var(--text-secondary);font-size:9px; }
+.guest-card-actions { display:flex;flex-wrap:wrap;gap:6px; }
+.guest-card-actions button { border:0;background:none;color:var(--text-tertiary);font-size:8px;cursor:pointer;padding:4px; }
+.guest-calendars { border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:0 0 16px; }
+.guest-calendars legend { font-size:9px;font-weight:700;padding:0 4px; }
+.guest-calendars label { display:flex;align-items:center;gap:8px;min-height:32px;font-size:12px; }
+.guest-calendars p { color:var(--text-tertiary);font-size:10px;margin:8px 0 0; }
+.guest-expiry { display:grid;gap:8px;margin:0 0 16px; }
+.guest-expiry > span { font-size:9px;font-weight:700; }
+.guest-presets { display:flex;flex-wrap:wrap;gap:6px; }
+.guest-presets button { border:1px solid var(--line);background:var(--panel);border-radius:8px;height:30px;padding:0 10px;font-size:9px;cursor:pointer;color:var(--text-mid); }
+.guest-presets button.active { border-color:var(--orange);background:var(--orange-soft);color:var(--active-text);font-weight:700; }
+.guest-banner { display:flex;align-items:flex-start;gap:10px;margin:0 32px 8px;padding:12px 14px;border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text-mid); }
+.guest-banner b, .guest-banner span { display:block; }
+.guest-banner b { font-size:11px;margin-bottom:2px; }
+.guest-banner span { color:var(--text-tertiary);font-size:9px;line-height:1.5; }
 .invite-card { border-style:dashed;background:transparent;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;cursor:pointer;color:var(--text-dim); }
 .invite-card > div { width:42px;height:42px;border-radius:50%;background:var(--hover-warm);color:var(--orange);display:grid;place-items:center; }.invite-card b { font-size:11px;color:var(--text-mid); }.invite-card span { font-size:8px;max-width:130px;line-height:1.5; }
 
@@ -567,7 +596,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .login-card > p:not(.eyebrow) { color:var(--muted);font-size:11px;line-height:1.6;margin:0 0 24px; }
 .login-card .field input { font-size:13px; }
 .login-error { border:1px solid var(--error-border);background:var(--orange-soft);color:var(--error-text);border-radius:8px;padding:10px 11px;font-size:10px;margin-bottom:14px; }
-.login-submit { width:100%;height:42px;border:0;border-radius:8px;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px;font-weight:700;cursor:pointer; }
+.login-submit { width:100%;height:42px;border:0;border-radius:8px;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px;font-weight:700;cursor:pointer;text-decoration:none; }
 .login-submit:disabled { opacity:.65;cursor:wait; }
 .login-privacy { margin:2px 0 0;text-align:center; }
 .login-privacy a { color:var(--text-dim);font-size:11px;text-decoration:none; }
@@ -695,6 +724,8 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
   .integration-grid,.family-grid { grid-template-columns:1fr; }.integration-card { grid-template-columns:42px 1fr; }.integration-action { grid-column:2; }
   .member-integration-card { grid-template-columns:42px 1fr; }.member-integration-card > .connect-btn { grid-column:2;justify-self:start; }.member-integration-accounts { grid-column:1 / -1; }.member-integration-account { grid-template-columns:32px minmax(0,1fr) auto; }.member-integration-account .connected,.member-integration-account .permission-missing { display:none; }
   .account-calendar-list { margin-left:0; }.account-calendar-row { grid-template-columns:9px minmax(0,1fr) auto; }.account-calendar-row > span { display:none; }
+  .guest-banner { margin:0 15px 8px; }
+  .guest-link-banner { flex-direction:column;align-items:stretch; }
   .settings-panel { grid-template-columns:1fr; }.settings-nav { border:0;border-bottom:1px solid var(--line);display:flex;overflow:auto;padding:9px; }.settings-nav button, .settings-nav a { min-width:90px;text-align:center;justify-content:center; }.settings-content { padding:22px 18px; }
   .privacy-page { padding:max(22px,env(safe-area-inset-top,0px)) 15px max(35px,env(safe-area-inset-bottom,0px)); }
   .privacy-card { padding:24px 18px; }

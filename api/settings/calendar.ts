@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../_lib/auth.js'
+import { requireAdmin, requireAuthentication } from '../_lib/auth.js'
 import {
   getCalendarSettings,
   isCalendarView,
@@ -19,7 +19,8 @@ class ValidationError extends Error {}
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET', 'PUT'])) return
-  if (!requireAuthentication(request, response)) return
+  const user = await requireAuthentication(request, response)
+  if (!user) return
 
   try {
     const env = appEnv()
@@ -29,6 +30,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       return
     }
 
+    if (!await requireAdmin(request, response)) return
     if (!requireSameOrigin(request, response, env.appUrl)) return
     const rawBody = await readJsonBody(request)
     if (!rawBody || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
