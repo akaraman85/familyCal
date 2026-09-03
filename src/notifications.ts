@@ -17,6 +17,7 @@ export type PushDevice = {
 export type NotificationStatus = {
   configured: boolean
   publicKey: string | null
+  configurationIssue: 'invalid_public_key' | 'invalid_private_key' | 'public_key_is_private' | null
   settings: NotificationSettings
   devices: PushDevice[]
 }
@@ -53,14 +54,29 @@ export function canRequestPushPermission() {
 }
 
 function urlBase64ToUint8Array(value: string) {
-  const padding = '='.repeat((4 - (value.length % 4)) % 4)
-  const base64 = (value + padding).replace(/-/g, '+').replace(/_/g, '/')
+  const normalized = value.trim()
+  const padding = '='.repeat((4 - (normalized.length % 4)) % 4)
+  const base64 = (normalized + padding).replace(/-/g, '+').replace(/_/g, '/')
   const raw = atob(base64)
   const output = new Uint8Array(raw.length)
   for (let index = 0; index < raw.length; index += 1) {
     output[index] = raw.charCodeAt(index)
   }
   return output
+}
+
+function assertValidVapidPublicKey(publicKey: string) {
+  let bytes: Uint8Array
+  try {
+    bytes = urlBase64ToUint8Array(publicKey)
+  } catch {
+    throw new Error('Push notifications are misconfigured on the server. Regenerate VAPID keys with npm run vapid.')
+  }
+  if (bytes.length !== 65) {
+    throw new Error(
+      'Push notifications are misconfigured on the server. Check that VAPID_PUBLIC_KEY is the longer key from npm run vapid.',
+    )
+  }
 }
 
 export async function loadNotificationStatus() {
@@ -105,6 +121,7 @@ export async function enablePushNotifications(publicKey: string) {
   if (!canRequestPushPermission()) {
     throw new Error('Open Karaman from the Home Screen to allow notifications')
   }
+  assertValidVapidPublicKey(publicKey)
   const permission = await Notification.requestPermission()
   if (permission !== 'granted') {
     throw new Error(
