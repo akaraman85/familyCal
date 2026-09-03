@@ -958,12 +958,6 @@ function AuthenticatedApp({ user, onLogout }: {
       { icon: Users, label: 'Family' },
     ]
   const profileName = isGuest ? user.name : user.username
-  const guestCalendars = isGuest
-    ? [
-      ...user.calendars.map((calendar) => calendar.name),
-      ...(user.includeHousehold ? [HOUSEHOLD_CALENDAR] : []),
-    ]
-    : []
 
   return (
     <div className="app-shell">
@@ -1024,33 +1018,21 @@ function AuthenticatedApp({ user, onLogout }: {
           <header className="topbar">
             <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
             <div className="top-actions">
-              <TopbarNotifications
-                showHints={page !== 'Settings'}
-                eventsError={showEventNotices ? eventsError : null}
-                eventSourceNotice={showEventNotices && !eventsError ? eventSourceNotice : null}
-                googleReconnect={eventSources.google === 'reconnect'}
-                onOpenSettings={() => setPage('Settings')}
-                onOpenIntegrations={() => setPage('Integrations')}
-              />
+              {!isGuest && (
+                <TopbarNotifications
+                  showHints={page !== 'Settings'}
+                  eventsError={showEventNotices ? eventsError : null}
+                  eventSourceNotice={showEventNotices && !eventsError ? eventSourceNotice : null}
+                  googleReconnect={eventSources.google === 'reconnect'}
+                  onOpenSettings={() => setPage('Settings')}
+                  onOpenIntegrations={() => setPage('Integrations')}
+                />
+              )}
               <ThemeMenu />
               {!isGuest && <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>}
             </div>
           </header>
         </div>
-
-        {isGuest && (
-          <div className="guest-banner">
-            <Clock3 size={16} />
-            <div>
-              <b>Busy times only</b>
-              <span>
-                Event names and details are hidden
-                {guestCalendars.length ? ` · ${guestCalendars.join(', ')}` : ''}
-                {` · access ends ${format(new Date(user.expiresAt), 'MMM d, yyyy')}`}
-              </span>
-            </div>
-          </div>
-        )}
 
         {page === 'Calendar' && (
           <CalendarPage
