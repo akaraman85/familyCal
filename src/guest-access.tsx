@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { addDays, format } from 'date-fns'
-import { Check, Copy, Link2, LoaderCircle, Plus, X } from 'lucide-react'
+import { Check, Copy, Link2, LoaderCircle, Mail, Plus, X } from 'lucide-react'
 import type { FamilyMember } from './family'
 import {
   createGuestAccess,
   loadGuests,
   revokeGuestAccess,
   rotateGuestLink,
+  sendGuestInvite,
   updateGuestAccess,
   type GuestAccess,
   type GuestAccessInput,
@@ -18,6 +19,13 @@ const PRESETS = [
   { days: 7, label: '7 days' },
   { days: 30, label: '30 days' },
 ] as const
+
+type InviteBanner = {
+  guestId: string
+  url: string
+  email: string | null
+  sent: boolean
+}
 
 function toLocalInput(date: Date) {
   const offset = date.getTimezoneOffset()
@@ -42,13 +50,24 @@ function statusLabel(guest: GuestAccess) {
   return `Until ${format(new Date(guest.expiresAt), 'MMM d, yyyy')}`
 }
 
+function inviteBannerFromGuest(guest: GuestAccess): InviteBanner | null {
+  if (!guest.inviteUrl) return null
+  return {
+    guestId: guest.id,
+    url: guest.inviteUrl,
+    email: guest.email,
+    sent: guest.inviteSent === true,
+  }
+}
+
 export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
   const [guests, setGuests] = useState<GuestAccess[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<GuestAccess | null | undefined>(undefined)
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
+  const [inviteBanner, setInviteBanner] = useState<InviteBanner | null>(null)
   const [copied, setCopied] = useState(false)
+  const [sending, setSending] = useState(false)
 
   const refresh = async () => {
     const data = await loadGuests()
@@ -76,15 +95,21 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
     }
   }
 
-  const rotate = async (guest: GuestAccess) => {
-    if (!window.confirm(`Create a new link for ${guest.name}? The previous link will stop working.`)) {
+  const rotate = async (guest: GuestAccess, sendInvite = false) => {
+    const message = sendInvite
+      ? `Create a new link for ${guest.name} and email it to ${guest.email}? The previous link will stop working.`
+      : `Create a new link for ${guest.name}? The previous link will stop working.`
+    if (!window.confirm(message)) {
       return
     }
     setError(null)
     try {
-      const result = await rotateGuestLink(guest.id)
-      setInviteUrl(result.guest.inviteUrl ?? null)
-      setCopied(false)
+      const result = await rotateGuestLink(guest.id, sendInvite)
+      const banner = inviteBannerFromGuest(result.guest)
+      if (banner) {
+        setInviteBanner(banner)
+        setCopied(false)
+      }
       await refresh()
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Unable to create a new link')
@@ -92,9 +117,23 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
   }
 
   const copyLink = async () => {
-    if (!inviteUrl) return
-    await navigator.clipboard.writeText(inviteUrl)
+    if (!inviteBanner?.url) return
+    await navigator.clipboard.writeText(inviteBanner.url)
     setCopied(true)
+  }
+
+  const sendInviteEmail = async () => {
+    if (!inviteBanner?.url || !inviteBanner.email) return
+    setSending(true)
+    setError(null)
+    try {
+      await sendGuestInvite(inviteBanner.guestId, inviteBanner.url)
+      setInviteBanner((current) => current ? { ...current, sent: true } : current)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to send invite email')
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -110,15 +149,34 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
         </button>
       </div>
       {error && <div className="integration-error" role="alert">{error}</div>}
-      {inviteUrl && (
+      {inviteBanner && (
         <div className="guest-link-banner">
           <div>
-            <b>Copy this link and send it yourself</b>
-            <span>{inviteUrl}</span>
+            <b>
+              {inviteBanner.sent && inviteBanner.email
+                ? `Invite sent to ${inviteBanner.email}`
+                : 'Invite link ready'}
+            </b>
+            <span>{inviteBanner.url}</span>
+            {!inviteBanner.sent && inviteBanner.email && (
+              <small>You can copy the link or email it directly.</small>
+            )}
+            {!inviteBanner.email && (
+              <small>Copy this link and send it yourself.</small>
+            )}
           </div>
-          <button type="button" onClick={() => void copyLink()}>
-            {copied ? <><Check size={14} />Copied</> : <><Copy size={14} />Copy link</>}
-          </button>
+          <div className="guest-link-banner-actions">
+            {inviteBanner.email && !inviteBanner.sent && (
+              <button type="button" className="guest-send-btn" disabled={sending} onClick={() => void sendInviteEmail()}>
+                {sending
+                  ? <><LoaderCircle size={14} />Sending…</>
+                  : <><Mail size={14} />Send to {inviteBanner.email}</>}
+              </button>
+            )}
+            <button type="button" onClick={() => void copyLink()}>
+              {copied ? <><Check size={14} />Copied</> : <><Copy size={14} />Copy link</>}
+            </button>
+          </div>
         </div>
       )}
       {loading
@@ -144,6 +202,9 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
                   <>
                     <button type="button" onClick={() => setEditing(guest)}>Edit</button>
                     <button type="button" onClick={() => void rotate(guest)}>New link</button>
+                    {guest.email && (
+                      <button type="button" onClick={() => void rotate(guest, true)}>Resend invite</button>
+                    )}
                     <button type="button" onClick={() => void revoke(guest)}>Revoke</button>
                   </>
                 )}
@@ -160,8 +221,9 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
             const result = editing
               ? await updateGuestAccess(editing.id, input)
               : await createGuestAccess(input)
-            if (result.guest.inviteUrl) {
-              setInviteUrl(result.guest.inviteUrl)
+            const banner = inviteBannerFromGuest(result.guest)
+            if (banner) {
+              setInviteBanner(banner)
               setCopied(false)
             }
             await refresh()
@@ -184,6 +246,7 @@ function GuestAccessModal({ guest, members, close, save }: {
   const [includeHousehold, setIncludeHousehold] = useState(guest?.includeHousehold ?? true)
   const [memberIds, setMemberIds] = useState<string[]>(guest?.memberIds ?? members.map((member) => member.id))
   const [expiresAt, setExpiresAt] = useState(toLocalInput(guest ? new Date(guest.expiresAt) : defaultExpiry()))
+  const [sendInvite, setSendInvite] = useState(Boolean(guest?.email))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -203,6 +266,9 @@ function GuestAccessModal({ guest, members, close, save }: {
     ))
   }
 
+  const trimmedEmail = email.trim()
+  const canAutoSend = Boolean(trimmedEmail) && !guest
+
   return (
     <div className="modal-scrim" onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}>
       <form className="family-member-modal guest-modal" onSubmit={async (event: FormEvent) => {
@@ -212,10 +278,11 @@ function GuestAccessModal({ guest, members, close, save }: {
         try {
           await save({
             name: name.trim(),
-            email: email.trim(),
+            email: trimmedEmail,
             includeHousehold,
             expiresAt: new Date(expiresAt).toISOString(),
             memberIds,
+            sendInvite: canAutoSend && sendInvite,
           })
         } catch (saveError) {
           setError(saveError instanceof Error ? saveError.message : 'Unable to save guest access')
@@ -234,9 +301,32 @@ function GuestAccessModal({ guest, members, close, save }: {
           <input autoFocus required maxLength={100} value={name} onChange={(event) => setName(event.target.value)} placeholder="Friend’s name" />
         </label>
         <label className="field">
-          <span>Email <small>optional, for your records</small></span>
-          <input type="email" maxLength={200} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="name@example.com" />
+          <span>Email <small>to send the invite link</small></span>
+          <input
+            type="email"
+            maxLength={200}
+            value={email}
+            onChange={(event) => {
+              const nextEmail = event.target.value
+              setEmail(nextEmail)
+              if (!guest && nextEmail.trim()) {
+                setSendInvite(true)
+              }
+            }}
+            placeholder="name@example.com"
+          />
         </label>
+        {!guest && (
+          <label className="guest-send-option">
+            <input
+              type="checkbox"
+              checked={sendInvite}
+              disabled={!trimmedEmail}
+              onChange={(event) => setSendInvite(event.target.checked)}
+            />
+            <span>Email invite automatically</span>
+          </label>
+        )}
         <fieldset className="guest-calendars">
           <legend>Calendars they can see as busy time</legend>
           <label>

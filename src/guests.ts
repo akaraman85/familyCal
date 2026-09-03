@@ -10,6 +10,7 @@ export type GuestAccess = {
   createdAt: string
   revokedAt: string | null
   inviteUrl?: string
+  inviteSent?: boolean
 }
 
 export type GuestAccessInput = {
@@ -18,6 +19,7 @@ export type GuestAccessInput = {
   includeHousehold: boolean
   expiresAt: string
   memberIds: string[]
+  sendInvite?: boolean
 }
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -54,14 +56,24 @@ export async function updateGuestAccess(guestId: string, input: GuestAccessInput
   return responseJson<{ guest: GuestAccess }>(response)
 }
 
-export async function rotateGuestLink(guestId: string) {
+export async function rotateGuestLink(guestId: string, sendInvite = false) {
   const response = await fetch('/api/guests', {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
     credentials: 'same-origin',
-    body: JSON.stringify({ guestId, rotateLink: true }),
+    body: JSON.stringify({ guestId, rotateLink: true, sendInvite }),
   })
   return responseJson<{ guest: GuestAccess }>(response)
+}
+
+export async function sendGuestInvite(guestId: string, inviteUrl: string) {
+  const response = await fetch('/api/guests/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ guestId, inviteUrl }),
+  })
+  return responseJson<{ sent: true; email: string }>(response)
 }
 
 export async function revokeGuestAccess(guestId: string) {
