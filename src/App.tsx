@@ -67,12 +67,20 @@ import {
   type PlannerProposal,
   type PlannerSettings,
 } from './planner'
-import { loadSession, login, logout, type SessionUser } from './auth'
+import {
+  isGuestUser,
+  loadSession,
+  login,
+  logout,
+  redeemGuestInvite,
+  type SessionUser,
+} from './auth'
 import { APP_PUBLIC_NAME } from './branding'
 import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
 import { PublicHomePage } from './public-home-page'
-import { isLoginPath, isPublicHomePath } from './routes'
+import { guestInviteToken, isLoginPath, isPublicHomePath } from './routes'
+import { GuestAccessSection } from './guest-access'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
 import { NotificationsSettings } from './notifications-settings'
@@ -115,6 +123,7 @@ type EventItem = {
   organizer?: CalendarEventData['organizer']
   color: EventColor
   source: 'saved' | 'google'
+  visibility?: CalendarEventData['visibility']
   google?: CalendarEventData['google']
 }
 
@@ -140,10 +149,11 @@ function familyCalendarNames(members: FamilyMember[], extra?: string) {
   return names
 }
 
-function useFamilyMembers() {
+function useFamilyMembers(enabled = true) {
   const [members, setMembers] = useState<FamilyMember[]>([])
   const [refreshKey, setRefreshKey] = useState(0)
   useEffect(() => {
+    if (!enabled) return
     let cancelled = false
     loadFamilyMembers()
       .then((data) => {
@@ -153,7 +163,7 @@ function useFamilyMembers() {
         if (!cancelled) setMembers([])
       })
     return () => { cancelled = true }
-  }, [refreshKey])
+  }, [enabled, refreshKey])
   return {
     members,
     refreshMembers: () => setRefreshKey((current) => current + 1),
@@ -262,6 +272,7 @@ function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventIt
     organizer: event.organizer,
     color: eventColor(event, members),
     source: event.source,
+    visibility: event.visibility,
     google: event.google,
   }
 }
@@ -373,6 +384,7 @@ function calendarTypeLabel(type: NonNullable<EventItem['google']>['calendar']['t
 }
 
 function eventSourceLabel(event: EventItem) {
+  if (event.visibility === 'busy') return 'Busy time'
   if (!event.google) return `${event.calendar} · Saved event`
   const accounts = [...new Set(event.google.accounts.map((account) => (
     account.email || account.displayName
@@ -498,14 +510,16 @@ function App() {
   const pathname = window.location.pathname
   const legalDocument = publicLegalDocument(pathname)
   const loginPath = isLoginPath(pathname)
+  const guestToken = guestInviteToken(pathname)
   const publicHomePath = isPublicHomePath(pathname)
   const [user, setUser] = useState<SessionUser | null | undefined>(
-    () => (publicHomePath ? null : undefined),
+    () => (publicHomePath && !guestToken ? null : undefined),
   )
   const [sessionError, setSessionError] = useState<string | null>(null)
 
   useEffect(() => {
     if (legalDocument) return
+    if (guestToken) return
     loadSession()
       .then((sessionUser) => {
         setUser(sessionUser)
@@ -517,7 +531,7 @@ function App() {
         setSessionError(error instanceof Error ? error.message : 'Authentication is unavailable')
         setUser(null)
       })
-  }, [legalDocument, loginPath])
+  }, [legalDocument, loginPath, guestToken])
 
   if (legalDocument === 'privacy') return <PrivacyPage />
   if (legalDocument === 'terms') return <TermsPage />
@@ -528,6 +542,16 @@ function App() {
       onLogout={async () => {
         await logout()
         setUser(null)
+        window.history.replaceState(null, '', '/')
+      }}
+    />
+  }
+  if (guestToken) {
+    return <GuestInviteScreen
+      token={guestToken}
+      onAuthenticated={(authenticatedUser) => {
+        setSessionError(null)
+        setUser(authenticatedUser)
         window.history.replaceState(null, '', '/')
       }}
     />
@@ -550,6 +574,44 @@ function App() {
   }
   window.history.replaceState(null, '', '/')
   return <PublicHomePage />
+}
+
+function GuestInviteScreen({ token, onAuthenticated }: {
+  token: string
+  onAuthenticated: (user: SessionUser) => void
+}) {
+  const [error, setError] = useState<string | null>(null)
+  const onAuthenticatedRef = useRef(onAuthenticated)
+  onAuthenticatedRef.current = onAuthenticated
+
+  useEffect(() => {
+    let cancelled = false
+    redeemGuestInvite(token)
+      .then((user) => {
+        if (!cancelled) onAuthenticatedRef.current(user)
+      })
+      .catch((inviteError: unknown) => {
+        if (!cancelled) {
+          setError(inviteError instanceof Error ? inviteError.message : 'This invite expired or was revoked')
+        }
+      })
+    return () => { cancelled = true }
+  }, [token])
+
+  return <main className="login-page">
+    <div className="login-theme"><ThemeMenu /></div>
+    <div className="login-stack">
+      <div className="login-card">
+        <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
+        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
+        <h1>{error ? 'Invite unavailable' : 'Opening calendar'}</h1>
+        <p>{error || 'Checking this guest link…'}</p>
+        {error
+          ? <a className="login-submit" href="/">Back to {APP_PUBLIC_NAME}</a>
+          : <div className="auth-loading"><LoaderCircle size={20}/><span>Signing you in</span></div>}
+      </div>
+    </div>
+  </main>
 }
 
 function LoginScreen({ error: initialError, onAuthenticated }: {
@@ -610,10 +672,11 @@ function AuthenticatedApp({ user, onLogout }: {
   user: SessionUser
   onLogout: () => Promise<void>
 }) {
+  const isGuest = isGuestUser(user)
   const [page, setPage] = useState<Page>(() => (
-    new URLSearchParams(window.location.search).has('integration')
-      ? 'Integrations'
-      : 'Calendar'
+    isGuest || !new URLSearchParams(window.location.search).has('integration')
+      ? 'Calendar'
+      : 'Integrations'
   ))
   const [view, setView] = useState<View>(() => (
     window.matchMedia('(max-width: 760px)').matches
@@ -626,7 +689,7 @@ function AuthenticatedApp({ user, onLogout }: {
   const userChangedView = useRef(false)
   const [selectedDate, setSelectedDate] = useState(() => new Date())
   const isMobile = useIsMobile()
-  const { members: familyMembers, refreshMembers } = useFamilyMembers()
+  const { members: familyMembers, refreshMembers } = useFamilyMembers(!isGuest)
   const [rawEvents, setRawEvents] = useState<CalendarEventData[]>([])
   const [eventSources, setEventSources] = useState<EventSources>({
     saved: 'ok',
@@ -669,8 +732,8 @@ function AuthenticatedApp({ user, onLogout }: {
   }, [isMobile])
 
   useEffect(() => {
-    void syncPushSubscription()
-  }, [])
+    if (!isGuest) void syncPushSubscription()
+  }, [isGuest])
 
   const changeView = (next: View) => {
     userChangedView.current = true
@@ -777,6 +840,7 @@ function AuthenticatedApp({ user, onLogout }: {
   }
 
   const openCreate = (draft?: EventDraft) => {
+    if (isGuest) return
     setSelectedEvent(null)
     const next = draft ?? draftForDate(selectedDate)
     setEventDraft(next)
@@ -802,7 +866,7 @@ function AuthenticatedApp({ user, onLogout }: {
     end: Date | null,
     allDay: boolean,
   ) => {
-    if (event.source !== 'saved') return
+    if (isGuest || event.source !== 'saved') return
     const sameTime = event.allDay === allDay
       && event.date.getTime() === start.getTime()
       && (event.endDate?.getTime() ?? null) === (end?.getTime() ?? null)
@@ -882,12 +946,24 @@ function AuthenticatedApp({ user, onLogout }: {
         ? `${format(startOfWeek(selectedDate, { weekStartsOn }), 'MMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn }), 'MMM d, yyyy')}`
         : format(selectedDate, 'MMMM yyyy')
 
-  const navItems: { icon: typeof CalendarDays; label: Page }[] = [
-    { icon: CalendarDays, label: 'Calendar' },
-    { icon: CalendarClock, label: 'Agenda' },
-    { icon: Link2, label: 'Integrations' },
-    { icon: Users, label: 'Family' },
-  ]
+  const navItems: { icon: typeof CalendarDays; label: Page }[] = isGuest
+    ? [
+      { icon: CalendarDays, label: 'Calendar' },
+      { icon: CalendarClock, label: 'Agenda' },
+    ]
+    : [
+      { icon: CalendarDays, label: 'Calendar' },
+      { icon: CalendarClock, label: 'Agenda' },
+      { icon: Link2, label: 'Integrations' },
+      { icon: Users, label: 'Family' },
+    ]
+  const profileName = isGuest ? user.name : user.username
+  const guestCalendars = isGuest
+    ? [
+      ...user.calendars.map((calendar) => calendar.name),
+      ...(user.includeHousehold ? [HOUSEHOLD_CALENDAR] : []),
+    ]
+    : []
 
   return (
     <div className="app-shell">
@@ -918,18 +994,25 @@ function AuthenticatedApp({ user, onLogout }: {
               ) : null}
             </button>
           ))}
-          <div className="nav-label second">Tools</div>
-          <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} onClick={() => { setChatOpen(true); setMobileNav(false) }}>
-            <WandSparkles size={18} /><span>AI planner</span><span className="new-pill">New</span>
-          </button>
+          {!isGuest && <>
+            <div className="nav-label second">Tools</div>
+            <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} onClick={() => { setChatOpen(true); setMobileNav(false) }}>
+              <WandSparkles size={18} /><span>AI planner</span><span className="new-pill">New</span>
+            </button>
+          </>}
         </nav>
 
         <div className="sidebar-bottom">
-          <button onClick={() => setPage('Settings')} className={page === 'Settings' ? 'active' : ''}><Settings size={18} />Settings</button>
-          <button><CircleHelp size={18} />Help & support</button>
+          {!isGuest && <>
+            <button onClick={() => setPage('Settings')} className={page === 'Settings' ? 'active' : ''}><Settings size={18} />Settings</button>
+            <button><CircleHelp size={18} />Help & support</button>
+          </>}
           <div className="profile">
-            <div className="avatar">{user.username.slice(0, 2).toUpperCase()}</div>
-            <div><strong>{user.username}</strong><span>Authenticated session</span></div>
+            <div className="avatar">{profileName.slice(0, 2).toUpperCase()}</div>
+            <div>
+              <strong>{profileName}</strong>
+              <span>{isGuest ? 'Guest · busy times only' : 'Authenticated session'}</span>
+            </div>
             <button className="profile-logout" title="Sign out" aria-label="Sign out" onClick={() => void onLogout()}><LogOut size={17}/></button>
           </div>
         </div>
@@ -950,10 +1033,24 @@ function AuthenticatedApp({ user, onLogout }: {
                 onOpenIntegrations={() => setPage('Integrations')}
               />
               <ThemeMenu />
-              <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>
+              {!isGuest && <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>}
             </div>
           </header>
         </div>
+
+        {isGuest && (
+          <div className="guest-banner">
+            <Clock3 size={16} />
+            <div>
+              <b>Busy times only</b>
+              <span>
+                Event names and details are hidden
+                {guestCalendars.length ? ` · ${guestCalendars.join(', ')}` : ''}
+                {` · access ends ${format(new Date(user.expiresAt), 'MMM d, yyyy')}`}
+              </span>
+            </div>
+          </div>
+        )}
 
         {page === 'Calendar' && (
           <CalendarPage
@@ -966,13 +1063,14 @@ function AuthenticatedApp({ user, onLogout }: {
             moveDate={moveDate}
             loading={eventsLoading}
             sources={eventSources}
-            members={familyMembers}
+            members={isGuest ? [] : familyMembers}
             weekStartsOn={calendarSettings.weekStartsOn}
             showWeekends={calendarSettings.showWeekends}
             selectEvent={setSelectedEvent}
             createAtSlot={openCreate}
             moveEvent={moveSavedEvent}
             isMobile={isMobile}
+            readOnly={isGuest}
           />
         )}
         {page === 'Agenda' && (
@@ -987,21 +1085,22 @@ function AuthenticatedApp({ user, onLogout }: {
               changeView('Day')
               setPage('Calendar')
             }}
+            readOnly={isGuest}
           />
         )}
-        {page === 'Integrations' && (
+        {!isGuest && page === 'Integrations' && (
           <IntegrationsPage onCalendarsChanged={() => {
             refreshEvents(true)
             refreshMembers()
           }} />
         )}
-        {page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
-        {page === 'Settings' && (
+        {!isGuest && page === 'Family' && <FamilyPage onMembersChanged={refreshMembers} />}
+        {!isGuest && page === 'Settings' && (
           <SettingsPage onCalendarSettingsSaved={setCalendarSettings} />
         )}
       </main>
 
-      <div className={`fab-stack ${fabOpen ? 'open' : ''} ${page === 'Calendar' && isMobile ? 'visible' : ''}`}>
+      <div className={`fab-stack ${fabOpen ? 'open' : ''} ${!isGuest && page === 'Calendar' && isMobile ? 'visible' : ''}`}>
         {fabOpen && (
           <>
             <button
@@ -1038,17 +1137,17 @@ function AuthenticatedApp({ user, onLogout }: {
           {fabOpen ? <X size={22} /> : <Plus size={22} />}
         </button>
       </div>
-      <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
-      <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />
+      {!isGuest && <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>}
+      {!isGuest && <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />}
       {selectedEvent && (
         <EventDetailModal
           event={selectedEvent}
           close={() => setSelectedEvent(null)}
-          save={selectedEvent.source === 'saved' ? updateEvent : undefined}
-          remove={selectedEvent.source === 'saved' ? deleteEvent : undefined}
+          save={!isGuest && selectedEvent.source === 'saved' ? updateEvent : undefined}
+          remove={!isGuest && selectedEvent.source === 'saved' ? deleteEvent : undefined}
         />
       )}
-      {modalOpen && eventDraft && (
+      {!isGuest && modalOpen && eventDraft && (
         <EventModal
           draft={eventDraft}
           close={closeCreate}
@@ -1113,13 +1212,14 @@ function slotPreviewLabel(startMinutes: number, endMinutes: number) {
   return `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile, readOnly = false }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
   loading: boolean; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
   createAtSlot: (draft: EventDraft) => void
   moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void
   isMobile: boolean
+  readOnly?: boolean
 }) {
   const selectDay = (day: Date) => {
     setSelectedDate(day)
@@ -1149,17 +1249,21 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             </div>
           </div>
         </div>
-        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} />}
-        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} />}
-        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} />}
+        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} readOnly={readOnly} />}
+        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
+        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
         {view === 'Year' && <YearView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
       <div className="calendar-footer">
         <div className="calendar-legend">
-          {members.map((member) => (
-            <span key={member.id}><i className={`dot ${member.color}`} />{member.name}</span>
-          ))}
-          <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}</span>
+          {readOnly
+            ? <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />Busy</span>
+            : <>
+              {members.map((member) => (
+                <span key={member.id}><i className={`dot ${member.color}`} />{member.name}</span>
+              ))}
+              <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}</span>
+            </>}
         </div>
         {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
       </div>
@@ -1167,7 +1271,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   )
 }
 
-function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, createAtSlot }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void }) {
+function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, createAtSlot, readOnly = false }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; onSelect: (d: Date) => void; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; readOnly?: boolean }) {
   const weekStart = weekStartDay(weekStartsOn)
   const days = useMemo(() => eachDayOfInterval({
     start: startOfWeek(startOfMonth(selectedDate), { weekStartsOn: weekStart }),
@@ -1183,7 +1287,7 @@ function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, 
             <div
               key={day.toISOString()}
               className={`day-cell ${!isSameMonth(day, selectedDate) ? 'muted' : ''} ${isSameDay(day, new Date()) ? 'today' : ''}`}
-              onClick={() => createAtSlot(draftForDate(day))}
+              onClick={() => { if (!readOnly) createAtSlot(draftForDate(day)) }}
             >
               <button type="button" className="day-cell-select" aria-label={`Select ${format(day, 'MMMM d, yyyy')}`} onClick={(click) => { click.stopPropagation(); onSelect(day) }}><span className="day-number">{format(day, 'd')}</span></button>
               <div className="events">
@@ -1198,7 +1302,7 @@ function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, 
   )
 }
 
-function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void }) {
+function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, readOnly = false }: { events: EventItem[]; selectedDate: Date; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void; readOnly?: boolean }) {
   const weekStart = weekStartDay(weekStartsOn)
   const days = eachDayOfInterval({
     start: startOfWeek(selectedDate, { weekStartsOn: weekStart }),
@@ -1223,6 +1327,7 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
     onCreate: createAtSlot,
     onMove: moveEvent,
     onSelect: selectEvent,
+    readOnly,
   })
   const displayEvents = labeledMovedEvents(events, movePreview)
   const timedPreview = slotPreview && !slotPreview.allDay ? slotPreview : null
@@ -1322,7 +1427,7 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
   )
 }
 
-function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void }) {
+function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, readOnly = false }: { events: EventItem[]; selectedDate: Date; selectEvent: (event: EventItem) => void; createAtSlot: (draft: EventDraft) => void; moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void; readOnly?: boolean }) {
   const days = [selectedDate]
   const {
     containerRef,
@@ -1343,6 +1448,7 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent }:
     onCreate: createAtSlot,
     onMove: moveEvent,
     onSelect: selectEvent,
+    readOnly,
   })
   const displayEvents = labeledMovedEvents(events, movePreview)
   const dayEvents = displayEvents.filter((event) => isSameDay(event.date, selectedDate))
@@ -1452,13 +1558,14 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
   })}</div>
 }
 
-function AgendaPage({ events, loading, googleDisconnected, openModal, selectEvent, openCalendar }: {
+function AgendaPage({ events, loading, googleDisconnected, openModal, selectEvent, openCalendar, readOnly = false }: {
   events: EventItem[]
   loading: boolean
   googleDisconnected: boolean
   openModal: () => void
   selectEvent: (event: EventItem) => void
   openCalendar: (date: Date) => void
+  readOnly?: boolean
 }) {
   const now = new Date()
   const today = startOfDay(now)
@@ -1479,9 +1586,9 @@ function AgendaPage({ events, loading, googleDisconnected, openModal, selectEven
         <div>
           <p className="eyebrow">Family agenda</p>
           <h1>Today and the week ahead</h1>
-          <p>A list of what is happening now. Use Calendar when you want the date grid.</p>
+          <p>{readOnly ? 'Busy times only. Event names and details stay hidden.' : 'A list of what is happening now. Use Calendar when you want the date grid.'}</p>
         </div>
-        <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>
+        {!readOnly && <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>}
       </div>
       {highlight && (
         <button
@@ -1497,7 +1604,7 @@ function AgendaPage({ events, loading, googleDisconnected, openModal, selectEven
               : ''}
             {highlight.event.start}
             {highlight.event.end ? ` – ${highlight.event.end}` : ''}
-            {highlight.event.calendar ? ` · ${highlight.event.calendar}` : ''}
+            {highlight.event.visibility !== 'busy' && highlight.event.calendar ? ` · ${highlight.event.calendar}` : ''}
           </small>
         </button>
       )}
@@ -1534,10 +1641,10 @@ function AgendaPage({ events, loading, googleDisconnected, openModal, selectEven
                           <Clock3 size={13} />
                           {event.start}
                           {event.end ? ` – ${event.end}` : ''}
-                          {event.location && <><MapPin size={13} />{event.location}</>}
+                          {event.visibility !== 'busy' && event.location && <><MapPin size={13} />{event.location}</>}
                         </span>
                       </div>
-                      <div className={`tiny-avatar ${event.color}`}>{event.calendar.slice(0, 1).toUpperCase()}</div>
+                      {event.visibility !== 'busy' && <div className={`tiny-avatar ${event.color}`}>{event.calendar.slice(0, 1).toUpperCase()}</div>}
                     </button>
                   ))}
                 </div>
@@ -1546,7 +1653,9 @@ function AgendaPage({ events, loading, googleDisconnected, openModal, selectEven
                 <div className="agenda-empty">
                   {loading
                     ? <span className="calendar-loading"><LoaderCircle size={16} />Loading today's plans</span>
-                    : 'Nothing on the calendar today. Enjoy the open space, or add an event.'}
+                    : readOnly
+                      ? 'No busy times today.'
+                      : 'Nothing on the calendar today. Enjoy the open space, or add an event.'}
                 </div>
               )}
           </section>
@@ -1816,6 +1925,7 @@ function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
       })}
       <button className="invite-card" onClick={() => setEditingMember(null)}><div><Plus size={23}/></div><b>Add family member</b><span>Create a person, then connect their calendar accounts</span></button>
     </div>}
+    <GuestAccessSection members={members} />
     {editingMember !== undefined && <FamilyMemberModal
       member={editingMember}
       close={() => setEditingMember(undefined)}
@@ -2718,7 +2828,7 @@ function EventDetailModal({ event, close, save, remove }: {
 
   return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !busy) close() }}>
     <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
-      <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={busy}><X size={20}/></button></div>
+      <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.visibility === 'busy' ? 'Busy time' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={busy}><X size={20}/></button></div>
       {editing
         ? <form onSubmit={(submitEvent) => void submit(submitEvent)}>
           <label className="field"><span>Event title</span><input ref={titleInputRef} required maxLength={200} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder="What’s happening?" /></label>
@@ -2757,7 +2867,7 @@ function EventDetailModal({ event, close, save, remove }: {
             <div><b>{eventTimeSummary(event)}</b><span>{eventSourceLabel(event)}</span></div>
           </div>
           <dl className="event-detail-list">
-            <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>
+            {event.visibility !== 'busy' && <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>}
             {event.location && <div><dt><MapPin size={16}/>Location</dt><dd>{event.location}</dd></div>}
             {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
             {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
@@ -2773,7 +2883,8 @@ function EventDetailModal({ event, close, save, remove }: {
             }}
             dangerouslySetInnerHTML={{ __html: safeDescription }}
           /></section>}
-          {!canEdit && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Open the event in Google Calendar to change it.</p>}
+          {!canEdit && event.visibility === 'busy' && <p className="event-readonly-note">This guest view shows only the time this calendar is busy.</p>}
+          {!canEdit && event.visibility !== 'busy' && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Open the event in Google Calendar to change it.</p>}
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
             <button type="button" onClick={close} disabled={busy}>Close</button>

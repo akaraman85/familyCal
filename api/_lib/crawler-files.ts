@@ -25,6 +25,7 @@ export function renderRobots(appUrl: string) {
   return [
     'User-agent: *',
     'Disallow: /api/',
+    'Disallow: /guest/',
     '',
     `Sitemap: ${absolutePublicUrl(appUrl, '/sitemap.xml')}`,
     '',

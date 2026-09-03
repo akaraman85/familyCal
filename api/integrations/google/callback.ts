@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../../_lib/auth.js'
+import { requireAdmin } from '../../_lib/auth.js'
 import { decryptJson, encryptJson, hashState } from '../../_lib/crypto.js'
 import {
   consumeOAuthState,
@@ -34,7 +34,7 @@ function queryValue(request: ApiRequest, name: string) {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
-  if (!requireAuthentication(request, response)) return
+  if (!await requireAdmin(request, response)) return
 
   let appUrl = ''
   let secureCookie = false

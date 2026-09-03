@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const TERMS_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const TERMS_UPDATED = 'August 28, 2026'
+export const TERMS_UPDATED = 'September 3, 2026'
 
 export const TERMS_SECTIONS: LegalSection[] = [
   {
@@ -14,8 +14,8 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: 'Access',
     paragraphs: [
-      'The app is gated by one shared household login. The people who use it are the members of that household. Signing in means you accept these terms.',
-      'The household is responsible for who they share that login with, and for which Google accounts they connect.',
+      'The household administrator signs in with the shared household login. Friends may be given a separate, time-limited guest link that can be revoked at any time. Signing in means you accept these terms.',
+      'The household is responsible for who they invite, which family-member calendars a guest can see as busy time, and which Google accounts they connect.',
     ],
   },
   {
@@ -27,7 +27,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: 'What is stored',
     paragraphs: [
-      'Family events, family members, preferences, encrypted Google tokens, and optional encrypted web-push subscriptions are stored in Postgres for this deployment.',
+      'Family events, family members, guest invite records, preferences, encrypted Google tokens, and optional encrypted web-push subscriptions are stored in Postgres for this deployment.',
     ],
   },
   {

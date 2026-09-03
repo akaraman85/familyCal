@@ -14,6 +14,7 @@ calendar views.
 - Per-account primary, owner, editable, and read-only calendar controls
 - Postgres-backed events created directly in the family calendar
 - Family member and preference administration
+- Time-limited guest links that show busy times only for selected family calendars
 - Responsive desktop and mobile layouts
 - Installable progressive web app on iPhone, iPad, and desktop
 - Web push event reminders on installed devices
@@ -137,8 +138,20 @@ HTTP-only, SameSite cookie.
 Set `AUTH_SESSION_SECRET` to an independent `openssl rand -base64 32` value.
 Because `cal` is intentionally weak and known, replace it with a strong secret
 before exposing the deployment beyond its temporary intended audience. This
-access gate is single-user; migrate to a managed identity provider before
-supporting separate household accounts or user-level permissions.
+access gate is the household administrator login. Friends can be invited from
+Family → Guest access with a copyable magic link. That link is hashed at rest,
+can be rotated or revoked immediately, and must expire within a year. Guest
+sessions are re-checked against the stored invite on every API request.
+
+Guests see only busy blocks for the household calendar and/or family-member
+calendars the administrator selected. Event titles, locations, descriptions,
+attendees, and conference links are stripped on the server. Guests cannot
+create or edit events, open integrations, change settings, or use the AI
+Planner. Sending the link is the administrator's responsibility; the app does
+not email invites.
+
+A future version that needs separate household accounts should still replace
+the shared administrator password with a managed identity provider.
 
 ## Google Calendar integration
 
@@ -161,9 +174,10 @@ Before deployment, provision:
 | Web Push | Run `npm run vapid` and set server-only `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. |
 | Reminder cron | Set server-only `CRON_SECRET` to `openssl rand -base64 32`. Vercel Cron sends it as a bearer token to `/api/notifications/dispatch` every five minutes. |
 
-The current product is a single-family deployment with one shared temporary
-login, not a multi-user identity system. Vercel Deployment Protection remains
-useful as defense in depth. A future multi-family version must replace
+The current product is a single-family deployment with one household
+administrator login plus optional guest links, not a multi-family identity
+system. Vercel Deployment Protection remains useful as defense in depth.
+A future multi-family version must replace
 `INTEGRATION_OWNER_ID` with the authenticated user's or household's server-side
 identity and use individual accounts.
 

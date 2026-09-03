@@ -1,4 +1,4 @@
-import { requireAuthentication } from '../_lib/auth.js'
+import { publicSessionUser, requireAuthentication } from '../_lib/auth.js'
 import {
   requireMethod,
   sendJson,
@@ -8,7 +8,7 @@ import {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
-  const user = requireAuthentication(request, response)
+  const user = await requireAuthentication(request, response)
   if (!user) return
-  sendJson(response, 200, { user })
+  sendJson(response, 200, { user: publicSessionUser(user) })
 }

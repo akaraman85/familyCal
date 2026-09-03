@@ -6,6 +6,8 @@ import {
   updateSavedEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
+import { guestEvents } from '../_lib/guest-visibility.js'
+import { getActiveGuest, guestGrantFromRecord } from '../_lib/guests.js'
 import {
   EventSearchRangeError,
   searchCalendarEvents,
@@ -124,7 +126,11 @@ function parseSavedEventId(id: unknown, action: 'updated' | 'deleted' = 'updated
   return eventId
 }
 
-async function getEvents(request: ApiRequest, response: ApiResponse) {
+async function getEvents(
+  request: ApiRequest,
+  response: ApiResponse,
+  access: 'admin' | { guestId: string },
+) {
   try {
     const env = integrationEnv()
     const { timeMin, timeMax } = parseRange(request)
@@ -140,8 +146,17 @@ async function getEvents(request: ApiRequest, response: ApiResponse) {
       revalidate,
       limit: Number.POSITIVE_INFINITY,
     })
+    let events = searchResult.events
+    if (access !== 'admin') {
+      const guest = await getActiveGuest(env.databaseUrl, env.ownerId, access.guestId)
+      if (!guest) {
+        sendJson(response, 401, { error: 'Guest access expired or revoked' })
+        return
+      }
+      events = guestEvents(events, guestGrantFromRecord(guest))
+    }
     sendJson(response, 200, {
-      events: searchResult.events,
+      events,
       sources: {
         saved: searchResult.sources.saved === 'skipped' ? 'ok' : searchResult.sources.saved,
         google: searchResult.sources.google === 'skipped' ? 'ok' : searchResult.sources.google,
@@ -292,9 +307,20 @@ async function patchEvent(request: ApiRequest, response: ApiResponse) {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET', 'POST', 'PATCH', 'DELETE'])) return
-  if (!requireAuthentication(request, response)) return
+  const user = await requireAuthentication(request, response)
+  if (!user) return
+  if (request.method === 'GET') {
+    return getEvents(
+      request,
+      response,
+      user.role === 'guest' ? { guestId: user.guestId } : 'admin',
+    )
+  }
+  if (user.role !== 'admin') {
+    sendJson(response, 403, { error: 'Administrator access required' })
+    return
+  }
   if (request.method === 'POST') return postEvent(request, response)
   if (request.method === 'PATCH') return patchEvent(request, response)
   if (request.method === 'DELETE') return deleteEvent(request, response)
-  return getEvents(request, response)
 }

@@ -1,4 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
+import { appEnv } from './env.js'
+import { getActiveGuest, type GuestRecord } from './guests.js'
 import {
   getCookie,
   sendJson,
@@ -16,14 +18,35 @@ type AuthConfig = {
   username: string
 }
 
-export type AuthenticatedUser = {
+export type AdminUser = {
+  role: 'admin'
   username: string
 }
 
-type SessionPayload = {
-  exp: number
-  username: string
+export type GuestUser = {
+  role: 'guest'
+  guestId: string
+  name: string
+  expiresAt: string
+  includeHousehold: boolean
+  calendars: Array<{ id: string; name: string }>
 }
+
+export type AuthenticatedUser = AdminUser | GuestUser
+
+type AdminSessionPayload = {
+  role?: 'admin'
+  username: string
+  exp: number
+}
+
+type GuestSessionPayload = {
+  role: 'guest'
+  guestId: string
+  exp: number
+}
+
+type SessionPayload = AdminSessionPayload | GuestSessionPayload
 
 function required(name: string) {
   const value = process.env[name]?.trim()
@@ -68,21 +91,33 @@ export function validCredentials(
     && safeEqual(submittedPassword, expectedPassword)
 }
 
+function sessionExpiry(expiresAt?: Date) {
+  const maxExp = Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS
+  if (!expiresAt) return maxExp
+  return Math.min(maxExp, Math.floor(expiresAt.getTime() / 1000))
+}
+
 export function createSession(username: string, config: AuthConfig) {
-  const payload: SessionPayload = {
+  const payload: AdminSessionPayload = {
+    role: 'admin',
     username,
-    exp: Math.floor(Date.now() / 1000) + SESSION_DURATION_SECONDS,
+    exp: sessionExpiry(),
   }
   const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${encoded}.${signature(encoded, config.secret)}`
 }
 
-export function readSession(
-  request: ApiRequest,
-  config: AuthConfig,
-): AuthenticatedUser | null {
-  const token = getCookie(request, SESSION_COOKIE)
-  if (!token) return null
+export function createGuestSession(guest: GuestRecord, config: AuthConfig) {
+  const payload: GuestSessionPayload = {
+    role: 'guest',
+    guestId: guest.id,
+    exp: sessionExpiry(new Date(guest.expires_at)),
+  }
+  const encoded = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  return `${encoded}.${signature(encoded, config.secret)}`
+}
+
+function parseSessionPayload(token: string, config: AuthConfig): SessionPayload | null {
   const [encoded, suppliedSignature, extra] = token.split('.')
   if (!encoded || !suppliedSignature || extra) return null
   if (!safeEqual(suppliedSignature, signature(encoded, config.secret))) return null
@@ -91,16 +126,47 @@ export function readSession(
     const payload = JSON.parse(
       Buffer.from(encoded, 'base64url').toString('utf8'),
     ) as SessionPayload
-    if (
-      payload.username !== config.username
-      || !Number.isFinite(payload.exp)
-      || payload.exp <= Math.floor(Date.now() / 1000)
-    ) {
+    if (!Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) {
       return null
     }
-    return { username: payload.username }
+    return payload
   } catch {
     return null
+  }
+}
+
+export function readAdminSession(
+  request: ApiRequest,
+  config: AuthConfig,
+): AdminUser | null {
+  const token = getCookie(request, SESSION_COOKIE)
+  if (!token) return null
+  const payload = parseSessionPayload(token, config)
+  if (!payload) return null
+  if ('guestId' in payload && payload.role === 'guest') return null
+  if (!('username' in payload) || payload.username !== config.username) return null
+  return { role: 'admin', username: payload.username }
+}
+
+export function publicGuestUser(guest: GuestRecord): GuestUser {
+  return {
+    role: 'guest',
+    guestId: guest.id,
+    name: guest.display_name,
+    expiresAt: guest.expires_at,
+    includeHousehold: guest.include_household,
+    calendars: guest.members,
+  }
+}
+
+export function publicSessionUser(user: AuthenticatedUser) {
+  if (user.role === 'admin') return { role: 'admin' as const, username: user.username }
+  return {
+    role: 'guest' as const,
+    name: user.name,
+    expiresAt: user.expiresAt,
+    includeHousehold: user.includeHousehold,
+    calendars: user.calendars,
   }
 }
 
@@ -126,20 +192,52 @@ export function clearSessionCookie(response: ApiResponse, config: AuthConfig) {
   )
 }
 
-export function requireAuthentication(
+export async function requireAuthentication(
   request: ApiRequest,
   response: ApiResponse,
-) {
+): Promise<AuthenticatedUser | null> {
   try {
     const config = authConfig()
-    const user = readSession(request, config)
-    if (user) return user
+    const token = getCookie(request, SESSION_COOKIE)
+    if (!token) {
+      sendJson(response, 401, { error: 'Authentication required' })
+      return null
+    }
+    const payload = parseSessionPayload(token, config)
+    if (!payload) {
+      sendJson(response, 401, { error: 'Authentication required' })
+      return null
+    }
+    if (payload.role === 'guest') {
+      const env = appEnv()
+      const guest = await getActiveGuest(env.databaseUrl, env.ownerId, payload.guestId)
+      if (!guest || guest.owner_id !== env.ownerId) {
+        sendJson(response, 401, { error: 'Guest access expired or revoked' })
+        return null
+      }
+      return publicGuestUser(guest)
+    }
+    if (!('username' in payload) || payload.username !== config.username) {
+      sendJson(response, 401, { error: 'Authentication required' })
+      return null
+    }
+    return { role: 'admin', username: payload.username }
   } catch (error) {
     console.error('Authentication configuration error', error)
     sendJson(response, 500, { error: 'Authentication is unavailable' })
     return null
   }
+}
 
-  sendJson(response, 401, { error: 'Authentication required' })
-  return null
+export async function requireAdmin(
+  request: ApiRequest,
+  response: ApiResponse,
+): Promise<AdminUser | null> {
+  const user = await requireAuthentication(request, response)
+  if (!user) return null
+  if (user.role !== 'admin') {
+    sendJson(response, 403, { error: 'Administrator access required' })
+    return null
+  }
+  return user
 }

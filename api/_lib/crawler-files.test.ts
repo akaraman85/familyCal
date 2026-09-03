@@ -21,6 +21,7 @@ assert.doesNotMatch(sitemap, /&amp;amp;/)
 const robots = renderRobots(appUrl)
 assert.match(robots, /^User-agent: \*/)
 assert.match(robots, /^Disallow: \/api\/$/m)
+assert.match(robots, /^Disallow: \/guest\/$/m)
 assert.match(robots, /^Sitemap: https:\/\/calendar\.example\.com\/sitemap\.xml$/m)
 
 console.log('crawler-files tests passed')

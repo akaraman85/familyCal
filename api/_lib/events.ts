@@ -17,6 +17,7 @@ export type CalendarEvent = {
     self: boolean
   } | null
   source: 'saved' | 'google'
+  visibility?: 'full' | 'busy'
   google?: {
     calendar: {
       id: string

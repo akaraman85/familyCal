@@ -30,7 +30,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }
 
     setSessionCookie(response, createSession(config.username, config), config)
-    sendJson(response, 200, { user: { username: config.username } })
+    sendJson(response, 200, { user: { role: 'admin', username: config.username } })
   } catch (error) {
     console.error('Login failed', error)
     sendJson(response, 500, { error: 'Authentication is unavailable' })

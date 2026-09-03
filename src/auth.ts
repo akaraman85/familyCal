@@ -1,5 +1,24 @@
-export type SessionUser = {
+export type AdminSessionUser = {
+  role: 'admin'
   username: string
+}
+
+export type GuestSessionUser = {
+  role: 'guest'
+  name: string
+  expiresAt: string
+  includeHousehold: boolean
+  calendars: Array<{ id: string; name: string }>
+}
+
+export type SessionUser = AdminSessionUser | GuestSessionUser
+
+export function isAdminUser(user: SessionUser | null | undefined): user is AdminSessionUser {
+  return user?.role === 'admin'
+}
+
+export function isGuestUser(user: SessionUser | null | undefined): user is GuestSessionUser {
+  return user?.role === 'guest'
 }
 
 async function errorFrom(response: Response) {
@@ -7,6 +26,14 @@ async function errorFrom(response: Response) {
     error?: string
   }
   return new Error(body.error || 'Request failed')
+}
+
+function normalizeSessionUser(user: SessionUser | { username: string; role?: string }): SessionUser {
+  if (user.role === 'guest') return user as GuestSessionUser
+  return {
+    role: 'admin',
+    username: 'username' in user ? user.username : '',
+  }
 }
 
 export async function loadSession() {
@@ -17,7 +44,7 @@ export async function loadSession() {
   if (response.status === 401) return null
   if (!response.ok) throw await errorFrom(response)
   const body = await response.json() as { user: SessionUser }
-  return body.user
+  return normalizeSessionUser(body.user)
 }
 
 export async function login(username: string, password: string) {
@@ -29,7 +56,19 @@ export async function login(username: string, password: string) {
   })
   if (!response.ok) throw await errorFrom(response)
   const body = await response.json() as { user: SessionUser }
-  return body.user
+  return normalizeSessionUser(body.user)
+}
+
+export async function redeemGuestInvite(token: string) {
+  const response = await fetch('/api/auth/guest', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ token }),
+  })
+  if (!response.ok) throw await errorFrom(response)
+  const body = await response.json() as { user: SessionUser }
+  return normalizeSessionUser(body.user)
 }
 
 export async function logout() {
