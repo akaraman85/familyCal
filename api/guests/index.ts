@@ -1,6 +1,8 @@
 import { requireAdmin } from '../_lib/auth.js'
 import { listFamilyMembers } from '../_lib/db.js'
+import { EmailDeliveryError, EmailNotConfiguredError } from '../_lib/email.js'
 import { appEnv } from '../_lib/env.js'
+import { sendGuestInviteEmail } from '../_lib/guest-invite-email.js'
 import {
   createGuest,
   guestInviteUrl,
@@ -24,7 +26,7 @@ const MIN_ACCESS_MS = 60 * 60 * 1000
 
 class ValidationError extends Error {}
 
-function guestJson(guest: GuestRecord, inviteUrl?: string) {
+function guestJson(guest: GuestRecord, inviteUrl?: string, inviteSent?: boolean) {
   return {
     id: guest.id,
     name: guest.display_name,
@@ -37,7 +39,26 @@ function guestJson(guest: GuestRecord, inviteUrl?: string) {
     createdAt: guest.created_at,
     revokedAt: guest.revoked_at,
     inviteUrl,
+    inviteSent,
   }
+}
+
+async function maybeSendGuestInvite(
+  guest: GuestRecord,
+  inviteUrl: string,
+  sendInvite: boolean,
+) {
+  if (!sendInvite) return false
+  if (!guest.email) {
+    throw new ValidationError('Add an email address before sending the invite')
+  }
+  await sendGuestInviteEmail({
+    guestName: guest.display_name,
+    guestEmail: guest.email,
+    inviteUrl,
+    expiresAt: new Date(guest.expires_at),
+  })
+  return true
 }
 
 async function parseGuestFields(
@@ -111,8 +132,14 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         env.ownerId,
         await parseGuestFields(body, env.databaseUrl, env.ownerId),
       )
+      const inviteUrl = guestInviteUrl(env.appUrl, created.token)
+      const inviteSent = await maybeSendGuestInvite(
+        created.guest,
+        inviteUrl,
+        body.sendInvite === true,
+      )
       sendJson(response, 201, {
-        guest: guestJson(created.guest, guestInviteUrl(env.appUrl, created.token)),
+        guest: guestJson(created.guest, inviteUrl, inviteSent),
       })
       return
     }
@@ -137,8 +164,14 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         sendJson(response, 404, { error: 'Guest access not found' })
         return
       }
+      const inviteUrl = guestInviteUrl(env.appUrl, rotated.token)
+      const inviteSent = await maybeSendGuestInvite(
+        rotated.guest,
+        inviteUrl,
+        body.sendInvite === true,
+      )
       sendJson(response, 200, {
-        guest: guestJson(rotated.guest, guestInviteUrl(env.appUrl, rotated.token)),
+        guest: guestJson(rotated.guest, inviteUrl, inviteSent),
       })
       return
     }
@@ -156,6 +189,14 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     sendJson(response, 200, { guest: guestJson(updated) })
   } catch (error) {
     console.error('Unable to manage guest access', error)
+    if (error instanceof EmailNotConfiguredError) {
+      sendJson(response, 503, { error: error.message })
+      return
+    }
+    if (error instanceof EmailDeliveryError) {
+      sendJson(response, 502, { error: error.message })
+      return
+    }
     sendJson(response, error instanceof ValidationError || error instanceof SyntaxError ? 400 : 500, {
       error: error instanceof ValidationError
         ? error.message
