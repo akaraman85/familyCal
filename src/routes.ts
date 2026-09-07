@@ -1,20 +1,16 @@
-export function normalizePathname(pathname: string) {
-  return pathname.replace(/\/+$/, '') || '/'
-}
-
-export function isPublicHomePath(pathname: string) {
-  return normalizePathname(pathname) === '/'
-}
-
-export function isLoginPath(pathname: string) {
-  return normalizePathname(pathname) === '/login'
-}
-
-export function guestInviteToken(pathname: string) {
-  const match = normalizePathname(pathname).match(/^\/guest\/([^/]+)$/)
-  return match?.[1] ?? null
-}
-
-export function isGuestInvitePath(pathname: string) {
-  return guestInviteToken(pathname) !== null
-}
+export {
+  GUEST_INVITE_ERROR_PARAM,
+  GUEST_INVITE_EXPIRED_VALUE,
+  guestInviteErrorFromSearch,
+  guestInviteExpiredLocation,
+  guestInviteSuccessLocation,
+  guestInviteToken,
+  isGuestInvitePath,
+  isLegalDocumentPath,
+  isLoginPath,
+  isPublicHomePath,
+  looksLikeStaticAsset,
+  navigationDecision,
+  normalizePathname,
+  type NavigationDecision,
+} from '../api/_lib/app-routes'

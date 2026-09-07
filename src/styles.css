@@ -658,6 +658,7 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .public-home-header-login:hover { filter:brightness(1.03); }
 .public-home-hero { flex:1;display:grid;grid-template-columns:minmax(0,1fr);gap:28px;align-items:center;max-width:1180px;width:100%;margin:0 auto;padding:24px max(28px,env(safe-area-inset-right,0px)) max(40px,env(safe-area-inset-bottom,0px)) max(28px,env(safe-area-inset-left,0px)); }
 .public-home-copy { max-width:560px; }
+.public-home-alert { border:1px solid var(--error-border);background:var(--orange-soft);color:var(--error-text);border-radius:10px;padding:11px 13px;font-size:13px;line-height:1.5;margin:0 0 18px; }
 .public-home-eyebrow { color:var(--orange)!important;text-transform:uppercase;letter-spacing:1.3px;font-size:10px!important;font-weight:700;margin:0 0 14px!important; }
 .public-home-copy h1 { font:700 clamp(34px,5vw,52px)/1.05 Manrope;margin:0 0 18px;letter-spacing:-1.2px;text-transform:capitalize; }
 .public-home-copy h1 span { color:var(--orange); }

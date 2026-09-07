@@ -42,8 +42,6 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }, state))
   } catch (error) {
     console.error('Unable to start Google Calendar authorization', error)
-    response.statusCode = 302
-    response.setHeader('Location', '/?integration=google-calendar&status=error')
-    response.end()
+    redirect(response, '/?integration=google-calendar&status=error')
   }
 }

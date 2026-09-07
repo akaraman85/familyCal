@@ -13,6 +13,7 @@
       "schedule": "*/5 * * * *"
     }
   ],
+  "trailingSlash": false,
   "functions": {
     "api/planner/propose.ts": {
       "maxDuration": 60
@@ -45,6 +46,18 @@
     },
     {
       "source": "/guest/:token",
+      "destination": "/api/auth/guest?token=:token"
+    },
+    {
+      "source": "/guest/:token/",
+      "destination": "/api/auth/guest?token=:token"
+    },
+    {
+      "source": "/login",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/login/",
       "destination": "/index.html"
     }
   ],

@@ -36,11 +36,9 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   if (!requireMethod(request, response, ['GET'])) return
   if (!await requireAdmin(request, response)) return
 
-  let appUrl = ''
   let secureCookie = false
   try {
     const env = integrationEnv()
-    appUrl = env.appUrl
     secureCookie = new URL(env.appUrl).protocol === 'https:'
     const code = queryValue(request, 'code')
     const state = queryValue(request, 'state')
@@ -92,10 +90,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     })
 
     clearOAuthCookie(response, secureCookie)
-    redirect(response, `${env.appUrl}/?integration=google-calendar&status=connected`)
+    redirect(response, '/?integration=google-calendar&status=connected')
   } catch (error) {
     console.error('Google Calendar OAuth callback failed', error)
     clearOAuthCookie(response, secureCookie)
-    redirect(response, `${appUrl}/?integration=google-calendar&status=error`)
+    redirect(response, '/?integration=google-calendar&status=error')
   }
 }

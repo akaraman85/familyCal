@@ -24,6 +24,7 @@
   "license": "ISC",
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
+    "@vercel/functions": "^3.9.5",
     "ai": "^7.0.73",
     "date-fns": "^4.4.0",
     "dompurify": "^3.4.14",

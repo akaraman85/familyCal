@@ -79,7 +79,7 @@ import { APP_PUBLIC_NAME } from './branding'
 import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
 import { PublicHomePage } from './public-home-page'
-import { guestInviteToken, isLoginPath, isPublicHomePath } from './routes'
+import { guestInviteErrorFromSearch, guestInviteToken, isLoginPath, isPublicHomePath } from './routes'
 import { GuestAccessSection } from './guest-access'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
@@ -595,9 +595,15 @@ function App() {
     />
   }
   if (publicHomePath) {
-    return <PublicHomePage />
+    return <PublicHomePage inviteError={guestInviteErrorFromSearch(window.location.search)} />
   }
-  window.history.replaceState(null, '', '/')
+  return <UnknownPathHome />
+}
+
+function UnknownPathHome() {
+  useEffect(() => {
+    window.history.replaceState(null, '', '/')
+  }, [])
   return <PublicHomePage />
 }
 
