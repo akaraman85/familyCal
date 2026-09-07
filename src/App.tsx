@@ -104,6 +104,10 @@ import {
   useTheme,
   type ThemePreference,
 } from './theme'
+import {
+  EVENT_TEXT_SIZE_OPTIONS,
+  useDisplaySettings,
+} from './display-settings'
 
 type View = CalendarView
 type Page = 'Calendar' | 'Agenda' | 'Integrations' | 'Family' | 'Settings'
@@ -414,6 +418,27 @@ function ThemePicker() {
           onClick={() => setPreference(option.value)}
         >
           <ThemeIcon preference={option.value} size={14} />
+          {option.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function EventTextSizePicker() {
+  const { eventTextSize, setEventTextSize } = useDisplaySettings()
+  return (
+    <div className="theme-options" role="radiogroup" aria-label="Event text size">
+      {EVENT_TEXT_SIZE_OPTIONS.map((option) => (
+        <button
+          key={option.value}
+          type="button"
+          role="radio"
+          aria-checked={eventTextSize === option.value}
+          className={eventTextSize === option.value ? 'active' : ''}
+          title={option.hint}
+          onClick={() => setEventTextSize(option.value)}
+        >
           {option.label}
         </button>
       ))}
@@ -2040,6 +2065,13 @@ function SettingsPage({ onCalendarSettingsSaved }: {
               <small>Device is the default. Light and Dark override it locally.</small>
             </span>
             <ThemePicker />
+          </label>
+          <label>
+            <span>
+              <b>Event text size</b>
+              <small>Adjust how large event titles and times appear in calendar views.</small>
+            </span>
+            <EventTextSizePicker />
           </label>
         </div>
         <div className="settings-section">
