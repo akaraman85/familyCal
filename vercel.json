@@ -59,6 +59,46 @@
     {
       "source": "/login/",
       "destination": "/index.html"
+    },
+    {
+      "source": "/calendar",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/calendar/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/agenda",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/agenda/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/integrations",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/integrations/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/family",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/family/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/settings/",
+      "destination": "/index.html"
     }
   ],
   "headers": [

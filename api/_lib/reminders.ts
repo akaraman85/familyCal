@@ -66,7 +66,7 @@ export function reminderPayload(event: CalendarEvent, timezone: string) {
     return {
       title: event.title,
       body: `Today · All day${location}`,
-      url: '/',
+      url: '/calendar',
       tag: `event:${event.id}`,
     }
   }
@@ -84,7 +84,7 @@ export function reminderPayload(event: CalendarEvent, timezone: string) {
   return {
     title: event.title,
     body: `${today ? 'Starts' : 'Upcoming'} ${when}${location}`,
-    url: '/',
+    url: '/calendar',
     tag: `event:${event.id}`,
   }
 }

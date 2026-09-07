@@ -1,3 +1,4 @@
+import { googleOAuthReturnLocation } from '../../_lib/app-routes.js'
 import { requireAdmin } from '../../_lib/auth.js'
 import { decryptJson, encryptJson, hashState } from '../../_lib/crypto.js'
 import {
@@ -90,10 +91,10 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     })
 
     clearOAuthCookie(response, secureCookie)
-    redirect(response, '/?integration=google-calendar&status=connected')
+    redirect(response, googleOAuthReturnLocation('connected'))
   } catch (error) {
     console.error('Google Calendar OAuth callback failed', error)
     clearOAuthCookie(response, secureCookie)
-    redirect(response, '/?integration=google-calendar&status=error')
+    redirect(response, googleOAuthReturnLocation('error'))
   }
 }
