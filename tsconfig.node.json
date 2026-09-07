@@ -7,5 +7,5 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["vite.config.ts", "api/_lib/crawler-files.ts"]
+  "include": ["vite.config.ts", "api/_lib/crawler-files.ts", "api/_lib/app-routes.ts", "api/_lib/session-cookie.ts"]
 }

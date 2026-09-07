@@ -50,7 +50,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       {
         title: 'Karaman is ready',
         body: 'Event reminders will appear on this device.',
-        url: '/',
+        url: '/calendar',
         tag: 'karaman-test',
       },
       {

@@ -176,12 +176,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .mobile-close { display: none; border: 0; background: none; margin-left: auto; }
 .nav-label { color: var(--text-label); font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; margin: 4px 11px 8px; }
 .nav-label.second { margin-top: 25px; }
-.sidebar nav button, .sidebar-bottom > button { border: 0; background: transparent; width: 100%; height: 43px; border-radius: 9px; display:flex; align-items:center; gap: 12px; padding: 0 12px; font-size: 13px; font-weight: 500; color: var(--text-nav); margin: 2px 0; cursor: pointer; transition: .18s ease; }
-.sidebar nav button:hover, .sidebar-bottom > button:hover { background: var(--hover); color: var(--ink); }
-.sidebar nav button.active, .sidebar-bottom > button.active { background: var(--active-fill); color: var(--active-text); font-weight: 600; }
+.sidebar nav button, .sidebar nav a, .sidebar-bottom > button, .sidebar-bottom > a { border: 0; background: transparent; width: 100%; height: 43px; border-radius: 9px; display:flex; align-items:center; gap: 12px; padding: 0 12px; font-size: 13px; font-weight: 500; color: var(--text-nav); margin: 2px 0; cursor: pointer; transition: .18s ease; text-decoration: none; box-sizing: border-box; }
+.sidebar nav button:hover, .sidebar nav a:hover, .sidebar-bottom > button:hover, .sidebar-bottom > a:hover { background: var(--hover); color: var(--ink); }
+.sidebar nav button.active, .sidebar nav a.active, .sidebar-bottom > button.active, .sidebar-bottom > a.active { background: var(--active-fill); color: var(--active-text); font-weight: 600; }
 .nav-count { margin-left: auto; background: var(--nav-count-bg); color: var(--nav-count-text); border-radius: 10px; min-width: 20px; padding: 2px 5px; font-size: 10px; }
 .nav-warning { margin-left: auto; display: grid; place-items: center; color: var(--orange); flex: none; }
-.sidebar nav button.active .nav-warning { color: var(--error-text); }
+.sidebar nav button.active .nav-warning, .sidebar nav a.active .nav-warning { color: var(--error-text); }
 .new-pill { margin-left: auto; color: var(--active-text); font-size: 9px; padding: 3px 6px; border: 1px solid var(--pill-border); border-radius: 8px; text-transform: uppercase; letter-spacing: .5px; }
 .sidebar-bottom { margin-top: auto; }
 .profile { border-top: 1px solid var(--line); margin-top: 15px; padding: 19px 4px 0; display: flex; align-items:center; gap: 10px; }

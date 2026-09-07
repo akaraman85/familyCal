@@ -1,7 +1,9 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { navigationDecision } from './api/_lib/app-routes.ts'
 import { renderRobots, renderSitemap } from './api/_lib/crawler-files.ts'
+import { sessionPayloadFromCookieHeader, trySessionSecret } from './api/_lib/session-cookie.ts'
 
 function publicAppUrlForDev() {
   const configured = process.env.PUBLIC_APP_URL?.trim().replace(/\/$/, '')
@@ -19,12 +21,44 @@ function rewritePublicLegalPath(request: { url?: string }) {
   }
 }
 
-export default defineConfig({
+function isViteInternalPath(pathname: string) {
+  return pathname.startsWith('/@')
+    || pathname.startsWith('/src/')
+    || pathname.startsWith('/node_modules')
+}
+
+function applyAuthRedirect(
+  request: { url?: string; headers: { cookie?: string; host?: string } },
+  response: { statusCode: number; setHeader: (name: string, value: string) => void; end: () => void },
+) {
+  const host = request.headers.host || 'localhost'
+  const url = new URL(request.url ?? '/', `http://${host}`)
+  if (isViteInternalPath(url.pathname)) return false
+  const secret = trySessionSecret()
+  const payload = secret ? sessionPayloadFromCookieHeader(request.headers.cookie, secret) : null
+  const decision = navigationDecision(url.pathname, {
+    hasSession: Boolean(payload),
+    isGuest: payload?.role === 'guest',
+    search: url.search,
+  })
+  if (decision === 'continue') return false
+  response.statusCode = 302
+  response.setHeader('Location', decision.redirect)
+  response.end()
+  return true
+}
+
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '')
+  if (env.AUTH_SESSION_SECRET) process.env.AUTH_SESSION_SECRET = env.AUTH_SESSION_SECRET
+
+  return {
   plugins: [
     {
       name: 'public-legal-paths',
       configureServer(server) {
         server.middlewares.use((request, response, next) => {
+          if (applyAuthRedirect(request, response)) return
           const pathname = request.url?.split('?')[0] ?? ''
           if (pathname === '/sitemap.xml') {
             response.statusCode = 200
@@ -44,6 +78,7 @@ export default defineConfig({
       },
       configurePreviewServer(server) {
         server.middlewares.use((request, response, next) => {
+          if (applyAuthRedirect(request, response)) return
           const pathname = request.url?.split('?')[0] ?? ''
           if (pathname === '/sitemap.xml') {
             response.statusCode = 200
@@ -81,7 +116,7 @@ export default defineConfig({
         description: 'A private household calendar dashboard with Google Calendar integration, family events, and AI planning.',
         lang: 'en',
         dir: 'ltr',
-        start_url: '/',
+        start_url: '/calendar',
         scope: '/',
         display: 'standalone',
         display_override: ['standalone', 'minimal-ui', 'browser'],
@@ -125,4 +160,5 @@ export default defineConfig({
       },
     }),
   ],
+  }
 })
