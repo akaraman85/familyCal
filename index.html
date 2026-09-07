@@ -20,6 +20,10 @@
           if (themeMeta) themeMeta.setAttribute('content', color)
           var statusMeta = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')
           if (statusMeta) statusMeta.setAttribute('content', resolved === 'dark' ? 'black-translucent' : 'default')
+          var textSize = localStorage.getItem('karaman-event-text-size')
+          if (textSize === 'compact' || textSize === 'large') {
+            document.documentElement.setAttribute('data-event-text-size', textSize)
+          }
         } catch (e) {}
       })()
     </script>
