@@ -1,16 +1,12 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CalendarDays,
   CalendarRange,
   Sparkles,
   Users,
 } from 'lucide-react'
-import {
-  APP_DESCRIPTION,
-  APP_PUBLIC_NAME,
-  APP_SHORT_NAME,
-  APP_SUPPORT_EMAIL,
-} from './branding'
+import { APP_DESCRIPTION, APP_PUBLIC_NAME, APP_SHORT_NAME, APP_SUPPORT_EMAIL } from './branding'
+import { guestInviteErrorFromSearch, GUEST_INVITE_ERROR_PARAM } from './routes'
 
 const FEATURE_STATS = [
   { icon: CalendarRange, value: 'Google sync', label: 'Read-only calendar import' },
@@ -18,7 +14,17 @@ const FEATURE_STATS = [
   { icon: Sparkles, value: 'AI planning', label: 'Smart event suggestions' },
 ] as const
 
+let consumedInviteError: boolean | undefined
+
+function consumeInviteErrorFlag() {
+  if (consumedInviteError !== undefined) return consumedInviteError
+  consumedInviteError = guestInviteErrorFromSearch(window.location.search)
+  return consumedInviteError
+}
+
 export function PublicHomePage() {
+  const [inviteError] = useState(consumeInviteErrorFlag)
+
   useEffect(() => {
     const previous = document.title
     document.title = APP_PUBLIC_NAME
@@ -26,6 +32,15 @@ export function PublicHomePage() {
       document.title = previous
     }
   }, [])
+
+  useEffect(() => {
+    if (!inviteError) return
+    const url = new URL(window.location.href)
+    if (!url.searchParams.has(GUEST_INVITE_ERROR_PARAM)) return
+    url.searchParams.delete(GUEST_INVITE_ERROR_PARAM)
+    const search = url.searchParams.toString()
+    window.history.replaceState(null, '', `${url.pathname}${search ? `?${search}` : ''}${url.hash}`)
+  }, [inviteError])
 
   return (
     <div className="public-home-shell">
@@ -49,6 +64,11 @@ export function PublicHomePage() {
 
       <main className="public-home-hero">
         <section className="public-home-copy">
+          {inviteError && (
+            <div className="public-home-alert" role="alert">
+              This invite expired or was revoked. Ask the calendar owner for a new link.
+            </div>
+          )}
           <p className="public-home-eyebrow">Private household calendar</p>
           <h1>
             Family calendar

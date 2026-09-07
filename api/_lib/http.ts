@@ -40,6 +40,17 @@ export function redirect(response: ApiResponse, location: string) {
   response.end()
 }
 
+export function queryValue(request: ApiRequest, name: string) {
+  const value = request.query?.[name]
+  if (Array.isArray(value)) return value[0]
+  if (value) return value
+  try {
+    return new URL(request.url ?? '/', 'http://localhost').searchParams.get(name) ?? undefined
+  } catch {
+    return undefined
+  }
+}
+
 export function requireMethod(
   request: ApiRequest,
   response: ApiResponse,

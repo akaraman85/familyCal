@@ -1,4 +1,3 @@
-import { createHmac, timingSafeEqual } from 'node:crypto'
 import { appEnv } from './env.js'
 import { getActiveGuest, type GuestRecord } from './guests.js'
 import {
@@ -7,9 +6,16 @@ import {
   type ApiRequest,
   type ApiResponse,
 } from './http.js'
-
-const SESSION_COOKIE = 'familycal_session'
-const SESSION_DURATION_SECONDS = 12 * 60 * 60
+import {
+  parseSessionPayload,
+  safeEqual,
+  SESSION_COOKIE,
+  SESSION_DURATION_SECONDS,
+  signature,
+  trySessionSecret,
+  type AdminSessionPayload,
+  type GuestSessionPayload,
+} from './session-cookie.js'
 
 type AuthConfig = {
   appUrl: string
@@ -34,20 +40,6 @@ export type GuestUser = {
 
 export type AuthenticatedUser = AdminUser | GuestUser
 
-type AdminSessionPayload = {
-  role?: 'admin'
-  username: string
-  exp: number
-}
-
-type GuestSessionPayload = {
-  role: 'guest'
-  guestId: string
-  exp: number
-}
-
-type SessionPayload = AdminSessionPayload | GuestSessionPayload
-
 function required(name: string) {
   const value = process.env[name]?.trim()
   if (!value) throw new Error(`Missing required environment variable: ${name}`)
@@ -55,8 +47,8 @@ function required(name: string) {
 }
 
 export function authConfig(): AuthConfig {
-  const secret = Buffer.from(required('AUTH_SESSION_SECRET'), 'base64')
-  if (secret.length !== 32) {
+  const secret = trySessionSecret()
+  if (!secret) {
     throw new Error('AUTH_SESSION_SECRET must be a base64-encoded 32-byte key')
   }
   return {
@@ -65,17 +57,6 @@ export function authConfig(): AuthConfig {
     password: required('APP_PASSWORD'),
     secret,
   }
-}
-
-function signature(value: string, secret: Buffer) {
-  return createHmac('sha256', secret).update(value).digest('base64url')
-}
-
-function safeEqual(left: string, right: string) {
-  const leftBuffer = Buffer.from(left)
-  const rightBuffer = Buffer.from(right)
-  return leftBuffer.length === rightBuffer.length
-    && timingSafeEqual(leftBuffer, rightBuffer)
 }
 
 export function validCredentials(
@@ -117,31 +98,13 @@ export function createGuestSession(guest: GuestRecord, config: AuthConfig) {
   return `${encoded}.${signature(encoded, config.secret)}`
 }
 
-function parseSessionPayload(token: string, config: AuthConfig): SessionPayload | null {
-  const [encoded, suppliedSignature, extra] = token.split('.')
-  if (!encoded || !suppliedSignature || extra) return null
-  if (!safeEqual(suppliedSignature, signature(encoded, config.secret))) return null
-
-  try {
-    const payload = JSON.parse(
-      Buffer.from(encoded, 'base64url').toString('utf8'),
-    ) as SessionPayload
-    if (!Number.isFinite(payload.exp) || payload.exp <= Math.floor(Date.now() / 1000)) {
-      return null
-    }
-    return payload
-  } catch {
-    return null
-  }
-}
-
 export function readAdminSession(
   request: ApiRequest,
   config: AuthConfig,
 ): AdminUser | null {
   const token = getCookie(request, SESSION_COOKIE)
   if (!token) return null
-  const payload = parseSessionPayload(token, config)
+  const payload = parseSessionPayload(token, config.secret)
   if (!payload) return null
   if ('guestId' in payload && payload.role === 'guest') return null
   if (!('username' in payload) || payload.username !== config.username) return null
@@ -203,7 +166,7 @@ export async function requireAuthentication(
       sendJson(response, 401, { error: 'Authentication required' })
       return null
     }
-    const payload = parseSessionPayload(token, config)
+    const payload = parseSessionPayload(token, config.secret)
     if (!payload) {
       sendJson(response, 401, { error: 'Authentication required' })
       return null

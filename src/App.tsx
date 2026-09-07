@@ -597,7 +597,13 @@ function App() {
   if (publicHomePath) {
     return <PublicHomePage />
   }
-  window.history.replaceState(null, '', '/')
+  return <UnknownPathHome />
+}
+
+function UnknownPathHome() {
+  useEffect(() => {
+    window.history.replaceState(null, '', '/')
+  }, [])
   return <PublicHomePage />
 }
 
