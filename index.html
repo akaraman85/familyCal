@@ -24,6 +24,17 @@
           if (textSize === 'compact' || textSize === 'large') {
             document.documentElement.setAttribute('data-event-text-size', textSize)
           }
+          var path = location.pathname.replace(/\/+$/, '') || '/'
+          if (
+            path === '/login'
+            || path === '/calendar'
+            || path === '/agenda'
+            || path === '/integrations'
+            || path === '/family'
+            || path === '/settings'
+          ) {
+            document.documentElement.setAttribute('data-app-route', path === '/login' ? 'login' : 'app')
+          }
         } catch (e) {}
       })()
     </script>
@@ -31,8 +42,21 @@
       html { background: #f5f4f0; color-scheme: light dark; }
       html[data-theme="light"] { background: #f5f4f0; color-scheme: light; }
       html[data-theme="dark"] { background: #161513; color-scheme: dark; }
+      html[data-app-route] .public-home-shell { display: none !important; }
+      html[data-app-route] .auth-loading-fallback { display: flex !important; }
+      .auth-loading-fallback {
+        display: none;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        color: #7d817f;
+        font: 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      html[data-theme="dark"] .auth-loading-fallback { color: #9a9892; }
       @media (prefers-color-scheme: dark) {
         html:not([data-theme="light"]) { background: #161513; }
+        html:not([data-theme="light"]) .auth-loading-fallback { color: #9a9892; }
       }
     </style>
     <meta name="description" content="Family Calendar is a private household calendar dashboard with Google Calendar integration, family events, and AI planning." />
@@ -196,6 +220,7 @@
   </head>
   <body>
     <div id="root">
+      <div class="auth-loading-fallback">Checking access…</div>
       <div class="public-home-shell">
         <header class="public-home-header">
           <a class="public-home-logo" href="/" aria-label="Family Calendar">

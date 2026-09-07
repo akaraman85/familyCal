@@ -26,13 +26,27 @@ registerRoute(({ url }) => url.pathname.startsWith('/api/'), new NetworkOnly())
 try {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('/index.html'), {
-      allowlist: [/^\/$/, /^\/login\/?$/],
+      allowlist: [
+        /^\/login\/?$/,
+        /^\/calendar\/?$/,
+        /^\/agenda\/?$/,
+        /^\/integrations\/?$/,
+        /^\/family\/?$/,
+        /^\/settings\/?$/,
+      ],
     }),
   )
 } catch {
   registerRoute(
     new NavigationRoute(createHandlerBoundToURL('index.html'), {
-      allowlist: [/^\/$/, /^\/login\/?$/],
+      allowlist: [
+        /^\/login\/?$/,
+        /^\/calendar\/?$/,
+        /^\/agenda\/?$/,
+        /^\/integrations\/?$/,
+        /^\/family\/?$/,
+        /^\/settings\/?$/,
+      ],
     }),
   )
 }
@@ -57,7 +71,7 @@ self.addEventListener('push', (event) => {
       body: payload.body || 'Open the family calendar.',
       icon: '/pwa-192x192.png',
       badge: '/pwa-192x192.png',
-      data: { url: payload.url || '/' },
+      data: { url: payload.url || '/calendar' },
       tag: payload.tag || 'karaman',
     }),
   )
@@ -66,7 +80,7 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const targetUrl = new URL(
-    String((event.notification.data as { url?: string } | undefined)?.url || '/'),
+    String((event.notification.data as { url?: string } | undefined)?.url || '/calendar'),
     self.location.origin,
   ).href
   event.waitUntil((async () => {

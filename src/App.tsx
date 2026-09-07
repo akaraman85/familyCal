@@ -79,7 +79,19 @@ import { APP_PUBLIC_NAME } from './branding'
 import { publicLegalDocument } from './legal'
 import { PrivacyPage, TermsPage } from './legal-page'
 import { PublicHomePage } from './public-home-page'
-import { guestInviteToken, isLoginPath, isPublicHomePath } from './routes'
+import {
+  appPageFromPath,
+  appPagePath,
+  authenticatedLocation,
+  guestInviteToken,
+  isAdminOnlyAppPage,
+  isAppPath,
+  isLoginPath,
+  isPublicHomePath,
+  loginLocation,
+  normalizePathname,
+  type AppPage,
+} from './routes'
 import { GuestAccessSection } from './guest-access'
 import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, syncPushSubscription } from './notifications'
@@ -110,7 +122,7 @@ import {
 } from './display-settings'
 
 type View = CalendarView
-type Page = 'Calendar' | 'Agenda' | 'Integrations' | 'Family' | 'Settings'
+type Page = AppPage
 type EventColor = 'coral' | 'blue' | 'green' | 'gold'
 type EventItem = {
   id: string
@@ -531,12 +543,19 @@ function agendaDayLabel(day: Date, today: Date) {
   return format(day, 'EEEE')
 }
 
+function replaceLocation(path: string) {
+  const current = `${window.location.pathname}${window.location.search}`
+  if (current === path) return
+  window.history.replaceState(null, '', path)
+}
+
 function App() {
   const pathname = window.location.pathname
   const legalDocument = publicLegalDocument(pathname)
   const loginPath = isLoginPath(pathname)
   const guestToken = guestInviteToken(pathname)
   const publicHomePath = isPublicHomePath(pathname)
+  const appPath = isAppPath(pathname)
   const [user, setUser] = useState<SessionUser | null | undefined>(
     () => (publicHomePath && !guestToken ? null : undefined),
   )
@@ -547,16 +566,21 @@ function App() {
     if (guestToken) return
     loadSession()
       .then((sessionUser) => {
-        setUser(sessionUser)
-        if (sessionUser && loginPath) {
-          window.history.replaceState(null, '', '/')
+        if (sessionUser) {
+          if (loginPath || publicHomePath) {
+            replaceLocation(authenticatedLocation(window.location.search, isGuestUser(sessionUser)))
+          }
+        } else if (appPath) {
+          replaceLocation(loginLocation())
         }
+        setUser(sessionUser)
       })
       .catch((error: unknown) => {
         setSessionError(error instanceof Error ? error.message : 'Authentication is unavailable')
+        if (appPath) replaceLocation(loginLocation())
         setUser(null)
       })
-  }, [legalDocument, loginPath, guestToken])
+  }, [legalDocument, loginPath, guestToken, appPath])
 
   if (legalDocument === 'privacy') return <PrivacyPage />
   if (legalDocument === 'terms') return <TermsPage />
@@ -566,8 +590,8 @@ function App() {
       user={user}
       onLogout={async () => {
         await logout()
+        replaceLocation('/')
         setUser(null)
-        window.history.replaceState(null, '', '/')
       }}
     />
   }
@@ -576,8 +600,8 @@ function App() {
       token={guestToken}
       onAuthenticated={(authenticatedUser) => {
         setSessionError(null)
+        replaceLocation(authenticatedLocation(window.location.search, isGuestUser(authenticatedUser)))
         setUser(authenticatedUser)
-        window.history.replaceState(null, '', '/')
       }}
     />
   }
@@ -589,8 +613,8 @@ function App() {
       error={sessionError}
       onAuthenticated={(authenticatedUser) => {
         setSessionError(null)
+        replaceLocation(authenticatedLocation(window.location.search, isGuestUser(authenticatedUser)))
         setUser(authenticatedUser)
-        window.history.replaceState(null, '', '/')
       }}
     />
   }
@@ -699,16 +723,19 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
   </main>
 }
 
+function pageFromLocation(isGuest: boolean): Page {
+  const fromPath = appPageFromPath(window.location.pathname)
+  if (fromPath && !(isGuest && isAdminOnlyAppPage(fromPath))) return fromPath
+  if (!isGuest && new URLSearchParams(window.location.search).has('integration')) return 'Integrations'
+  return 'Calendar'
+}
+
 function AuthenticatedApp({ user, onLogout }: {
   user: SessionUser
   onLogout: () => Promise<void>
 }) {
   const isGuest = isGuestUser(user)
-  const [page, setPage] = useState<Page>(() => (
-    isGuest || !new URLSearchParams(window.location.search).has('integration')
-      ? 'Calendar'
-      : 'Integrations'
-  ))
+  const [page, setPage] = useState<Page>(() => pageFromLocation(isGuest))
   const [view, setView] = useState<View>(() => (
     window.matchMedia('(max-width: 760px)').matches
       ? 'Day'
@@ -742,6 +769,28 @@ function AuthenticatedApp({ user, onLogout }: {
   const [mobileNav, setMobileNav] = useState(false)
   const [fabOpen, setFabOpen] = useState(false)
   const weekStartsOn = weekStartDay(calendarSettings.weekStartsOn)
+
+  const goToPage = (next: Page) => {
+    const path = appPagePath(next)
+    if (normalizePathname(window.location.pathname) !== path) {
+      window.history.pushState(null, '', path)
+    }
+    setPage(next)
+    setMobileNav(false)
+  }
+
+  useEffect(() => {
+    const expected = appPagePath(page)
+    if (normalizePathname(window.location.pathname) !== expected) {
+      replaceLocation(`${expected}${window.location.search}`)
+    }
+  }, [page])
+
+  useEffect(() => {
+    const onPop = () => setPage(pageFromLocation(isGuest))
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [isGuest])
   const showEventNotices = page === 'Calendar' || page === 'Agenda'
   const eventSourceNotice = showEventNotices
     ? googleSourceNotice(eventSources, events.some((event) => event.source === 'google'))
@@ -1002,10 +1051,15 @@ function AuthenticatedApp({ user, onLogout }: {
         <nav>
           <div className="nav-label">Workspace</div>
           {navItems.map(({ icon: Icon, label }) => (
-            <button
+            <a
               key={label}
+              href={appPagePath(label)}
               className={page === label ? 'active' : ''}
-              onClick={() => { setPage(label); setMobileNav(false) }}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                event.preventDefault()
+                goToPage(label)
+              }}
               aria-label={label === 'Integrations' && integrationsAttention
                 ? 'Integrations (needs attention)'
                 : label}
@@ -1017,7 +1071,7 @@ function AuthenticatedApp({ user, onLogout }: {
                   <AlertTriangle size={14} aria-hidden="true" />
                 </span>
               ) : null}
-            </button>
+            </a>
           ))}
           {!isGuest && <>
             <div className="nav-label second">Tools</div>
@@ -1029,7 +1083,17 @@ function AuthenticatedApp({ user, onLogout }: {
 
         <div className="sidebar-bottom">
           {!isGuest && <>
-            <button onClick={() => setPage('Settings')} className={page === 'Settings' ? 'active' : ''}><Settings size={18} />Settings</button>
+            <a
+              href={appPagePath('Settings')}
+              onClick={(event) => {
+                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
+                event.preventDefault()
+                goToPage('Settings')
+              }}
+              className={page === 'Settings' ? 'active' : ''}
+            >
+              <Settings size={18} />Settings
+            </a>
             <button><CircleHelp size={18} />Help & support</button>
           </>}
           <div className="profile">
@@ -1055,8 +1119,8 @@ function AuthenticatedApp({ user, onLogout }: {
                   eventsError={showEventNotices ? eventsError : null}
                   eventSourceNotice={showEventNotices && !eventsError ? eventSourceNotice : null}
                   googleReconnect={eventSources.google === 'reconnect'}
-                  onOpenSettings={() => setPage('Settings')}
-                  onOpenIntegrations={() => setPage('Integrations')}
+                  onOpenSettings={() => goToPage('Settings')}
+                  onOpenIntegrations={() => goToPage('Integrations')}
                 />
               )}
               <ThemeMenu />
@@ -1096,7 +1160,7 @@ function AuthenticatedApp({ user, onLogout }: {
             openCalendar={(date) => {
               setSelectedDate(date)
               changeView('Day')
-              setPage('Calendar')
+              goToPage('Calendar')
             }}
             readOnly={isGuest}
           />

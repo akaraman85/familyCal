@@ -1,3 +1,4 @@
+import { googleOAuthReturnLocation } from '../../_lib/app-routes.js'
 import { requireAdmin } from '../../_lib/auth.js'
 import { hashState, randomState } from '../../_lib/crypto.js'
 import {
@@ -42,6 +43,6 @@ export default async function handler(request: ApiRequest, response: ApiResponse
     }, state))
   } catch (error) {
     console.error('Unable to start Google Calendar authorization', error)
-    redirect(response, '/?integration=google-calendar&status=error')
+    redirect(response, googleOAuthReturnLocation('error'))
   }
 }
