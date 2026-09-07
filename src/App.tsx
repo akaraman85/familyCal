@@ -32,8 +32,10 @@ import {
   movedEventWrite,
   previewStyle,
   TIMELINE_END_MINUTES,
+  TIMELINE_GRID_HOURS,
   TIMELINE_LABEL_HOURS,
   TIMELINE_START_MINUTES,
+  isTimelineLabelHour,
   timelinePercent,
   timelinePosition,
   timedOverlapStyleVars,
@@ -1203,6 +1205,20 @@ function timedEventClassName(
   ].filter(Boolean).join(' ')
 }
 
+function TimelineHourLines() {
+  return (
+    <div className="timeline-hour-lines" aria-hidden="true">
+      {TIMELINE_GRID_HOURS.map((hour) => (
+        <i
+          key={hour}
+          className={isTimelineLabelHour(hour) ? 'major' : 'minor'}
+          style={{ top: timelinePercent(hour * 60) }}
+        />
+      ))}
+    </div>
+  )
+}
+
 function SlotGhost({
   startMinutes,
   endMinutes,
@@ -1387,7 +1403,12 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
         onPointerCancel={onGridPointerCancel}
         onLostPointerCapture={onGridPointerCancel}
       >
-        <div className="times">{TIMELINE_LABEL_HOURS.map((hour) => <span key={hour} style={{ top: timelinePercent(hour * 60) }}>{timelineLabel(hour)}</span>)}</div>
+        <div className="times">
+          <TimelineHourLines />
+          {TIMELINE_LABEL_HOURS.map((hour) => (
+            <span key={hour} style={{ top: timelinePercent(hour * 60) }}>{timelineLabel(hour)}</span>
+          ))}
+        </div>
         {days.map((day) => {
           const dayTimed = displayEvents.filter((event) => !event.allDay && isSameDay(event.date, day))
           const layouts = layoutGridTimedEvents(dayTimed)
@@ -1407,6 +1428,7 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
               }}
               onMouseLeave={onHoverLeave}
             >
+              <TimelineHourLines />
               {timedPreview && isSameDay(timedPreview.startDay, day) && (
                 <SlotGhost
                   startMinutes={timedPreview.startMinutes}
@@ -1500,7 +1522,12 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
       </div>
       <div className="day-timed">
         <div className="day-timeline">
-          {TIMELINE_LABEL_HOURS.map((hour) => <div className="time-row" key={hour} style={{ top: timelinePercent(hour * 60) }}><span>{timelineLabel(hour)}</span><i /></div>)}
+          <TimelineHourLines />
+          {TIMELINE_LABEL_HOURS.map((hour) => (
+            <div className="time-row" key={hour} style={{ top: timelinePercent(hour * 60) }}>
+              <span>{timelineLabel(hour)}</span>
+            </div>
+          ))}
         </div>
         <div
           className="day-events"
@@ -1520,6 +1547,7 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
           }}
           onMouseLeave={onHoverLeave}
         >
+          <TimelineHourLines />
           {showNowLine && nowTop && (
             <div className="now-indicator" style={{ top: nowTop }}>
               <span>{format(now, 'h:mm a')}</span>

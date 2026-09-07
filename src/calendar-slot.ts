@@ -4,8 +4,21 @@ import type { CalendarEventWrite } from './events'
 export const TIMELINE_START_MINUTES = 7 * 60
 export const TIMELINE_END_MINUTES = 23 * 60
 export const TIMELINE_RANGE_MINUTES = TIMELINE_END_MINUTES - TIMELINE_START_MINUTES
-export const TIMELINE_LABEL_HOURS = [8, 10, 12, 14, 16, 18, 20, 22]
 export const SNAP_MINUTES = 15
+
+export function timelineHours(stepHours = 1) {
+  const hours: number[] = []
+  for (let hour = 0; hour < 24; hour += stepHours) {
+    const minutes = hour * 60
+    if (minutes > TIMELINE_START_MINUTES && minutes < TIMELINE_END_MINUTES) {
+      hours.push(hour)
+    }
+  }
+  return hours
+}
+
+export const TIMELINE_GRID_HOURS = timelineHours(1)
+export const TIMELINE_LABEL_HOURS = timelineHours(2)
 export const DEFAULT_EVENT_MINUTES = 60
 export const POINTER_MOVE_THRESHOLD_PX = 8
 export const WEEK_GUTTER_WIDTH = 56
@@ -136,16 +149,24 @@ export function allDayRangeDraft(startDay: Date, endDay: Date): EventDraft {
   }
 }
 
+export function timelinePercentValue(minutes: number) {
+  return ((minutes - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES) * 100
+}
+
 export function timelinePercent(minutes: number) {
-  return `${((minutes - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES) * 100}%`
+  return `${timelinePercentValue(minutes)}%`
+}
+
+export function isTimelineLabelHour(hour: number) {
+  return TIMELINE_LABEL_HOURS.includes(hour)
 }
 
 export function previewStyle(startMinutes: number, endMinutes: number) {
   const start = Math.min(startMinutes, endMinutes)
   const end = Math.max(startMinutes, endMinutes)
-  const top = (start - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES * 100
+  const top = timelinePercentValue(start)
   const height = Math.max(
-    ((end - start) / TIMELINE_RANGE_MINUTES) * 100,
+    timelinePercentValue(end) - top,
     (SNAP_MINUTES / TIMELINE_RANGE_MINUTES) * 100,
   )
   return {
@@ -185,9 +206,9 @@ export function timelinePosition(event: { allDay: boolean; date: Date; endDate?:
   }
   const visibleStart = Math.max(startMinutes, TIMELINE_START_MINUTES)
   const visibleEnd = Math.min(endMinutes, TIMELINE_END_MINUTES)
-  const top = (visibleStart - TIMELINE_START_MINUTES) / TIMELINE_RANGE_MINUTES * 100
+  const top = timelinePercentValue(visibleStart)
   const height = Math.min(
-    (visibleEnd - visibleStart) / TIMELINE_RANGE_MINUTES * 100,
+    timelinePercentValue(visibleEnd) - top,
     100 - top,
   )
   return {
