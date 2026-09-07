@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   CalendarDays,
   CalendarRange,
@@ -6,7 +6,7 @@ import {
   Users,
 } from 'lucide-react'
 import { APP_DESCRIPTION, APP_PUBLIC_NAME, APP_SHORT_NAME, APP_SUPPORT_EMAIL } from './branding'
-import { GUEST_INVITE_ERROR_PARAM } from './routes'
+import { guestInviteErrorFromSearch, GUEST_INVITE_ERROR_PARAM } from './routes'
 
 const FEATURE_STATS = [
   { icon: CalendarRange, value: 'Google sync', label: 'Read-only calendar import' },
@@ -14,7 +14,17 @@ const FEATURE_STATS = [
   { icon: Sparkles, value: 'AI planning', label: 'Smart event suggestions' },
 ] as const
 
-export function PublicHomePage({ inviteError = false }: { inviteError?: boolean }) {
+let consumedInviteError: boolean | undefined
+
+function consumeInviteErrorFlag() {
+  if (consumedInviteError !== undefined) return consumedInviteError
+  consumedInviteError = guestInviteErrorFromSearch(window.location.search)
+  return consumedInviteError
+}
+
+export function PublicHomePage() {
+  const [inviteError] = useState(consumeInviteErrorFlag)
+
   useEffect(() => {
     const previous = document.title
     document.title = APP_PUBLIC_NAME
