@@ -14,7 +14,12 @@ import {
   snapMinutes,
   slotToDraft,
   TIMELINE_END_MINUTES,
+  TIMELINE_GRID_HOURS,
+  TIMELINE_LABEL_HOURS,
   TIMELINE_START_MINUTES,
+  isTimelineLabelHour,
+  timelinePercent,
+  timelinePosition,
   timedEventRange,
   timedOverlapStyleVars,
 } from './calendar-slot.ts'
@@ -23,6 +28,24 @@ assert.equal(snapMinutes(8 * 60 + 7), 8 * 60)
 assert.equal(snapMinutes(8 * 60 + 8), 8 * 60 + SNAP_MINUTES)
 assert.equal(snapMinutes(6 * 60), TIMELINE_START_MINUTES)
 assert.equal(snapMinutes(24 * 60), TIMELINE_END_MINUTES)
+assert.deepEqual(TIMELINE_LABEL_HOURS, [8, 10, 12, 14, 16, 18, 20, 22])
+assert.deepEqual(TIMELINE_GRID_HOURS, [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22])
+assert.equal(isTimelineLabelHour(16), true)
+assert.equal(isTimelineLabelHour(17), false)
+assert.equal(timelinePercent(TIMELINE_START_MINUTES), '0%')
+assert.equal(timelinePercent(8 * 60), '6.25%')
+assert.equal(timelinePercent(16 * 60), '56.25%')
+assert.equal(timelinePercent(18 * 60), '68.75%')
+assert.equal(timelinePercent(21 * 60), '87.5%')
+assert.equal(timelinePercent(TIMELINE_END_MINUTES), '100%')
+
+const fourPm = timelinePosition({
+  allDay: false,
+  date: dateAtMinutes(new Date(2026, 7, 27), 16 * 60),
+  endDate: dateAtMinutes(new Date(2026, 7, 27), 17 * 60),
+})
+assert.equal(fourPm?.top, timelinePercent(16 * 60))
+assert.equal(fourPm?.height, '6.25%')
 
 const rect = { top: 0, height: 160, left: 56, width: 700 } as DOMRect
 assert.equal(minutesFromClientY(0, rect), TIMELINE_START_MINUTES)
