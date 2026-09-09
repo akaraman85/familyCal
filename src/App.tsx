@@ -6,7 +6,7 @@ import {
 import DOMPurify from 'dompurify'
 import {
   AlertTriangle, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
-  CircleHelp, Clock3, Columns2, ExternalLink, Globe, ImagePlus, LayoutGrid,
+  CircleHelp, Clock3, Columns2, ExternalLink, Globe, GripVertical, ImagePlus, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
   Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
@@ -1355,6 +1355,35 @@ function timedEventClassName(
   ].filter(Boolean).join(' ')
 }
 
+function eventIsMovable(event: EventItem, readOnly: boolean) {
+  return !readOnly && event.source === 'saved'
+}
+
+function EventDragHandle({
+  visible,
+  label,
+  pointerProps,
+}: {
+  visible: boolean
+  label: string
+  pointerProps: {
+    'data-calendar-event-drag': string
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void
+  }
+}) {
+  if (!visible) return null
+  return (
+    <span
+      className="event-drag-handle"
+      title={label}
+      aria-hidden="true"
+      {...pointerProps}
+    >
+      <GripVertical size={12} strokeWidth={2.4} />
+    </span>
+  )
+}
+
 function TimelineHourLines() {
   return (
     <div className="timeline-hour-lines" aria-hidden="true">
@@ -1539,6 +1568,7 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
     onHoverMove,
     onHoverLeave,
     eventPointerProps,
+    eventDragHandleProps,
   } = useTimelineInteraction<EventItem>({
     days,
     gutterWidth: WEEK_GUTTER_WIDTH,
@@ -1573,11 +1603,16 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
                 <button
                   type="button"
                   className={`all-day-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
-                  title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to another day` : eventSourceLabel(event)}
+                  title={eventSourceLabel(event)}
                   key={event.id}
                   {...eventPointerProps(event)}
                 >
-                  {event.title}
+                  <EventDragHandle
+                    visible={eventIsMovable(event, readOnly)}
+                    label="Drag to another day"
+                    pointerProps={eventDragHandleProps(event)}
+                  />
+                  <span className="all-day-event-title">{event.title}</span>
                 </button>
               ))}
             </div>
@@ -1634,12 +1669,19 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
                     type="button"
                     className={timedEventClassName('week-event', event, movePreview, layout)}
                     style={style}
-                    title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+                    title={eventSourceLabel(event)}
                     key={event.id}
                     {...eventPointerProps(event)}
                   >
-                    <b>{event.title}</b>
-                    <span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span>
+                    <EventDragHandle
+                      visible={eventIsMovable(event, readOnly)}
+                      label="Drag to reschedule"
+                      pointerProps={eventDragHandleProps(event)}
+                    />
+                    <span className="week-event-body">
+                      <b>{event.title}</b>
+                      <span>{event.start}{event.google ? ` · ${calendarTypeLabel(event.google.calendar.type)}` : ''}</span>
+                    </span>
                   </button>
                 )
               })}
@@ -1666,6 +1708,7 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
     onHoverMove,
     onHoverLeave,
     eventPointerProps,
+    eventDragHandleProps,
   } = useTimelineInteraction<EventItem>({
     days,
     gutterWidth: 0,
@@ -1700,11 +1743,16 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
             <button
               type="button"
               className={`all-day-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
-              title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+              title={eventSourceLabel(event)}
               key={event.id}
               {...eventPointerProps(event)}
             >
-              {event.title}
+              <EventDragHandle
+                visible={eventIsMovable(event, readOnly)}
+                label="Drag to reschedule"
+                pointerProps={eventDragHandleProps(event)}
+              />
+              <span className="all-day-event-title">{event.title}</span>
             </button>
           ))}
         </div>
@@ -1760,9 +1808,14 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
                 className={timedEventClassName('day-event-card', event, movePreview, layout)}
                 key={event.id}
                 style={style}
-                title={event.source === 'saved' ? `${eventSourceLabel(event)} · Drag to reschedule` : eventSourceLabel(event)}
+                title={eventSourceLabel(event)}
                 {...eventPointerProps(event)}
               >
+                <EventDragHandle
+                  visible={eventIsMovable(event, readOnly)}
+                  label="Drag to reschedule"
+                  pointerProps={eventDragHandleProps(event)}
+                />
                 <div className="day-event-content">
                   <b>{event.title}</b>
                   <span>{event.start}{event.end ? ` – ${event.end}` : ''}</span>
