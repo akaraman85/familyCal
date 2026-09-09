@@ -173,7 +173,7 @@ Before deployment, provision:
 | Canonical URL | Set `PUBLIC_APP_URL` to the exact public origin, without a trailing slash. |
 | Integration owner | Set `INTEGRATION_OWNER_ID` to a stable, non-secret identifier for this family deployment. |
 | Web Push | Run `npm run vapid` and set server-only `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY`. |
-| Reminder cron | Set server-only `CRON_SECRET` to `openssl rand -base64 32`. Vercel Cron sends it as a bearer token to `/api/notifications/dispatch` every five minutes. |
+| Reminder cron | Set server-only `CRON_SECRET` to `openssl rand -hex 32`. Vercel Cron sends it as a bearer token to `/api/notifications/dispatch` every five minutes. Hex avoids characters that cannot appear in an Authorization header. |
 | Guest invite email | Set server-only `RESEND_API_KEY` from [Resend](https://resend.com) and `EMAIL_FROM` to a verified sender address, for example `Family Calendar <invites@yourdomain.com>`. |
 
 The current product is a single-family deployment with one household
