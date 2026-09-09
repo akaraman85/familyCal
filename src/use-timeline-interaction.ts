@@ -257,10 +257,14 @@ export function useTimelineInteraction<T extends GridEvent>({
 
   const eventPointerProps = (gridEvent: T) => ({
     'data-calendar-event': gridEvent.id,
-    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => startMove(event, gridEvent),
     onClick: (event: { preventDefault: () => void; stopPropagation: () => void }) => {
       onEventClick(event, gridEvent)
     },
+  })
+
+  const eventDragHandleProps = (gridEvent: T) => ({
+    'data-calendar-event-drag': '',
+    onPointerDown: (event: ReactPointerEvent<HTMLElement>) => startMove(event, gridEvent),
   })
 
   return {
@@ -276,6 +280,7 @@ export function useTimelineInteraction<T extends GridEvent>({
     onHoverMove,
     onHoverLeave,
     eventPointerProps,
+    eventDragHandleProps,
     onEventClick,
   }
 }
