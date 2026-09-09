@@ -525,14 +525,14 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
 .view-dropdown-menu button.active { background:var(--mobile-accent-soft); color:var(--mobile-accent); font-weight:600; }
 .view-dropdown-menu button:hover { background:light-dark(rgba(255,255,255,.65), rgba(255,255,255,.08)); }
 .view-dropdown-menu button.active:hover { background:var(--mobile-accent-soft); }
-.filter-menu { min-width:248px; padding:8px 6px 6px; }
-.filter-menu-label { margin:2px 10px 6px; color:var(--text-tertiary); font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; }
+.filter-menu { min-width:252px; padding:10px 8px 8px; }
+.filter-menu-label { margin:4px 10px 8px; color:var(--text-tertiary); font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase; }
 .filter-menu-empty { margin:6px 10px 8px; color:var(--text-tertiary); font-size:11px; }
 .filter-menu-list { display:flex; flex-direction:column; }
-.view-dropdown-menu.filter-menu button { min-height:34px; padding:0 10px; border:0; background:transparent; border-radius:8px; color:var(--ink); font-weight:500; }
+.view-dropdown-menu.filter-menu button { min-height:36px; padding:0 10px; border:0; background:transparent; border-radius:8px; color:var(--ink); font-weight:500; }
 .view-dropdown-menu.filter-menu button.is-on { font-weight:600; }
 .view-dropdown-menu.filter-menu button span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.view-dropdown-menu.filter-menu button .dot { width:8px; height:8px; flex:none; }
+.view-dropdown-menu.filter-menu button .dot { width:8px; height:8px; flex:none; display:block; }
 .view-dropdown-menu.filter-menu button svg { flex:none; color:var(--mobile-accent); }
 .view-dropdown-menu.filter-menu button.is-off { color:var(--text-tertiary); }
 .view-dropdown-menu.filter-menu button.is-off .dot { opacity:.45; }
@@ -540,7 +540,7 @@ main { margin-left: 248px; min-width: 0; flex: 1; min-height: 100vh; min-height:
 .view-dropdown-menu.filter-menu button:hover,
 .view-dropdown-menu.filter-menu button.is-on:hover,
 .view-dropdown-menu.filter-menu button.is-off:hover { background:var(--hover); color:var(--ink); }
-.view-dropdown-menu.filter-menu .filter-show-all { margin:4px 4px 0; padding:8px 8px 2px; min-height:32px; border-top:1px solid var(--line); border-radius:0; justify-content:center; color:var(--text-secondary); font-size:12px; font-weight:600; }
+.view-dropdown-menu.filter-menu .filter-show-all { margin:6px 4px 0; padding:10px 8px 2px; min-height:34px; border-top:1px solid var(--line); border-radius:0; justify-content:center; color:var(--text-secondary); font-size:12px; font-weight:600; }
 .view-dropdown-menu.filter-menu .filter-show-all:hover { background:transparent; color:var(--ink); }
 
 .sheet-scrim { align-items:flex-end; padding:0; }
