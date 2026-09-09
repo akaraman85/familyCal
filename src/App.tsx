@@ -44,6 +44,7 @@ import {
   type MovePreview,
   type TimedOverlapLayout,
 } from './calendar-slot'
+import { eventOccursOnDay, mergeCalendarEvents, parseCalendarDate } from './calendar-range'
 import { useTimelineInteraction } from './use-timeline-interaction'
 import {
   disconnectGoogleCalendar,
@@ -261,15 +262,13 @@ function googleSourceNotice(sources: EventSources, hasGoogleEvents: boolean) {
 
 function eventDate(event: CalendarEventData) {
   if (!event.allDay) return new Date(event.startAt)
-  const [year, month, day] = event.startAt.split('-').map(Number)
-  return new Date(year, month - 1, day)
+  return parseCalendarDate(event.startAt)
 }
 
 function eventEndDate(event: CalendarEventData) {
   if (!event.endAt) return null
   if (!event.allDay) return new Date(event.endAt)
-  const [year, month, day] = event.endAt.split('-').map(Number)
-  return new Date(year, month - 1, day)
+  return parseCalendarDate(event.endAt)
 }
 
 function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventItem {
@@ -830,7 +829,7 @@ function AuthenticatedApp({ user, onLogout }: {
     if (view === 'Year') {
       return {
         start: new Date(selectedDate.getFullYear(), 0, 1),
-        end: new Date(selectedDate.getFullYear() + 1, 0, 1),
+        end: new Date(selectedDate.getFullYear(), 11, 31, 23, 59, 59, 999),
       }
     }
     if (view === 'Month') {
@@ -839,12 +838,8 @@ function AuthenticatedApp({ user, onLogout }: {
         end: addDays(endOfWeek(endOfMonth(selectedDate), { weekStartsOn }), 1),
       }
     }
-    if (view === 'Week') {
-      const start = startOfWeek(selectedDate, { weekStartsOn })
-      return { start, end: addDays(start, 7) }
-    }
-    const start = startOfDay(selectedDate)
-    return { start, end: addDays(start, 1) }
+    const start = startOfWeek(selectedDate, { weekStartsOn })
+    return { start, end: addDays(start, 7) }
   }, [page, selectedDate, view, weekStartsOn])
   const rangeKey = `${eventRange.start.toISOString()}|${eventRange.end.toISOString()}`
 
@@ -858,8 +853,8 @@ function AuthenticatedApp({ user, onLogout }: {
     const cached = eventCacheRef.current.get(rangeKey)
     const revalidateGoogle = revalidateGoogleRef.current
     revalidateGoogleRef.current = false
-    if (cached) {
-      setRawEvents(cached.events)
+    if (cached?.events.length) {
+      setRawEvents((current) => mergeCalendarEvents(current, cached.events, eventRange, false))
       setEventSources(cached.sources)
       setEventsLoading(revalidateGoogle)
     } else {
@@ -867,9 +862,12 @@ function AuthenticatedApp({ user, onLogout }: {
     }
     setEventsError(null)
 
-    const apply = (data: Awaited<ReturnType<typeof loadCalendarEvents>>) => {
+    const apply = (
+      data: Awaited<ReturnType<typeof loadCalendarEvents>>,
+      prune: boolean,
+    ) => {
       eventCacheRef.current.set(rangeKey, { events: data.events, sources: data.sources })
-      setRawEvents(data.events)
+      setRawEvents((current) => mergeCalendarEvents(current, data.events, eventRange, prune))
       setEventSources(data.sources)
     }
 
@@ -882,7 +880,7 @@ function AuthenticatedApp({ user, onLogout }: {
           { revalidate: revalidateGoogle },
         )
         if (controller.signal.aborted) return
-        apply(first)
+        apply(first, Boolean(revalidateGoogle) && !first.stale)
         if (first.stale && !revalidateGoogle) {
           setEventsLoading(true)
           const next = await loadCalendarEvents(
@@ -892,12 +890,11 @@ function AuthenticatedApp({ user, onLogout }: {
             { revalidate: true },
           )
           if (controller.signal.aborted) return
-          apply(next)
+          apply(next, !next.stale)
         }
         if (!controller.signal.aborted) setEventsLoading(false)
       } catch (error: unknown) {
         if (error instanceof DOMException && error.name === 'AbortError') return
-        if (!eventCacheRef.current.has(rangeKey)) setRawEvents([])
         setEventsError(error instanceof Error ? error.message : 'Unable to load events')
         if (!controller.signal.aborted) setEventsLoading(false)
       }
@@ -1375,7 +1372,7 @@ function MonthView({ events, selectedDate, weekStartsOn, onSelect, selectEvent, 
       <div className="weekday-row">{WEEKDAY_LABELS[weekStartsOn].map((d) => <div key={d}>{d}</div>)}</div>
       <div className="month-grid">
         {days.map((day) => {
-          const dayEvents = events.filter((event) => isSameDay(event.date, day))
+          const dayEvents = events.filter((event) => eventOccursOnDay(event, day))
           return (
             <div
               key={day.toISOString()}
@@ -1444,7 +1441,7 @@ function WeekView({ events, selectedDate, weekStartsOn, showWeekends, selectEven
               onPointerDown={(pointer) => onColumnPointerDown(pointer, day, true)}
               onPointerUp={onColumnPointerUp}
             >
-              {displayEvents.filter((event) => event.allDay && isSameDay(event.date, day)).map((event) => (
+              {displayEvents.filter((event) => event.allDay && eventOccursOnDay(event, day)).map((event) => (
                 <button
                   type="button"
                   className={`all-day-event ${event.color} ${event.source === 'saved' ? 'movable' : ''} ${movePreview?.eventId === event.id ? 'dragging' : ''}`}
@@ -1550,7 +1547,7 @@ function DayView({ events, selectedDate, selectEvent, createAtSlot, moveEvent, r
     readOnly,
   })
   const displayEvents = labeledMovedEvents(events, movePreview)
-  const dayEvents = displayEvents.filter((event) => isSameDay(event.date, selectedDate))
+  const dayEvents = displayEvents.filter((event) => eventOccursOnDay(event, selectedDate))
   const allDayEvents = dayEvents.filter((event) => event.allDay)
   const timedEvents = dayEvents.filter((event) => !event.allDay)
   const now = new Date()
@@ -1659,7 +1656,7 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
     const first = new Date(selectedDate.getFullYear(), month, 1)
     const offset = yearGridOffset(first, weekStartsOn)
     const days = new Date(selectedDate.getFullYear(), month + 1, 0).getDate()
-    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{weekdayLabels.map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date()) ? 'today' : ''} ${events.some((e) => isSameDay(e.date, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
+    return <button className="mini-month" key={month} onClick={() => onSelect(first)}><h3>{format(first, 'MMMM')}</h3><div className="mini-weekdays">{weekdayLabels.map((d, i) => <span key={`${d}${i}`}>{d}</span>)}</div><div className="mini-days">{Array.from({ length: offset }, (_, i) => <i key={`x${i}`} />)}{Array.from({ length: days }, (_, i) => { const date = new Date(selectedDate.getFullYear(), month, i + 1); return <span key={i} className={`${isSameDay(date, new Date()) ? 'today' : ''} ${events.some((e) => eventOccursOnDay(e, date)) ? 'has-event' : ''}`}>{i + 1}</span> })}</div></button>
   })}</div>
 }
 

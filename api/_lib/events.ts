@@ -105,7 +105,11 @@ export async function listSavedEvents(
               ELSE start_at
             END < $3
         AND CASE
-              WHEN all_day THEN COALESCE(all_day_end_date::timestamptz, start_at)
+              WHEN all_day THEN COALESCE(
+                all_day_end_date::timestamptz + INTERVAL '1 day',
+                all_day_date::timestamptz + INTERVAL '1 day',
+                start_at + INTERVAL '1 day'
+              )
               ELSE COALESCE(end_at, start_at)
             END >= $2
       ORDER BY start_at`,
