@@ -59,6 +59,17 @@ import {
   type FamilyMemberInput,
 } from './family'
 import {
+  calendarFilterIsNarrowed,
+  clearCalendarMemberFilter,
+  eventVisibleInMemberFilter,
+  hiddenCalendarFilterCount,
+  persistCalendarMemberFilter,
+  readCalendarMemberFilter,
+  toggleHouseholdFilter,
+  toggleMemberFilter,
+  type CalendarMemberFilter,
+} from './calendar-filter'
+import {
   loadPlannerSettings,
   preparePlannerScreenshot,
   proposeEvents,
@@ -391,6 +402,82 @@ function ViewDropdown({ view, setView }: { view: View; setView: (view: View) => 
               {view === value && <Check size={14} />}
             </button>
           ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MemberFilterMenu({ members, filter, onChange }: {
+  members: FamilyMember[]
+  filter: CalendarMemberFilter
+  onChange: (update: (current: CalendarMemberFilter) => CalendarMemberFilter) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
+  const hiddenCount = hiddenCalendarFilterCount(filter, members)
+  const active = calendarFilterIsNarrowed(filter, members)
+
+  useEffect(() => {
+    if (!open) return
+    const close = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [open])
+
+  return (
+    <div className="view-dropdown" ref={menuRef}>
+      <button
+        type="button"
+        className={`filter-btn ${active ? 'active' : ''}`}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-label={active ? `Filter by family member, ${hiddenCount} hidden` : 'Filter by family member'}
+        onClick={() => setOpen((currentOpen) => !currentOpen)}
+      >
+        <ListFilter size={16} />
+        Filter
+        {active ? <span className="filter-count">{hiddenCount}</span> : null}
+      </button>
+      {open && (
+        <div className="glass-menu view-dropdown-menu filter-menu" role="menu" aria-label="Filter by family member">
+          <p className="filter-menu-label">Family members</p>
+          {members.map((member) => {
+            const checked = !filter.hiddenMemberIds.includes(member.id)
+            return (
+              <button
+                key={member.id}
+                type="button"
+                role="menuitemcheckbox"
+                aria-checked={checked}
+                className={checked ? 'active' : ''}
+                onClick={() => onChange((current) => toggleMemberFilter(current, member.id))}
+              >
+                <i className={`dot ${member.color}`} />
+                <span>{member.name}</span>
+                {checked && <Check size={14} />}
+              </button>
+            )
+          })}
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            aria-checked={!filter.hideHousehold}
+            className={!filter.hideHousehold ? 'active' : ''}
+            onClick={() => onChange((current) => toggleHouseholdFilter(current))}
+          >
+            <i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />
+            <span>{HOUSEHOLD_CALENDAR}</span>
+            {!filter.hideHousehold && <Check size={14} />}
+          </button>
+          {!members.length && <p className="filter-menu-empty">Add family members to filter their calendars.</p>}
+          {active && (
+            <button type="button" className="filter-show-all" onClick={() => onChange(() => clearCalendarMemberFilter())}>
+              Show all
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1314,6 +1401,20 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
   isMobile: boolean
   readOnly?: boolean
 }) {
+  const [filter, setFilter] = useState(readCalendarMemberFilter)
+  const visibleEvents = useMemo(
+    () => (
+      readOnly
+        ? events
+        : events.filter((event) => eventVisibleInMemberFilter(event, members, filter))
+    ),
+    [events, filter, members, readOnly],
+  )
+
+  useEffect(() => {
+    if (!readOnly) persistCalendarMemberFilter(filter)
+  }, [filter, readOnly])
+
   const selectDay = (day: Date) => {
     setSelectedDate(day)
     if (isMobile && view !== 'Day') setView('Day')
@@ -1324,7 +1425,10 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
         <div className="mobile-calendar-header mobile-only">
           <div className="mobile-calendar-top">
             <h2>{format(selectedDate, 'MMMM yyyy')}</h2>
-            <ViewDropdown view={view} setView={setView} />
+            <div className="mobile-calendar-actions">
+              {!readOnly && <MemberFilterMenu members={members} filter={filter} onChange={setFilter} />}
+              <ViewDropdown view={view} setView={setView} />
+            </div>
           </div>
           <WeekDatePicker selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={selectDay} />
         </div>
@@ -1336,26 +1440,48 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             <h2>{dateTitle}</h2>
           </div>
           <div className="view-controls">
-            <button className="filter-btn desktop-toolbar"><ListFilter size={16} />Filter</button>
+            {!readOnly && (
+              <div className="desktop-toolbar">
+                <MemberFilterMenu members={members} filter={filter} onChange={setFilter} />
+              </div>
+            )}
             <div className="segmented desktop-toolbar">
               {CALENDAR_VIEWS.map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}
             </div>
           </div>
         </div>
-        {view === 'Month' && <MonthView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} readOnly={readOnly} />}
-        {view === 'Week' && <WeekView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
-        {view === 'Day' && <DayView events={events} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
-        {view === 'Year' && <YearView events={events} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
+        {view === 'Month' && <MonthView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} readOnly={readOnly} />}
+        {view === 'Week' && <WeekView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
+        {view === 'Day' && <DayView events={visibleEvents} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
+        {view === 'Year' && <YearView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
       <div className="calendar-footer">
         <div className="calendar-legend">
           {readOnly
             ? <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />Busy</span>
             : <>
-              {members.map((member) => (
-                <span key={member.id}><i className={`dot ${member.color}`} />{member.name}</span>
-              ))}
-              <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}</span>
+              {members.map((member) => {
+                const hidden = filter.hiddenMemberIds.includes(member.id)
+                return (
+                  <button
+                    key={member.id}
+                    type="button"
+                    className={`legend-item ${hidden ? 'is-hidden' : ''}`}
+                    aria-pressed={!hidden}
+                    onClick={() => setFilter((current) => toggleMemberFilter(current, member.id))}
+                  >
+                    <i className={`dot ${member.color}`} />{member.name}
+                  </button>
+                )
+              })}
+              <button
+                type="button"
+                className={`legend-item ${filter.hideHousehold ? 'is-hidden' : ''}`}
+                aria-pressed={!filter.hideHousehold}
+                onClick={() => setFilter((current) => toggleHouseholdFilter(current))}
+              >
+                <i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}
+              </button>
             </>}
         </div>
         {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
