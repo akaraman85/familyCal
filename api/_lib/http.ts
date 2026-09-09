@@ -1,8 +1,27 @@
-import type { IncomingMessage, ServerResponse } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, ServerResponse } from 'node:http'
 
 export type ApiRequest = IncomingMessage & {
   body?: unknown
   query?: Record<string, string | string[]>
+}
+
+export type RequestWithHeaders = {
+  headers?: IncomingHttpHeaders | Headers
+}
+
+function firstHeaderValue(value: unknown) {
+  if (Array.isArray(value)) return firstHeaderValue(value[0])
+  if (typeof value === 'number') return String(value)
+  if (typeof value !== 'string') return undefined
+  const trimmed = value.trim()
+  return trimmed || undefined
+}
+
+export function requestHeader(request: RequestWithHeaders, name: string) {
+  const headers = request.headers
+  if (!headers) return undefined
+  if (headers instanceof Headers) return firstHeaderValue(headers.get(name))
+  return firstHeaderValue(headers[name.toLowerCase()])
 }
 
 export type ApiResponse = ServerResponse

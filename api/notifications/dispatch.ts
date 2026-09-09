@@ -1,3 +1,4 @@
+import { isAuthorizedCronRequest } from '../_lib/cron-auth.js'
 import { searchCalendarEvents } from '../_lib/event-search.js'
 import { appEnv, integrationEnv } from '../_lib/env.js'
 import { getPlannerSettings } from '../_lib/planner-settings.js'
@@ -5,7 +6,6 @@ import {
   cleanupNotificationDeliveries,
   claimNotificationDelivery,
   countPushSubscriptions,
-  cronSecret,
   getNotificationSettings,
   releaseNotificationDelivery,
   REMINDER_LOOKBACK_MS,
@@ -14,6 +14,7 @@ import {
 } from '../_lib/push.js'
 import { dueReminders, reminderPayload } from '../_lib/reminders.js'
 import {
+  requestHeader,
   requireMethod,
   sendJson,
   type ApiRequest,
@@ -26,12 +27,6 @@ function encryptionKey() {
   const value = process.env.INTEGRATION_ENCRYPTION_KEY?.trim()
   if (!value) throw new Error('Missing required environment variable: INTEGRATION_ENCRYPTION_KEY')
   return value
-}
-
-function authorizedCron(request: ApiRequest) {
-  const secret = cronSecret()
-  if (!secret) return false
-  return request.headers.authorization === `Bearer ${secret}`
 }
 
 function googleConfig() {
@@ -55,7 +50,12 @@ function googleConfig() {
 
 export default async function handler(request: ApiRequest, response: ApiResponse) {
   if (!requireMethod(request, response, ['GET'])) return
-  if (!authorizedCron(request)) {
+  if (!isAuthorizedCronRequest(request)) {
+    console.warn('Rejected notification dispatch', {
+      hasAuthorization: Boolean(requestHeader(request, 'authorization')),
+      hasCronSchedule: Boolean(requestHeader(request, 'x-vercel-cron-schedule')),
+      userAgent: requestHeader(request, 'user-agent') ?? null,
+    })
     sendJson(response, 401, { error: 'Authentication required' })
     return
   }

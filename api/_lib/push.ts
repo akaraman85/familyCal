@@ -76,9 +76,7 @@ export function vapidConfig() {
   }
 }
 
-export function cronSecret() {
-  return process.env.CRON_SECRET?.trim() || null
-}
+export { cronSecret } from './cron-auth.js'
 
 export function endpointHash(endpoint: string) {
   return createHash('sha256').update(endpoint).digest('hex')
