@@ -1,6 +1,9 @@
 import { neon } from '@neondatabase/serverless'
 import type { CalendarEvent } from './events.js'
+import { eventOverlapsRange } from './event-range.js'
 import { GOOGLE_CALENDAR_PROVIDER_ID } from './providers/google-calendar.js'
+
+export { eventOverlapsRange, eventTimeRange } from './event-range.js'
 
 export const GOOGLE_EVENT_CACHE_FRESH_MS = 2 * 60 * 1000
 
@@ -50,29 +53,6 @@ export function expandToMonthBounds(timeMin: Date, timeMax: Date) {
     start: new Date(`${months[0]}T00:00:00.000Z`),
     end: last,
   }
-}
-
-export function eventTimeRange(event: Pick<CalendarEvent, 'startAt' | 'endAt' | 'allDay'>) {
-  if (event.allDay) {
-    const start = Date.parse(`${event.startAt}T00:00:00.000Z`)
-    const end = event.endAt
-      ? Date.parse(`${event.endAt}T00:00:00.000Z`)
-      : start + 24 * 60 * 60 * 1000
-    return { start, end: Number.isNaN(end) ? start : end }
-  }
-  const start = Date.parse(event.startAt)
-  const end = event.endAt ? Date.parse(event.endAt) : start
-  return { start, end: Number.isNaN(end) ? start : end }
-}
-
-export function eventOverlapsRange(
-  event: Pick<CalendarEvent, 'startAt' | 'endAt' | 'allDay'>,
-  timeMin: Date,
-  timeMax: Date,
-) {
-  const { start, end } = eventTimeRange(event)
-  if (Number.isNaN(start)) return false
-  return start < timeMax.getTime() && end >= timeMin.getTime()
 }
 
 function monthBounds(monthStart: string) {
