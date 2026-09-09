@@ -443,34 +443,36 @@ function MemberFilterMenu({ members, filter, onChange }: {
       {open && (
         <div className="glass-menu view-dropdown-menu filter-menu" role="menu" aria-label="Filter by family member">
           <p className="filter-menu-label">Family members</p>
-          {members.map((member) => {
-            const checked = !filter.hiddenMemberIds.includes(member.id)
-            return (
-              <button
-                key={member.id}
-                type="button"
-                role="menuitemcheckbox"
-                aria-checked={checked}
-                className={checked ? 'active' : ''}
-                onClick={() => onChange((current) => toggleMemberFilter(current, member.id))}
-              >
-                <i className={`dot ${member.color}`} />
-                <span>{member.name}</span>
-                {checked && <Check size={14} />}
-              </button>
-            )
-          })}
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            aria-checked={!filter.hideHousehold}
-            className={!filter.hideHousehold ? 'active' : ''}
-            onClick={() => onChange((current) => toggleHouseholdFilter(current))}
-          >
-            <i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />
-            <span>{HOUSEHOLD_CALENDAR}</span>
-            {!filter.hideHousehold && <Check size={14} />}
-          </button>
+          <div className="filter-menu-list">
+            {members.map((member) => {
+              const checked = !filter.hiddenMemberIds.includes(member.id)
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={checked}
+                  className={checked ? 'is-on' : 'is-off'}
+                  onClick={() => onChange((current) => toggleMemberFilter(current, member.id))}
+                >
+                  <i className={`dot ${member.color}`} />
+                  <span>{member.name}</span>
+                  <Check size={14} aria-hidden="true" />
+                </button>
+              )
+            })}
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={!filter.hideHousehold}
+              className={!filter.hideHousehold ? 'is-on' : 'is-off'}
+              onClick={() => onChange((current) => toggleHouseholdFilter(current))}
+            >
+              <i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />
+              <span>{HOUSEHOLD_CALENDAR}</span>
+              <Check size={14} aria-hidden="true" />
+            </button>
+          </div>
           {!members.length && <p className="filter-menu-empty">Add family members to filter their calendars.</p>}
           {active && (
             <button type="button" className="filter-show-all" onClick={() => onChange(() => clearCalendarMemberFilter())}>
