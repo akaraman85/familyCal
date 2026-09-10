@@ -1,6 +1,11 @@
 import { Output, generateText, stepCountIs, tool } from 'ai'
 import { z } from 'zod'
-import { listFamilyMembers } from './db.js'
+import { listFamilyMembers, listIntegrationAccounts } from './db.js'
+import {
+  availableFamilyCalendars,
+  coerceUnconnectedMemberCalendar,
+  resolvePlannerDefaultCalendar,
+} from './family-calendars.js'
 import { searchCalendarEvents } from './event-search.js'
 import type { CalendarEvent } from './events.js'
 import { omitExistingProposedEvents } from './planner-duplicates.js'
@@ -117,7 +122,15 @@ export async function proposeCalendarEvents(input: {
   settings: PlannerSettings
   now: Date
 }) {
-  const members = await listFamilyMembers(input.databaseUrl, input.ownerId)
+  const [members, accounts] = await Promise.all([
+    listFamilyMembers(input.databaseUrl, input.ownerId),
+    listIntegrationAccounts(input.databaseUrl, input.ownerId),
+  ])
+  const familyCalendars = availableFamilyCalendars(members, accounts)
+  const defaultCalendar = resolvePlannerDefaultCalendar(
+    input.settings.defaultCalendar,
+    familyCalendars.calendars,
+  )
   const household = members.length
     ? members.map((member) => member.display_name).join(', ')
     : 'No family members are configured'
@@ -138,8 +151,10 @@ export async function proposeCalendarEvents(input: {
 ${JSON.stringify({
     currentInstant: input.now.toISOString(),
     householdTimezone: input.settings.timezone,
-    defaultCalendar: input.settings.defaultCalendar,
+    defaultCalendar,
+    availableCalendars: familyCalendars.calendars,
     knownFamilyMembers: household,
+    familyMembersWithoutCalendars: familyCalendars.withoutCalendars,
     priorPlannerState: sessionContext,
   })}
 
@@ -227,7 +242,9 @@ Rules:
 - For creation, screenshot extraction, or editing requests, return proposal. Search the covered date range first and omit any event that is already on the calendar.
 - Preserve every explicitly stated date, time, title, and location.
 - For recurring requests, expand occurrences into individual events, up to ${MAX_PROPOSED_EVENTS}.
-- Use the default calendar unless the user clearly names another calendar.
+- Available calendars are only the household calendar plus family members who have a connected calendar integration. Do not invent other calendar names.
+- Use the default calendar unless the user clearly names another available calendar.
+- Family members listed as having no connected calendar are people in the household, not calendars. Never assign events to them.
 - Use ISO 8601 timestamps with an explicit UTC offset. For all-day events, use local midnight, set allDayDate to the intended local YYYY-MM-DD date, and set allDayEndDate to the exclusive local end date for multi-day events or null for a single day. For timed events, set both date-only fields to null.
 - If some items are clear but another required date or time cannot be inferred safely, return needs_clarification while retaining every fully resolved event in the events array.
 - Never claim an event was saved. You only prepare proposals for review.
@@ -243,8 +260,17 @@ Rules:
     messages: [{ role: 'user', content: userContent }],
   })
 
-  const { proposal, duplicateCount } = await omitExistingProposedEvents({
-    proposal: validateProposal(result.output),
+  const proposal = validateProposal(result.output)
+  proposal.events = proposal.events.map((event) => ({
+    ...event,
+    calendar: coerceUnconnectedMemberCalendar(
+      event.calendar,
+      familyCalendars.withoutCalendars,
+    ),
+  }))
+
+  const { proposal: deduped, duplicateCount } = await omitExistingProposedEvents({
+    proposal,
     databaseUrl: input.databaseUrl,
     ownerId: input.ownerId,
     encryptionKey: input.encryptionKey,
@@ -254,7 +280,7 @@ Rules:
   })
 
   return {
-    proposal,
+    proposal: deduped,
     model,
     usage: result.usage,
     duplicateCount,

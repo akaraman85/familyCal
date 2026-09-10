@@ -25,6 +25,28 @@ export type FamilyMemberInput = {
   color: string
 }
 
+export const HOUSEHOLD_CALENDAR_NAME = 'Family'
+const GOOGLE_CALENDAR_PROVIDER = 'google-calendar'
+
+export function memberHasCalendarIntegration(member: Pick<FamilyMember, 'integrations'>) {
+  return member.integrations.some((item) => item.provider === GOOGLE_CALENDAR_PROVIDER)
+}
+
+export function membersWithCalendarIntegrations(members: FamilyMember[]) {
+  return members.filter(memberHasCalendarIntegration)
+}
+
+export function resolveSavedEventCalendar(
+  calendar: string,
+  members: FamilyMember[],
+  householdCalendar = HOUSEHOLD_CALENDAR_NAME,
+) {
+  const calendarName = calendar.trim().toLowerCase()
+  const member = members.find((item) => item.name.trim().toLowerCase() === calendarName)
+  if (member && !memberHasCalendarIntegration(member)) return householdCalendar
+  return calendar
+}
+
 async function responseJson<T>(response: Response): Promise<T> {
   if (response.ok) return response.json() as Promise<T>
   const body = await response.json().catch(() => ({ error: 'Request failed' })) as { error?: string }

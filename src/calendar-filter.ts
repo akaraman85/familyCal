@@ -9,6 +9,7 @@ export type CalendarMemberFilter = {
 export type CalendarFilterMember = {
   id: string
   name: string
+  hasCalendarIntegration?: boolean
 }
 
 export type FilterableCalendarEvent = {
@@ -121,7 +122,10 @@ export function eventCalendarFilterIds(
   }
 
   const calendarName = event.calendar.trim().toLowerCase()
-  const member = members.find((item) => item.name.trim().toLowerCase() === calendarName)
+  const member = members.find((item) => (
+    item.name.trim().toLowerCase() === calendarName
+    && item.hasCalendarIntegration !== false
+  ))
   return member ? [member.id] : [HOUSEHOLD_FILTER_ID]
 }
 

@@ -43,6 +43,11 @@ const household = event({
   calendar: 'Family',
 })
 
+const memberWithoutCalendar = event({
+  source: 'saved',
+  calendar: 'Jason Karaman',
+})
+
 const unassignedGoogle = event({
   source: 'google',
   calendar: 'Work',
@@ -71,6 +76,11 @@ assert.deepEqual(eventCalendarFilterIds(alexGoogle, members), ['alex'])
 assert.deepEqual(eventCalendarFilterIds(mayaSaved, members), ['maya'])
 assert.deepEqual(eventCalendarFilterIds(event({ source: 'saved', calendar: 'MAYA' }), members), ['maya'])
 assert.deepEqual(eventCalendarFilterIds(household, members), [HOUSEHOLD_FILTER_ID])
+assert.deepEqual(eventCalendarFilterIds(memberWithoutCalendar, members), [HOUSEHOLD_FILTER_ID])
+assert.deepEqual(eventCalendarFilterIds(memberWithoutCalendar, [
+  ...members,
+  { id: 'jason', name: 'Jason Karaman', hasCalendarIntegration: false },
+]), [HOUSEHOLD_FILTER_ID])
 assert.deepEqual(eventCalendarFilterIds(unassignedGoogle, members), [HOUSEHOLD_FILTER_ID])
 assert.deepEqual(eventCalendarFilterIds(sharedGoogle, members), ['alex'])
 assert.deepEqual(eventCalendarFilterIds(familyGoogle, members), ['alex', 'maya'])
