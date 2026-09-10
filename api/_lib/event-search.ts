@@ -1,5 +1,7 @@
 import { loadConnectedGoogleEvents } from './connected-events.js'
+import { listFamilyMembers, listIntegrationAccounts } from './db.js'
 import { listSavedEvents, type CalendarEvent } from './events.js'
+import { householdCalendarForUnconnectedMembers } from './family-calendars.js'
 
 export const EVENT_SEARCH_MAX_RANGE_MS = 370 * 24 * 60 * 60 * 1000
 export const EVENT_SEARCH_DEFAULT_LIMIT = 50
@@ -72,7 +74,7 @@ export async function searchCalendarEvents(config: EventSearchConfig): Promise<E
   const source = config.source ?? 'all'
   const limit = config.limit ?? EVENT_SEARCH_DEFAULT_LIMIT
 
-  const [savedEvents, google] = await Promise.all([
+  const [savedEvents, google, members, accounts] = await Promise.all([
     source === 'google'
       ? Promise.resolve([] as CalendarEvent[])
       : listSavedEvents(
@@ -97,10 +99,15 @@ export async function searchCalendarEvents(config: EventSearchConfig): Promise<E
         timeMax: config.timeMax,
         revalidate: config.revalidate ?? false,
       }),
+    listFamilyMembers(config.databaseUrl, config.ownerId),
+    listIntegrationAccounts(config.databaseUrl, config.ownerId),
   ])
 
-  let events = [...savedEvents, ...google.events]
-    .sort((left, right) => left.startAt.localeCompare(right.startAt))
+  let events = householdCalendarForUnconnectedMembers(
+    [...savedEvents, ...google.events],
+    members,
+    accounts,
+  ).sort((left, right) => left.startAt.localeCompare(right.startAt))
 
   if (config.calendar) {
     events = events.filter((event) => matchesCalendar(event, config.calendar!))

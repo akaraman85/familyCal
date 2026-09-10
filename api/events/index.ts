@@ -6,6 +6,11 @@ import {
   updateSavedEvent,
 } from '../_lib/events.js'
 import { requireAuthentication } from '../_lib/auth.js'
+import { listFamilyMembers, listIntegrationAccounts } from '../_lib/db.js'
+import {
+  availableFamilyCalendars,
+  coerceUnconnectedMemberCalendar,
+} from '../_lib/family-calendars.js'
 import { guestEvents } from '../_lib/guest-visibility.js'
 import { getActiveGuest, guestGrantFromRecord } from '../_lib/guests.js'
 import {
@@ -126,6 +131,31 @@ function parseSavedEventId(id: unknown, action: 'updated' | 'deleted' = 'updated
   return eventId
 }
 
+async function withAllowedCalendars<T extends { calendar: string }>(
+  databaseUrl: string,
+  ownerId: string,
+  events: T[],
+) {
+  const [members, accounts] = await Promise.all([
+    listFamilyMembers(databaseUrl, ownerId),
+    listIntegrationAccounts(databaseUrl, ownerId),
+  ])
+  const { withoutCalendars } = availableFamilyCalendars(members, accounts)
+  return events.map((event) => ({
+    ...event,
+    calendar: coerceUnconnectedMemberCalendar(event.calendar, withoutCalendars),
+  }))
+}
+
+async function withAllowedCalendar<T extends { calendar: string }>(
+  databaseUrl: string,
+  ownerId: string,
+  event: T,
+) {
+  const [coerced] = await withAllowedCalendars(databaseUrl, ownerId, [event])
+  return coerced
+}
+
 async function getEvents(
   request: ApiRequest,
   response: ApiResponse,
@@ -218,7 +248,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
       const created = await createSavedEvents(
         env.databaseUrl,
         env.ownerId,
-        events,
+        await withAllowedCalendars(env.databaseUrl, env.ownerId, events),
         requestId,
         { sessionId, revision },
       )
@@ -229,7 +259,7 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
     const event = await createSavedEvent(
       env.databaseUrl,
       env.ownerId,
-      parseEvent(body),
+      await withAllowedCalendar(env.databaseUrl, env.ownerId, parseEvent(body)),
     )
     sendJson(response, 201, { event })
   } catch (error) {
@@ -289,7 +319,7 @@ async function patchEvent(request: ApiRequest, response: ApiResponse) {
       env.databaseUrl,
       env.ownerId,
       parseSavedEventId(body.id),
-      parseEvent(body),
+      await withAllowedCalendar(env.databaseUrl, env.ownerId, parseEvent(body)),
     )
     if (!updated) {
       sendJson(response, 404, { error: 'Event not found' })

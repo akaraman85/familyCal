@@ -54,7 +54,11 @@ import {
 } from './integrations'
 import {
   deleteFamilyMember,
+  HOUSEHOLD_CALENDAR_NAME,
   loadFamilyMembers,
+  memberHasCalendarIntegration,
+  membersWithCalendarIntegrations,
+  resolveSavedEventCalendar,
   saveFamilyMember,
   type FamilyMember,
   type FamilyMemberInput,
@@ -159,7 +163,7 @@ type EventItem = {
 
 type NewEventInput = CalendarEventWrite
 
-const HOUSEHOLD_CALENDAR = 'Family'
+const HOUSEHOLD_CALENDAR = HOUSEHOLD_CALENDAR_NAME
 const HOUSEHOLD_EVENT_COLOR: EventColor = 'green'
 const AGENDA_DAYS = 8
 const EVENT_COLORS = new Set<EventColor>(['coral', 'blue', 'green', 'gold'])
@@ -172,7 +176,7 @@ const GOOGLE_CALENDAR_TYPE_RANK = {
 
 function familyCalendarNames(members: FamilyMember[], extra?: string) {
   const names = [HOUSEHOLD_CALENDAR]
-  for (const member of members) {
+  for (const member of membersWithCalendarIntegrations(members)) {
     if (member.name && !names.includes(member.name)) names.push(member.name)
   }
   if (extra && !names.includes(extra)) names.push(extra)
@@ -228,7 +232,9 @@ function eventColor(
     }
   }
   if (event.source === 'saved') {
-    const member = members.find((item) => item.name === event.calendar)
+    const member = members.find((item) => (
+      item.name === event.calendar && memberHasCalendarIntegration(item)
+    ))
     if (member) return asEventColor(member.color)
   }
   return HOUSEHOLD_EVENT_COLOR
@@ -285,6 +291,9 @@ function eventEndDate(event: CalendarEventData) {
 function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventItem {
   const startDate = eventDate(event)
   const endDate = eventEndDate(event)
+  const calendar = event.source === 'saved'
+    ? resolveSavedEventCalendar(event.calendar, members, HOUSEHOLD_CALENDAR)
+    : event.calendar
   return {
     id: event.id,
     title: event.title,
@@ -293,12 +302,12 @@ function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventIt
     allDay: event.allDay,
     start: event.allDay ? 'All day' : format(startDate, 'h:mm a'),
     end: endDate && !event.allDay ? format(endDate, 'h:mm a') : undefined,
-    calendar: event.calendar,
+    calendar,
     location: event.location ?? undefined,
     description: event.description ?? undefined,
     externalUrl: event.externalUrl ?? undefined,
     organizer: event.organizer,
-    color: eventColor(event, members),
+    color: eventColor({ ...event, calendar }, members),
     source: event.source,
     visibility: event.visibility,
     google: event.google,
@@ -473,7 +482,7 @@ function MemberFilterMenu({ members, filter, onChange }: {
               <Check size={14} aria-hidden="true" />
             </button>
           </div>
-          {!members.length && <p className="filter-menu-empty">Add family members to filter their calendars.</p>}
+          {!members.length && <p className="filter-menu-empty">Connect a Google Calendar to filter by family member.</p>}
           {active && (
             <button type="button" className="filter-show-all" onClick={() => onChange(() => clearCalendarMemberFilter())}>
               Show all
@@ -995,8 +1004,12 @@ function AuthenticatedApp({ user, onLogout }: {
   useEffect(() => {
     setSelectedEvent((current) => {
       if (!current) return current
-      const color = eventColor(current, familyMembers)
-      return color === current.color ? current : { ...current, color }
+      const calendar = current.source === 'saved'
+        ? resolveSavedEventCalendar(current.calendar, familyMembers, HOUSEHOLD_CALENDAR)
+        : current.calendar
+      const color = eventColor({ ...current, calendar }, familyMembers)
+      if (calendar === current.calendar && color === current.color) return current
+      return { ...current, calendar, color }
     })
   }, [familyMembers])
 
@@ -1228,7 +1241,7 @@ function AuthenticatedApp({ user, onLogout }: {
             moveDate={moveDate}
             loading={eventsLoading}
             sources={eventSources}
-            members={isGuest ? [] : familyMembers}
+            members={isGuest ? [] : membersWithCalendarIntegrations(familyMembers)}
             weekStartsOn={calendarSettings.weekStartsOn}
             showWeekends={calendarSettings.showWeekends}
             selectEvent={setSelectedEvent}
@@ -2271,6 +2284,7 @@ function SettingsPage({ onCalendarSettingsSaved }: {
   const [plannerError, setPlannerError] = useState<string | null>(null)
   const [savingPlanner, setSavingPlanner] = useState(false)
   const [plannerSaved, setPlannerSaved] = useState(false)
+  const calendars = useFamilyCalendars(planner?.defaultCalendar)
 
   useEffect(() => {
     loadCalendarSettings()
@@ -2373,7 +2387,7 @@ function SettingsPage({ onCalendarSettingsSaved }: {
           <label><span><b>Enable AI Planner</b><small>Allow authenticated users to request event proposals</small></span><button type="button" className={`toggle ${planner.enabled ? 'on' : ''}`} onClick={() => setPlanner({ ...planner, enabled: !planner.enabled })}><i/></button></label>
           <label><span><b>Model profile</b><small>Choose the balance of speed, cost, and reasoning quality</small></span><select value={planner.modelProfile} onChange={(event) => setPlanner({ ...planner, modelProfile: event.target.value as PlannerSettings['modelProfile'] })}><option value="fast">Fast · GPT-5.6 Luna</option><option value="balanced">Balanced · GPT-5.6 Terra</option><option value="quality">Quality · GPT-5.6 Sol</option></select></label>
           <label><span><b>Household timezone</b><small>IANA timezone used to resolve phrases like “tomorrow at 7”</small></span><input value={planner.timezone} onChange={(event) => setPlanner({ ...planner, timezone: event.target.value })} placeholder="America/New_York"/></label>
-          <label><span><b>Default calendar</b><small>Used when a request does not name a calendar</small></span><input maxLength={100} value={planner.defaultCalendar} onChange={(event) => setPlanner({ ...planner, defaultCalendar: event.target.value })}/></label>
+          <label><span><b>Default calendar</b><small>Used when a request does not name a calendar. Only household and members with a connected calendar are available.</small></span><select value={planner.defaultCalendar} onChange={(event) => setPlanner({ ...planner, defaultCalendar: event.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
           <div className="settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
         </>}
         {plannerError && <div className="modal-error" role="alert">{plannerError}</div>}

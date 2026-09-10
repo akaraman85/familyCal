@@ -1,5 +1,10 @@
 import { requireAdmin } from '../_lib/auth.js'
+import { listFamilyMembers, listIntegrationAccounts } from '../_lib/db.js'
 import { appEnv } from '../_lib/env.js'
+import {
+  availableFamilyCalendars,
+  resolvePlannerDefaultCalendar,
+} from '../_lib/family-calendars.js'
 import {
   getPlannerSettings,
   isPlannerModelProfile,
@@ -50,11 +55,16 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new ValidationError('Planner settings are invalid')
     }
 
+    const [members, accounts] = await Promise.all([
+      listFamilyMembers(env.databaseUrl, env.ownerId),
+      listIntegrationAccounts(env.databaseUrl, env.ownerId),
+    ])
+    const { calendars } = availableFamilyCalendars(members, accounts)
     const settings = await savePlannerSettings(env.databaseUrl, env.ownerId, {
       enabled: body.enabled,
       modelProfile: body.modelProfile,
       timezone,
-      defaultCalendar,
+      defaultCalendar: resolvePlannerDefaultCalendar(defaultCalendar, calendars),
     })
     sendJson(response, 200, { settings })
   } catch (error) {
