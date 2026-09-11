@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict'
 import { eventOverlapsRange, eventTimeRange } from '../api/_lib/event-range.ts'
-import { eventOccursOnDay, mergeCalendarEvents, parseCalendarDate } from './calendar-range.ts'
+import {
+  eventOccursOnDay,
+  mergeCalendarEvents,
+  omitCalendarEvent,
+  parseCalendarDate,
+} from './calendar-range.ts'
 import type { CalendarEventData } from './events.ts'
 
 const allDay = {
@@ -58,19 +63,35 @@ assert.equal(eventOccursOnDay(savedSpan, new Date(2026, 8, 10)), false)
 assert.deepEqual(parseCalendarDate('2026-09-09'), new Date(2026, 8, 9))
 assert.deepEqual(parseCalendarDate('2026-09-09T00:00:00.000Z'), new Date(2026, 8, 9))
 
-const existing: CalendarEventData[] = [{
-  id: 'google:week',
-  title: 'Peer dinner',
-  startAt: '2026-09-09T22:00:00.000Z',
-  endAt: '2026-09-09T23:00:00.000Z',
-  allDay: false,
-  calendar: 'Family',
-  location: null,
-  description: null,
-  externalUrl: null,
-  organizer: null,
-  source: 'google',
-}]
+function eventData(
+  id: string,
+  source: CalendarEventData['source'],
+  startAt: string,
+  endAt: string | null = null,
+  title = id,
+): CalendarEventData {
+  return {
+    id,
+    title,
+    startAt,
+    endAt,
+    allDay: !startAt.includes('T'),
+    calendar: 'Family',
+    location: null,
+    description: null,
+    externalUrl: null,
+    organizer: null,
+    source,
+  }
+}
+
+const existing: CalendarEventData[] = [eventData(
+  'google:week',
+  'google',
+  '2026-09-09T22:00:00.000Z',
+  '2026-09-09T23:00:00.000Z',
+  'Peer dinner',
+)]
 const merged = mergeCalendarEvents(existing, [], { start: dayStart, end: dayEnd }, false)
 assert.equal(merged.length, 1)
 const pruned = mergeCalendarEvents(existing, [], { start: dayStart, end: dayEnd }, true)
@@ -82,5 +103,30 @@ const kept = mergeCalendarEvents(
   true,
 )
 assert.equal(kept[0].title, 'Updated')
+
+const savedInRange = eventData('saved:deleted', 'saved', '2026-09-09T18:00:00.000Z', '2026-09-09T19:00:00.000Z')
+const savedOutside = eventData('saved:next-week', 'saved', '2026-09-16T18:00:00.000Z', '2026-09-16T19:00:00.000Z')
+const googleKept = existing[0]
+const afterDelete = mergeCalendarEvents(
+  [savedInRange, savedOutside, googleKept],
+  [],
+  { start: dayStart, end: dayEnd },
+  false,
+)
+assert.deepEqual(afterDelete.map((event) => event.id), ['saved:next-week', 'google:week'])
+
+const remainingSaved = eventData('saved:kept', 'saved', '2026-09-09T20:00:00.000Z', '2026-09-09T21:00:00.000Z')
+const refreshed = mergeCalendarEvents(
+  [savedInRange, remainingSaved],
+  [remainingSaved],
+  { start: dayStart, end: dayEnd },
+  false,
+)
+assert.deepEqual(refreshed.map((event) => event.id), ['saved:kept'])
+
+assert.deepEqual(
+  omitCalendarEvent([savedInRange, remainingSaved], 'saved:deleted').map((event) => event.id),
+  ['saved:kept'],
+)
 
 console.log('calendar-range tests passed')
