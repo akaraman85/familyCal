@@ -11,13 +11,18 @@ export function mergeCalendarEvents(
   const incomingIds = new Set(incoming.map((event) => event.id))
   const next = new Map<string, CalendarEventData>()
   for (const event of current) {
-    if (prune && eventOverlapsRange(event, range.start, range.end) && !incomingIds.has(event.id)) {
-      continue
-    }
+    const missingFromRange = eventOverlapsRange(event, range.start, range.end)
+      && !incomingIds.has(event.id)
+    // Saved events are complete for the range; Google results can be stale.
+    if (missingFromRange && (prune || event.source === 'saved')) continue
     next.set(event.id, event)
   }
   for (const event of incoming) next.set(event.id, event)
   return [...next.values()]
+}
+
+export function omitCalendarEvent<T extends { id: string }>(events: T[], id: string) {
+  return events.filter((event) => event.id !== id)
 }
 
 export function eventOccursOnDay(

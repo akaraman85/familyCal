@@ -44,7 +44,7 @@ import {
   type MovePreview,
   type TimedOverlapLayout,
 } from './calendar-slot'
-import { eventOccursOnDay, mergeCalendarEvents, parseCalendarDate } from './calendar-range'
+import { eventOccursOnDay, mergeCalendarEvents, omitCalendarEvent, parseCalendarDate } from './calendar-range'
 import { useTimelineInteraction } from './use-timeline-interaction'
 import {
   disconnectGoogleCalendar,
@@ -1089,9 +1089,21 @@ function AuthenticatedApp({ user, onLogout }: {
     }
   }
 
+  const forgetCalendarEvent = (id: string) => {
+    setRawEvents((current) => omitCalendarEvent(current, id))
+    for (const [key, cached] of eventCacheRef.current) {
+      if (!cached.events.some((event) => event.id === id)) continue
+      eventCacheRef.current.set(key, {
+        events: omitCalendarEvent(cached.events, id),
+        sources: cached.sources,
+      })
+    }
+  }
+
   const deleteEvent = async (id: string) => {
     await deleteCalendarEvent(id)
     setSelectedEvent(null)
+    forgetCalendarEvent(id)
     refreshEvents()
   }
 
