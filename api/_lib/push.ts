@@ -62,10 +62,75 @@ export function isReminderMinutes(value: unknown): value is ReminderMinutes {
   return typeof value === 'number' && (REMINDER_MINUTES as readonly number[]).includes(value)
 }
 
+const VAPID_PUBLIC_KEY_BYTES = 65
+const VAPID_PRIVATE_KEY_BYTES = 32
+
+export type VapidConfigurationIssue =
+  | 'missing'
+  | 'invalid_public_key'
+  | 'invalid_private_key'
+  | 'public_key_is_private'
+
+export function normalizeVapidKey(value: string) {
+  let key = value.trim()
+  if (
+    (key.startsWith('"') && key.endsWith('"'))
+    || (key.startsWith("'") && key.endsWith("'"))
+  ) {
+    key = key.slice(1, -1).trim()
+  }
+  const prefixMatch = key.match(/^VAPID_(?:PUBLIC|PRIVATE)_KEY=(.+)$/i)
+  if (prefixMatch) key = prefixMatch[1].trim()
+  return key
+}
+
+export function decodeVapidKey(value: string) {
+  const normalized = normalizeVapidKey(value)
+  const padding = '='.repeat((4 - (normalized.length % 4)) % 4)
+  const base64 = (normalized + padding).replace(/-/g, '+').replace(/_/g, '/')
+  return Buffer.from(base64, 'base64')
+}
+
+export function isValidVapidPublicKey(value: string) {
+  try {
+    return decodeVapidKey(value).length === VAPID_PUBLIC_KEY_BYTES
+  } catch {
+    return false
+  }
+}
+
+export function isValidVapidPrivateKey(value: string) {
+  try {
+    return decodeVapidKey(value).length === VAPID_PRIVATE_KEY_BYTES
+  } catch {
+    return false
+  }
+}
+
+export function vapidConfigurationIssue(): VapidConfigurationIssue | null {
+  const rawPublic = process.env.VAPID_PUBLIC_KEY?.trim()
+  const rawPrivate = process.env.VAPID_PRIVATE_KEY?.trim()
+  if (!rawPublic || !rawPrivate) return 'missing'
+
+  const publicKey = normalizeVapidKey(rawPublic)
+  const privateKey = normalizeVapidKey(rawPrivate)
+  if (!isValidVapidPublicKey(publicKey)) {
+    if (isValidVapidPrivateKey(publicKey)) return 'public_key_is_private'
+    return 'invalid_public_key'
+  }
+  if (!isValidVapidPrivateKey(privateKey)) return 'invalid_private_key'
+  return null
+}
+
 export function vapidConfig() {
-  const publicKey = process.env.VAPID_PUBLIC_KEY?.trim()
-  const privateKey = process.env.VAPID_PRIVATE_KEY?.trim()
-  if (!publicKey || !privateKey) return null
+  const rawPublic = process.env.VAPID_PUBLIC_KEY?.trim()
+  const rawPrivate = process.env.VAPID_PRIVATE_KEY?.trim()
+  if (!rawPublic || !rawPrivate) return null
+
+  const publicKey = normalizeVapidKey(rawPublic)
+  const privateKey = normalizeVapidKey(rawPrivate)
+  if (!isValidVapidPublicKey(publicKey) || !isValidVapidPrivateKey(privateKey)) return null
+
   const explicitSubject = process.env.VAPID_SUBJECT?.trim()
   const appUrl = appEnv().appUrl
   return {
