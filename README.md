@@ -17,7 +17,7 @@ calendar views.
 - Time-limited guest links that show busy times only for selected family calendars
 - Responsive desktop and mobile layouts
 - Installable progressive web app on iPhone, iPad, and desktop
-- Web push event reminders on installed devices
+- Web push event reminders on installed devices, with per-event timing and frequency
 
 ## Development
 
@@ -47,10 +47,14 @@ Safari is required for Home Screen install on iOS. Settings includes the same st
 Installed devices can receive native OS notifications through Web Push. The
 permission prompt must be accepted from the Home Screen app on iPhone and iPad.
 
-Timed family and Google Calendar events send a reminder 15, 30, or 60 minutes
-before they start. All-day events send at 8:00 AM in the household timezone from
-AI Planner settings. A Vercel Cron job checks due reminders every five minutes;
-that frequency requires a Vercel plan that allows sub-daily crons.
+Timed family and Google Calendar events send a reminder at a chosen time
+before they start—at the start, or 5 minutes to 2 days ahead. All-day events
+use 8:00 AM in the household timezone, offset by that same choice. Reminders
+can fire once or repeat every 15 minutes, 30 minutes, hourly, or daily until
+the event. Family defaults live in Settings → Notifications; each calendar
+event can override when it notifies and how often. A Vercel Cron job checks
+due reminders every five minutes; that frequency requires a Vercel plan that
+allows sub-daily crons.
 
 Generate VAPID keys with `npm run vapid` and store them only as server
 environment variables. Subscription keys are encrypted with
