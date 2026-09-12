@@ -1,6 +1,8 @@
 import { isAuthorizedCronRequest } from '../_lib/cron-auth.js'
 import { searchCalendarEvents } from '../_lib/event-search.js'
 import { appEnv, integrationEnv } from '../_lib/env.js'
+import { listEventReminderPreferences } from '../_lib/event-reminder-prefs.js'
+import { reminderForDispatch } from '../_lib/reminder-options.js'
 import { getPlannerSettings } from '../_lib/planner-settings.js'
 import {
   cleanupNotificationDeliveries,
@@ -9,6 +11,7 @@ import {
   getNotificationSettings,
   releaseNotificationDelivery,
   REMINDER_LOOKBACK_MS,
+  REMINDER_SEARCH_MS,
   sendPushPayload,
   vapidConfig,
 } from '../_lib/push.js'
@@ -21,7 +24,7 @@ import {
   type ApiResponse,
 } from '../_lib/http.js'
 
-const MAX_REMINDERS_PER_RUN = 10
+const MAX_REMINDERS_PER_RUN = 25
 
 function encryptionKey() {
   const value = process.env.INTEGRATION_ENCRYPTION_KEY?.trim()
@@ -68,10 +71,11 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
     const env = appEnv()
     const key = encryptionKey()
-    const [settings, devices, planner] = await Promise.all([
+    const [settings, devices, planner, overrides] = await Promise.all([
       getNotificationSettings(env.databaseUrl, env.ownerId),
       countPushSubscriptions(env.databaseUrl, env.ownerId),
       getPlannerSettings(env.databaseUrl, env.ownerId),
+      listEventReminderPreferences(env.databaseUrl, env.ownerId),
     ])
 
     if (!settings.eventReminders || devices === 0) {
@@ -89,8 +93,8 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       encryptionKey: google.encryptionKey || key,
       clientId: google.clientId,
       clientSecret: google.clientSecret,
-      timeMin: new Date(now.getTime() - 36 * 60 * 60 * 1000),
-      timeMax: new Date(now.getTime() + 36 * 60 * 60 * 1000),
+      timeMin: new Date(now.getTime() - REMINDER_SEARCH_MS),
+      timeMax: new Date(now.getTime() + REMINDER_SEARCH_MS),
       source: google.source,
       revalidate: false,
       limit: Number.POSITIVE_INFINITY,
@@ -98,8 +102,8 @@ export default async function handler(request: ApiRequest, response: ApiResponse
 
     const due = dueReminders(search.events, now, {
       timezone: planner.timezone,
-      reminderMinutes: settings.reminderMinutes,
       lookbackMs: REMINDER_LOOKBACK_MS,
+      scheduleFor: (event) => reminderForDispatch(event.id, settings, overrides),
     }).slice(0, MAX_REMINDERS_PER_RUN)
 
     let sent = 0
@@ -110,6 +114,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
         reminder.event.id,
         'reminder',
         reminder.eventStartAt,
+        reminder.fireKey,
       )
       if (!claimed) continue
       try {
@@ -126,6 +131,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
             reminder.event.id,
             'reminder',
             reminder.eventStartAt,
+            reminder.fireKey,
           )
           continue
         }
@@ -137,6 +143,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
           reminder.event.id,
           'reminder',
           reminder.eventStartAt,
+          reminder.fireKey,
         )
         throw error
       }

@@ -11,6 +11,11 @@ import {
   availableFamilyCalendars,
   coerceUnconnectedMemberCalendar,
 } from '../_lib/family-calendars.js'
+import {
+  attachEventReminders,
+  listEventReminderPreferences,
+  saveEventReminderPreference,
+} from '../_lib/event-reminder-prefs.js'
 import { guestEvents } from '../_lib/guest-visibility.js'
 import { getActiveGuest, guestGrantFromRecord } from '../_lib/guests.js'
 import {
@@ -21,6 +26,11 @@ import {
 import { integrationEnv } from '../_lib/env.js'
 import { verifyPlannerProposal } from '../_lib/planner-confirmation.js'
 import { MAX_PROPOSED_EVENTS } from '../_lib/planner-limits.js'
+import { getNotificationSettings } from '../_lib/push.js'
+import {
+  isNotifyMinutes,
+  isReminderFrequency,
+} from '../_lib/reminder-options.js'
 import {
   errorMessage,
   readJsonBody,
@@ -32,6 +42,38 @@ import {
 } from '../_lib/http.js'
 
 class ValidationError extends Error {}
+
+function parseReminder(value: unknown) {
+  if (value === undefined || value === null) return null
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new ValidationError('Event reminder is invalid')
+  }
+  const body = value as Record<string, unknown>
+  if (
+    typeof body.enabled !== 'boolean'
+    || !isNotifyMinutes(body.notifyMinutes)
+    || !isReminderFrequency(body.frequency)
+  ) {
+    throw new ValidationError('Event reminder is invalid')
+  }
+  return {
+    enabled: body.enabled,
+    notifyMinutes: body.notifyMinutes,
+    frequency: body.frequency,
+  }
+}
+
+async function withReminders<T extends { id: string }>(
+  databaseUrl: string,
+  ownerId: string,
+  events: T[],
+) {
+  const [settings, overrides] = await Promise.all([
+    getNotificationSettings(databaseUrl, ownerId),
+    listEventReminderPreferences(databaseUrl, ownerId),
+  ])
+  return attachEventReminders(events, settings, overrides)
+}
 
 function queryValue(request: ApiRequest, name: string) {
   const value = request.query?.[name]
@@ -184,6 +226,8 @@ async function getEvents(
         return
       }
       events = guestEvents(events, guestGrantFromRecord(guest))
+    } else {
+      events = await withReminders(env.databaseUrl, env.ownerId, events)
     }
     sendJson(response, 200, {
       events,
@@ -252,15 +296,25 @@ async function postEvent(request: ApiRequest, response: ApiResponse) {
         requestId,
         { sessionId, revision },
       )
-      sendJson(response, 201, { events: created })
+      sendJson(response, 201, { events: await withReminders(env.databaseUrl, env.ownerId, created) })
       return
     }
 
+    const reminder = parseReminder(body.reminder)
     const event = await createSavedEvent(
       env.databaseUrl,
       env.ownerId,
       await withAllowedCalendar(env.databaseUrl, env.ownerId, parseEvent(body)),
     )
+    if (reminder) {
+      event.reminder = await saveEventReminderPreference(env.databaseUrl, env.ownerId, {
+        eventId: event.id,
+        ...reminder,
+      })
+    } else {
+      const [withDefault] = await withReminders(env.databaseUrl, env.ownerId, [event])
+      event.reminder = withDefault.reminder
+    }
     sendJson(response, 201, { event })
   } catch (error) {
     console.error('Unable to save calendar event', error)
@@ -324,6 +378,16 @@ async function patchEvent(request: ApiRequest, response: ApiResponse) {
     if (!updated) {
       sendJson(response, 404, { error: 'Event not found' })
       return
+    }
+    const reminder = parseReminder(body.reminder)
+    if (reminder) {
+      updated.reminder = await saveEventReminderPreference(env.databaseUrl, env.ownerId, {
+        eventId: updated.id,
+        ...reminder,
+      })
+    } else {
+      const [withCurrent] = await withReminders(env.databaseUrl, env.ownerId, [updated])
+      updated.reminder = withCurrent.reminder
     }
     sendJson(response, 200, { event: updated })
   } catch (error) {

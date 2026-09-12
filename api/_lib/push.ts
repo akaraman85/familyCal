@@ -3,19 +3,30 @@ import { createRequire } from 'node:module'
 import { neon } from '@neondatabase/serverless'
 import { decryptJson, encryptJson } from './crypto.js'
 import { appEnv } from './env.js'
+import {
+  DEFAULT_NOTIFY_MINUTES,
+  DEFAULT_REMINDER_FREQUENCY,
+  isNotifyMinutes,
+  isReminderFrequency,
+  NOTIFY_MINUTES,
+  type NotifyMinutes,
+  type ReminderFrequency,
+} from './reminder-options.js'
 
 const require = createRequire(import.meta.url)
 const webpush = require('web-push') as typeof import('web-push')
 
-export const REMINDER_MINUTES = [15, 30, 60] as const
-export const ALL_DAY_REMINDER_HOUR = 8
+export const REMINDER_MINUTES = NOTIFY_MINUTES
+export { ALL_DAY_REMINDER_HOUR } from './reminder-options.js'
 export const REMINDER_LOOKBACK_MS = 2 * 60 * 60 * 1000
+export const REMINDER_SEARCH_MS = 72 * 60 * 60 * 1000
 
-export type ReminderMinutes = (typeof REMINDER_MINUTES)[number]
+export type ReminderMinutes = NotifyMinutes
 
 export type NotificationSettings = {
   eventReminders: boolean
-  reminderMinutes: ReminderMinutes
+  reminderMinutes: NotifyMinutes
+  reminderFrequency: ReminderFrequency
 }
 
 export type PushSubscriptionJSON = {
@@ -43,6 +54,7 @@ export type PushPayload = {
 type NotificationSettingsRow = {
   event_reminders: boolean
   reminder_minutes: number
+  reminder_frequency: string
 }
 
 type PushSubscriptionRow = {
@@ -55,11 +67,13 @@ type PushSubscriptionRow = {
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   eventReminders: true,
-  reminderMinutes: 30,
+  reminderMinutes: DEFAULT_NOTIFY_MINUTES,
+  reminderFrequency: DEFAULT_REMINDER_FREQUENCY,
 }
 
+export { isNotifyMinutes, isReminderFrequency }
 export function isReminderMinutes(value: unknown): value is ReminderMinutes {
-  return typeof value === 'number' && (REMINDER_MINUTES as readonly number[]).includes(value)
+  return isNotifyMinutes(value)
 }
 
 export function vapidConfig() {
@@ -83,12 +97,15 @@ export function endpointHash(endpoint: string) {
 }
 
 function serializeSettings(row: NotificationSettingsRow | undefined): NotificationSettings {
-  if (!row || !isReminderMinutes(row.reminder_minutes)) {
+  if (!row || !isNotifyMinutes(row.reminder_minutes)) {
     return DEFAULT_NOTIFICATION_SETTINGS
   }
   return {
     eventReminders: row.event_reminders,
     reminderMinutes: row.reminder_minutes,
+    reminderFrequency: isReminderFrequency(row.reminder_frequency)
+      ? row.reminder_frequency
+      : DEFAULT_REMINDER_FREQUENCY,
   }
 }
 
@@ -111,7 +128,7 @@ export function isPushSubscriptionJSON(value: unknown): value is PushSubscriptio
 export async function getNotificationSettings(databaseUrl: string, ownerId: string) {
   const sql = neon(databaseUrl)
   const rows = await sql.query(
-    `SELECT event_reminders, reminder_minutes
+    `SELECT event_reminders, reminder_minutes, reminder_frequency
        FROM notification_settings
       WHERE owner_id = $1
       LIMIT 1`,
@@ -128,14 +145,20 @@ export async function saveNotificationSettings(
   const sql = neon(databaseUrl)
   const rows = await sql.query(
     `INSERT INTO notification_settings (
-       owner_id, event_reminders, reminder_minutes
-     ) VALUES ($1, $2, $3)
+       owner_id, event_reminders, reminder_minutes, reminder_frequency
+     ) VALUES ($1, $2, $3, $4)
      ON CONFLICT (owner_id) DO UPDATE SET
        event_reminders = EXCLUDED.event_reminders,
        reminder_minutes = EXCLUDED.reminder_minutes,
+       reminder_frequency = EXCLUDED.reminder_frequency,
        updated_at = NOW()
-     RETURNING event_reminders, reminder_minutes`,
-    [ownerId, settings.eventReminders, settings.reminderMinutes],
+     RETURNING event_reminders, reminder_minutes, reminder_frequency`,
+    [
+      ownerId,
+      settings.eventReminders,
+      settings.reminderMinutes,
+      settings.reminderFrequency,
+    ],
   ) as NotificationSettingsRow[]
   return serializeSettings(rows[0])
 }
@@ -282,15 +305,16 @@ export async function claimNotificationDelivery(
   eventId: string,
   kind: string,
   eventStartAt: string,
+  fireKey = 'once',
 ) {
   const sql = neon(databaseUrl)
   const rows = await sql.query(
     `INSERT INTO notification_deliveries (
-       owner_id, event_id, kind, event_start_at
-     ) VALUES ($1, $2, $3, $4)
+       owner_id, event_id, kind, event_start_at, fire_key
+     ) VALUES ($1, $2, $3, $4, $5)
      ON CONFLICT DO NOTHING
      RETURNING event_id`,
-    [ownerId, eventId, kind, eventStartAt],
+    [ownerId, eventId, kind, eventStartAt, fireKey],
   )
   return rows.length === 1
 }
@@ -301,6 +325,7 @@ export async function releaseNotificationDelivery(
   eventId: string,
   kind: string,
   eventStartAt: string,
+  fireKey = 'once',
 ) {
   const sql = neon(databaseUrl)
   await sql.query(
@@ -308,8 +333,9 @@ export async function releaseNotificationDelivery(
       WHERE owner_id = $1
         AND event_id = $2
         AND kind = $3
-        AND event_start_at = $4`,
-    [ownerId, eventId, kind, eventStartAt],
+        AND event_start_at = $4
+        AND fire_key = $5`,
+    [ownerId, eventId, kind, eventStartAt, fireKey],
   )
 }
 

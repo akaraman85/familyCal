@@ -1,3 +1,15 @@
+import {
+  type NotifyMinutes,
+  type ReminderFrequency,
+} from '../api/_lib/reminder-options.ts'
+
+export type EventReminder = {
+  enabled: boolean
+  notifyMinutes: NotifyMinutes
+  frequency: ReminderFrequency
+  custom: boolean
+}
+
 export type CalendarEventData = {
   id: string
   title: string
@@ -15,6 +27,7 @@ export type CalendarEventData = {
   } | null
   source: 'saved' | 'google'
   visibility?: 'full' | 'busy'
+  reminder?: EventReminder
   google?: {
     calendar: {
       id: string
@@ -80,6 +93,11 @@ export type CalendarEventWrite = {
   allDay?: boolean
   allDayDate?: string | null
   allDayEndDate?: string | null
+  reminder?: {
+    enabled: boolean
+    notifyMinutes: NotifyMinutes
+    frequency: ReminderFrequency
+  }
 }
 
 export async function saveCalendarEvent(event: CalendarEventWrite) {

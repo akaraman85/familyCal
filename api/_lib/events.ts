@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { neon, Pool } from '@neondatabase/serverless'
+import type { NotifyMinutes, ReminderFrequency } from './reminder-options.js'
 
 export type CalendarEvent = {
   id: string
@@ -18,6 +19,12 @@ export type CalendarEvent = {
   } | null
   source: 'saved' | 'google'
   visibility?: 'full' | 'busy'
+  reminder?: {
+    enabled: boolean
+    notifyMinutes: NotifyMinutes
+    frequency: ReminderFrequency
+    custom: boolean
+  }
   google?: {
     calendar: {
       id: string
@@ -160,7 +167,13 @@ export async function deleteSavedEvent(
       RETURNING id`,
     [ownerId, eventId],
   )
-  return rows.length === 1
+  if (rows.length !== 1) return false
+  await sql.query(
+    `DELETE FROM event_notification_preferences
+      WHERE owner_id = $1 AND event_id = $2`,
+    [ownerId, `saved:${eventId}`],
+  )
+  return true
 }
 
 export async function updateSavedEvent(
