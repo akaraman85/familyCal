@@ -15,9 +15,15 @@ import {
   pushSupported,
   sendTestNotification,
   updateNotificationSettings,
+  notifyMinutesLabel,
+  reminderFrequencyHint,
+  reminderFrequencyLabel,
+  REMINDER_FREQUENCIES,
+  NOTIFY_MINUTES,
   type NotificationSettings,
   type NotificationStatus,
-  type ReminderMinutes,
+  type NotifyMinutes,
+  type ReminderFrequency,
 } from './notifications'
 
 export function NotificationOptInHint({ onOpen }: { onOpen: () => void }) {
@@ -260,11 +266,11 @@ export function NotificationsSettings() {
       </div>
       <div className="settings-section">
         <h2>Family reminders</h2>
-        <p>These choices apply to every device that has notifications enabled.</p>
+        <p>These are the defaults for every calendar event. Open an event to change when it notifies and how often.</p>
         <label>
           <span>
             <b>Remind before events</b>
-            <small>Timed events send a reminder before they start. All-day events send at 8:00 AM in the household timezone.</small>
+            <small>Master switch for family and Google events. Individual events can still be silenced from the event details.</small>
           </span>
           <button
             type="button"
@@ -285,7 +291,7 @@ export function NotificationsSettings() {
         <label>
           <span>
             <b>Reminder time</b>
-            <small>How far in advance to notify for timed events</small>
+            <small>When to notify for timed events. All-day events use 8:00 AM in the household timezone, offset by this choice.</small>
           </span>
           <select
             value={settings.reminderMinutes}
@@ -293,16 +299,39 @@ export function NotificationsSettings() {
             onChange={(event) => {
               const next = {
                 ...settings,
-                reminderMinutes: Number(event.target.value) as ReminderMinutes,
+                reminderMinutes: Number(event.target.value) as NotifyMinutes,
               }
               setSettings(next)
               setSaved(false)
               void saveSettings(next)
             }}
           >
-            <option value={15}>15 minutes before</option>
-            <option value={30}>30 minutes before</option>
-            <option value={60}>60 minutes before</option>
+            {NOTIFY_MINUTES.map((minutes) => (
+              <option key={minutes} value={minutes}>{notifyMinutesLabel(minutes)}</option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>
+            <b>Reminder frequency</b>
+            <small>{reminderFrequencyHint()}</small>
+          </span>
+          <select
+            value={settings.reminderFrequency}
+            disabled={loading || saving || !settings.eventReminders}
+            onChange={(event) => {
+              const next = {
+                ...settings,
+                reminderFrequency: event.target.value as ReminderFrequency,
+              }
+              setSettings(next)
+              setSaved(false)
+              void saveSettings(next)
+            }}
+          >
+            {REMINDER_FREQUENCIES.map((frequency) => (
+              <option key={frequency} value={frequency}>{reminderFrequencyLabel(frequency)}</option>
+            ))}
           </select>
         </label>
         {saved && (

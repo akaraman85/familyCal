@@ -634,6 +634,21 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .event-edit-toggle { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:15px; }
 .event-edit-toggle > span { font-size:9px;font-weight:600; }
 .event-readonly-note { color:var(--text-soft);font-size:8px;line-height:1.5;margin:12px 0 0; }
+.event-reminder-editor,.event-reminder-fields { border-top:1px solid var(--line);margin-top:16px;padding-top:16px; }
+.event-reminder-editor .event-reminder-fields { border-top:0;margin-top:10px;padding-top:0; }
+.event-reminder-heading { display:flex;align-items:center;gap:8px;margin-bottom:4px; }
+.event-reminder-heading svg { color:var(--text-soft);flex:none; }
+.event-reminder-heading b,.event-reminder-heading span { display:block; }
+.event-reminder-heading b { font-size:9px; }
+.event-reminder-heading span { color:var(--text-soft);font-size:8px;margin-top:2px; }
+.event-reminder-hint { color:var(--text-faint);font-size:8px;line-height:1.45;margin:0 0 4px; }
+.event-reminder-actions { display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-height:20px; }
+.event-reminder-actions span { display:flex;align-items:center;gap:4px;color:var(--green);font-size:8px;font-weight:700; }
+.event-reminder-reset { border:0;background:transparent;color:var(--blue-ink);padding:0;font-size:8px;font-weight:700;cursor:pointer; }
+.event-reminder-reset:disabled { opacity:.6;cursor:wait; }
+.sheet-row-content .event-reminder-fields { border-top:0;margin:0;padding:0;width:100%; }
+.sheet-row-content .event-edit-toggle > span,.sheet-row-content .field > span { font-size:12px; }
+.sheet-row-content .event-reminder-hint { font-size:11px; }
 .modal-heading { display:flex;justify-content:space-between;align-items:start;gap:12px;margin-bottom:22px; }.modal-heading > div:first-child { min-width:0;flex:1; }.modal-heading h2 { font:600 19px/1.35 Manrope;margin:4px 0;overflow-wrap:anywhere;word-break:break-word; }.modal-heading button { border:0;background:var(--modal-close);width:32px;height:32px;border-radius:8px;display:grid;place-items:center;cursor:pointer;flex-shrink:0; }
 .field { display:flex;flex-direction:column;gap:7px;margin-bottom:15px; }.field > span { font-size:9px;font-weight:600; }.field small { color:var(--text-faint);font-weight:400; }
 .field input,.field select { height:41px;border:1px solid var(--line);border-radius:8px;padding:0 11px;font-size:11px;color:var(--ink);background:var(--panel); }

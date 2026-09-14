@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const PRIVACY_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const PRIVACY_UPDATED = 'September 3, 2026'
+export const PRIVACY_UPDATED = 'September 12, 2026'
 
 export type PrivacySection = LegalSection
 
@@ -36,13 +36,13 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Household data',
     paragraphs: [
-      'Family events, family members, guest invite records, and preferences (calendar views and AI Planner settings) are stored in Postgres for this single-family deployment.',
+      'Family events, family members, guest invite records, and preferences (calendar views, AI Planner settings, and per-event reminder timing) are stored in Postgres for this single-family deployment.',
     ],
   },
   {
     heading: 'Notifications',
     paragraphs: [
-      'If Web Push reminders are enabled on an installed device, the push subscription is stored encrypted in Postgres.',
+      'If Web Push reminders are enabled on an installed device, the push subscription is stored encrypted in Postgres. When and how often to notify for family and Google events is stored as a household preference and is not written back to Google.',
     ],
   },
   {

@@ -5,7 +5,7 @@ import {
 } from 'react'
 import DOMPurify from 'dompurify'
 import {
-  AlertTriangle, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
+  AlertTriangle, Bell, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Columns2, ExternalLink, Globe, GripVertical, ImagePlus, LayoutGrid,
   Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
   Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
@@ -23,6 +23,7 @@ import {
   updateCalendarEvent,
   type CalendarEventData,
   type CalendarEventWrite,
+  type EventReminder,
   type EventSources,
 } from './events'
 import {
@@ -112,8 +113,9 @@ import {
 } from './routes'
 import { GuestAccessSection } from './guest-access'
 import { IosInstallGuide, IosInstallHint } from './install-app'
-import { consumeSettingsTab, syncPushSubscription } from './notifications'
+import { consumeSettingsTab, DEFAULT_NOTIFICATION_SETTINGS, loadNotificationStatus, remindersMatchDefault, syncPushSubscription } from './notifications'
 import { NotificationsSettings } from './notifications-settings'
+import { defaultReminderForm, EventReminderEditor, EventReminderFields } from './event-reminders'
 import { TopbarNotifications } from './topbar-notifications'
 import {
   CALENDAR_VIEWS,
@@ -158,6 +160,7 @@ type EventItem = {
   color: EventColor
   source: 'saved' | 'google'
   visibility?: CalendarEventData['visibility']
+  reminder?: EventReminder
   google?: CalendarEventData['google']
 }
 
@@ -310,6 +313,7 @@ function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventIt
     color: eventColor({ ...event, calendar }, members),
     source: event.source,
     visibility: event.visibility,
+    reminder: event.reminder,
     google: event.google,
   }
 }
@@ -1013,6 +1017,21 @@ function AuthenticatedApp({ user, onLogout }: {
     })
   }, [familyMembers])
 
+  useEffect(() => {
+    setSelectedEvent((current) => {
+      if (!current) return current
+      const next = events.find((item) => item.id === current.id)
+      if (!next) return current
+      if (
+        next.reminder?.enabled === current.reminder?.enabled
+        && next.reminder?.notifyMinutes === current.reminder?.notifyMinutes
+        && next.reminder?.frequency === current.reminder?.frequency
+        && next.reminder?.custom === current.reminder?.custom
+      ) return current
+      return { ...current, reminder: next.reminder }
+    })
+  }, [events])
+
   const saveEvent = async (event: NewEventInput) => {
     await saveCalendarEvent(event)
     setModalOpen(false)
@@ -1335,6 +1354,23 @@ function AuthenticatedApp({ user, onLogout }: {
           close={() => setSelectedEvent(null)}
           save={!isGuest && selectedEvent.source === 'saved' ? updateEvent : undefined}
           remove={!isGuest && selectedEvent.source === 'saved' ? deleteEvent : undefined}
+          canRemind={!isGuest}
+          onReminderSaved={(reminder) => {
+            const eventId = selectedEvent.id
+            const patch = (events: CalendarEventData[]) => events.map((item) => (
+              item.id === eventId ? { ...item, reminder } : item
+            ))
+            setRawEvents((current) => patch(current))
+            for (const [key, cached] of eventCacheRef.current) {
+              eventCacheRef.current.set(key, {
+                events: patch(cached.events),
+                sources: cached.sources,
+              })
+            }
+            setSelectedEvent((current) => (
+              current && current.id === eventId ? { ...current, reminder } : current
+            ))
+          }}
         />
       )}
       {!isGuest && modalOpen && eventDraft && (
@@ -3079,11 +3115,13 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
   }
 }
 
-function EventDetailModal({ event, close, save, remove }: {
+function EventDetailModal({ event, close, save, remove, canRemind, onReminderSaved }: {
   event: EventItem
   close: () => void
   save?: (id: string, input: NewEventInput) => Promise<void>
   remove?: (id: string) => Promise<void>
+  canRemind?: boolean
+  onReminderSaved?: (reminder: EventReminder) => void
 }) {
   const modalRef = useRef<HTMLElement>(null)
   const titleInputRef = useRef<HTMLInputElement>(null)
@@ -3170,6 +3208,14 @@ function EventDetailModal({ event, close, save, remove }: {
           </div>}
           <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>{calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}</select></label>
           <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
+          {canRemind && onReminderSaved && (
+            <EventReminderEditor
+              eventId={event.id}
+              reminder={event.reminder}
+              allDay={form.allDay}
+              onSaved={onReminderSaved}
+            />
+          )}
           {error && <div className="modal-error" role="alert">{error}</div>}
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
@@ -3199,8 +3245,16 @@ function EventDetailModal({ event, close, save, remove }: {
             }}
             dangerouslySetInnerHTML={{ __html: safeDescription }}
           /></section>}
+          {canRemind && onReminderSaved && (
+            <EventReminderEditor
+              eventId={event.id}
+              reminder={event.reminder}
+              allDay={event.allDay}
+              onSaved={onReminderSaved}
+            />
+          )}
           {!canEdit && event.visibility === 'busy' && <p className="event-readonly-note">This guest view shows only the time this calendar is busy.</p>}
-          {!canEdit && event.visibility !== 'busy' && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Open the event in Google Calendar to change it.</p>}
+          {!canEdit && event.visibility !== 'busy' && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Reminder choices stay in Karaman and are not written back to Google.</p>}
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
             <button type="button" onClick={close} disabled={busy}>Close</button>
@@ -3227,13 +3281,28 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [familyDefault, setFamilyDefault] = useState(DEFAULT_NOTIFICATION_SETTINGS)
+  const [reminder, setReminder] = useState(() => defaultReminderForm())
+
+  useEffect(() => {
+    let cancelled = false
+    loadNotificationStatus()
+      .then((status) => {
+        if (cancelled) return
+        setFamilyDefault(status.settings)
+        setReminder(defaultReminderForm(status.settings))
+      })
+      .catch(() => undefined)
+    return () => { cancelled = true }
+  }, [])
 
   const submit = async (submitEvent: FormEvent) => {
     submitEvent.preventDefault()
     setSaving(true)
     setError(null)
     try {
-      await save(eventWriteFromForm(form))
+      const write = eventWriteFromForm(form)
+      await save(remindersMatchDefault(reminder, familyDefault) ? write : { ...write, reminder })
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Unable to save event')
       setSaving(false)
@@ -3350,6 +3419,19 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
                 </div>
               </div>
             </div>
+            <div className="sheet-card">
+              <div className="sheet-row">
+                <Bell size={18} />
+                <div className="sheet-row-content">
+                  <EventReminderFields
+                    value={reminder}
+                    allDay={form.allDay}
+                    disabled={saving}
+                    onChange={setReminder}
+                  />
+                </div>
+              </div>
+            </div>
             <div className="sheet-card sheet-description">
               <textarea placeholder="Add description" rows={4} />
               <button type="button" className="use-ai-btn"><Sparkles size={14} />Use AI</button>
@@ -3392,6 +3474,12 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
     </div>}
     <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(e) => setForm({ ...form, calendar: e.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Add a place" /></label>
+    <EventReminderFields
+      value={reminder}
+      allDay={form.allDay}
+      disabled={saving}
+      onChange={setReminder}
+    />
     {error && <div className="modal-error" role="alert">{error}</div>}
     <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
     <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>

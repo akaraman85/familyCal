@@ -1,11 +1,36 @@
 import { isAppleTouchDevice, isStandaloneApp } from './install-app'
+import {
+  DEFAULT_NOTIFY_MINUTES,
+  DEFAULT_REMINDER_FREQUENCY,
+  isNotifyMinutes,
+  isReminderFrequency,
+  NOTIFY_MINUTES,
+  notifyMinutesLabel,
+  reminderFrequencyHint,
+  reminderFrequencyLabel,
+  REMINDER_FREQUENCIES,
+  type NotifyMinutes,
+  type ReminderFrequency,
+} from '../api/_lib/reminder-options.ts'
+import type { EventReminder } from './events'
 
-export const REMINDER_MINUTES = [15, 30, 60] as const
-export type ReminderMinutes = (typeof REMINDER_MINUTES)[number]
+export const REMINDER_MINUTES = NOTIFY_MINUTES
+export type ReminderMinutes = NotifyMinutes
+export {
+  NOTIFY_MINUTES,
+  notifyMinutesLabel,
+  reminderFrequencyHint,
+  reminderFrequencyLabel,
+  REMINDER_FREQUENCIES,
+  isNotifyMinutes,
+  isReminderFrequency,
+}
+export type { NotifyMinutes, ReminderFrequency }
 
 export type NotificationSettings = {
   eventReminders: boolean
-  reminderMinutes: ReminderMinutes
+  reminderMinutes: NotifyMinutes
+  reminderFrequency: ReminderFrequency
 }
 
 export type PushDevice = {
@@ -23,7 +48,8 @@ export type NotificationStatus = {
 
 export const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
   eventReminders: true,
-  reminderMinutes: 30,
+  reminderMinutes: DEFAULT_NOTIFY_MINUTES,
+  reminderFrequency: DEFAULT_REMINDER_FREQUENCY,
 }
 
 export const SETTINGS_TAB_KEY = 'karaman-settings-tab'
@@ -161,6 +187,38 @@ export async function syncPushSubscription() {
   } catch {
     // Keep calendar use working if this device cannot refresh its subscription.
   }
+}
+
+export async function updateEventReminder(
+  eventId: string,
+  reminder: Pick<EventReminder, 'enabled' | 'notifyMinutes' | 'frequency'>,
+) {
+  const response = await fetch('/api/notifications/event', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ eventId, ...reminder }),
+  })
+  return responseJson<{ reminder: EventReminder }>(response)
+}
+
+export async function resetEventReminder(eventId: string) {
+  const response = await fetch('/api/notifications/event', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    credentials: 'same-origin',
+    body: JSON.stringify({ eventId }),
+  })
+  return responseJson<{ reminder: EventReminder }>(response)
+}
+
+export function remindersMatchDefault(
+  reminder: Pick<EventReminder, 'enabled' | 'notifyMinutes' | 'frequency'>,
+  settings: NotificationSettings,
+) {
+  return reminder.enabled === settings.eventReminders
+    && reminder.notifyMinutes === settings.reminderMinutes
+    && reminder.frequency === settings.reminderFrequency
 }
 
 export function openNotificationSettings() {

@@ -2,7 +2,8 @@ import { requireAdmin } from '../_lib/auth.js'
 import { appEnv } from '../_lib/env.js'
 import {
   getNotificationSettings,
-  isReminderMinutes,
+  isNotifyMinutes,
+  isReminderFrequency,
   listPushDevices,
   saveNotificationSettings,
   vapidConfig,
@@ -45,13 +46,18 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       throw new ValidationError('Notification preferences are invalid')
     }
     const body = rawBody as Record<string, unknown>
-    if (typeof body.eventReminders !== 'boolean' || !isReminderMinutes(body.reminderMinutes)) {
+    if (
+      typeof body.eventReminders !== 'boolean'
+      || !isNotifyMinutes(body.reminderMinutes)
+      || !isReminderFrequency(body.reminderFrequency)
+    ) {
       throw new ValidationError('Notification preferences are invalid')
     }
 
     const settings = await saveNotificationSettings(env.databaseUrl, env.ownerId, {
       eventReminders: body.eventReminders,
       reminderMinutes: body.reminderMinutes,
+      reminderFrequency: body.reminderFrequency,
     })
     sendJson(response, 200, { settings })
   } catch (error) {

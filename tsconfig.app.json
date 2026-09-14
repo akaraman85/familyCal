@@ -17,6 +17,6 @@
     "allowImportingTsExtensions": true,
     "jsx": "react-jsx"
   },
-  "include": ["src", "api/_lib/app-routes.ts", "api/_lib/event-range.ts"],
+  "include": ["src", "api/_lib/app-routes.ts", "api/_lib/event-range.ts", "api/_lib/reminder-options.ts"],
   "exclude": ["src/sw.ts", "src/**/*.test.ts"]
 }

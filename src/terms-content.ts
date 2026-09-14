@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const TERMS_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const TERMS_UPDATED = 'September 3, 2026'
+export const TERMS_UPDATED = 'September 12, 2026'
 
 export const TERMS_SECTIONS: LegalSection[] = [
   {
@@ -27,7 +27,7 @@ export const TERMS_SECTIONS: LegalSection[] = [
   {
     heading: 'What is stored',
     paragraphs: [
-      'Family events, family members, guest invite records, preferences, encrypted Google tokens, and optional encrypted web-push subscriptions are stored in Postgres for this deployment.',
+      'Family events, family members, guest invite records, preferences (including per-event reminder timing), encrypted Google tokens, and optional encrypted web-push subscriptions are stored in Postgres for this deployment.',
     ],
   },
   {

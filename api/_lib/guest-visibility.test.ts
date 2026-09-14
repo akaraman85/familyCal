@@ -31,6 +31,12 @@ const alexGoogle = event({
   id: 'google:1',
   source: 'google',
   calendar: 'Alex',
+  reminder: {
+    enabled: true,
+    notifyMinutes: 30,
+    frequency: 'once',
+    custom: true,
+  },
   google: {
     calendar: {
       id: 'primary',
@@ -164,11 +170,13 @@ assert.equal(redacted.organizer, null)
 assert.equal(redacted.source, 'saved')
 assert.equal(redacted.visibility, 'busy')
 assert.equal(redacted.google, undefined)
+assert.equal(redacted.reminder, undefined)
 assert.equal(redacted.startAt, alexGoogle.startAt)
 assert.equal(redacted.endAt, alexGoogle.endAt)
 assert.doesNotMatch(JSON.stringify(redacted), /Oncologist/)
 assert.doesNotMatch(JSON.stringify(redacted), /Clinic/)
 assert.doesNotMatch(JSON.stringify(redacted), /alex@example.com/)
+assert.doesNotMatch(JSON.stringify(redacted), /notifyMinutes/)
 
 const visible = guestEvents(
   [alexGoogle, kidGoogle, household, mayaSaved, unassignedGoogle],
