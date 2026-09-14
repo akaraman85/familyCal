@@ -39,6 +39,12 @@ export function isEventReminderId(value: unknown): value is string {
     && (value.startsWith('saved:') || value.startsWith('google:'))
 }
 
+export function eventReminderKey(eventId: string) {
+  if (!eventId.startsWith('saved:')) return eventId
+  const separator = eventId.indexOf('::')
+  return separator === -1 ? eventId : eventId.slice(0, separator)
+}
+
 export function notifyMinutesLabel(minutes: NotifyMinutes, allDay = false) {
   if (minutes === 0) return allDay ? 'Morning of (8:00 AM)' : 'At the start'
   if (minutes === 5) return '5 minutes before'
@@ -105,7 +111,7 @@ export function resolveEventReminder(
   settings: ReminderDefaults,
   overrides: Map<string, EventReminderPreference>,
 ): ResolvedEventReminder {
-  const override = overrides.get(eventId)
+  const override = overrides.get(eventId) ?? overrides.get(eventReminderKey(eventId))
   if (!override) return defaultEventReminder(settings)
   return {
     enabled: override.enabled,
@@ -121,7 +127,7 @@ export function reminderForDispatch(
   overrides: Map<string, EventReminderPreference>,
 ): EventReminderPreference | null {
   if (!settings.eventReminders) return null
-  const override = overrides.get(eventId)
+  const override = overrides.get(eventId) ?? overrides.get(eventReminderKey(eventId))
   if (!override) {
     return {
       eventId,
@@ -131,7 +137,7 @@ export function reminderForDispatch(
     }
   }
   if (!override.enabled) return null
-  return override
+  return { ...override, eventId }
 }
 
 export function attachEventReminders<T extends { id: string }>(

@@ -62,4 +62,31 @@ assert.equal(
   null,
 )
 
+assert.deepEqual(
+  resolveEventReminder(
+    'saved:series-1::2026-09-21T15:00:00.000Z',
+    settings,
+    new Map([['saved:series-1', { ...override, eventId: 'saved:series-1' }]]),
+  ),
+  {
+    enabled: true,
+    notifyMinutes: 1440,
+    frequency: 'daily',
+    custom: true,
+  },
+)
+assert.deepEqual(
+  reminderForDispatch(
+    'saved:series-1::2026-09-21T15:00:00.000Z',
+    settings,
+    new Map([['saved:series-1', { ...override, eventId: 'saved:series-1' }]]),
+  ),
+  {
+    eventId: 'saved:series-1::2026-09-21T15:00:00.000Z',
+    enabled: true,
+    notifyMinutes: 1440,
+    frequency: 'daily',
+  },
+)
+
 console.log('event reminder preference tests passed')

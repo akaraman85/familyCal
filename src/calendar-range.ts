@@ -22,7 +22,15 @@ export function mergeCalendarEvents(
 }
 
 export function omitCalendarEvent<T extends { id: string }>(events: T[], id: string) {
-  return events.filter((event) => event.id !== id)
+  const seriesId = savedEventSeriesId(id)
+  return events.filter((event) => savedEventSeriesId(event.id) !== seriesId)
+}
+
+export function savedEventSeriesId(id: string) {
+  if (!id.startsWith('saved:')) return id
+  const rest = id.slice('saved:'.length)
+  const separator = rest.indexOf('::')
+  return separator === -1 ? id : `saved:${rest.slice(0, separator)}`
 }
 
 export function eventOccursOnDay(

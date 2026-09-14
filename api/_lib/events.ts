@@ -1,6 +1,13 @@
 import { randomUUID } from 'node:crypto'
 import { neon, Pool } from '@neondatabase/serverless'
 import type { NotifyMinutes, ReminderFrequency } from './reminder-options.js'
+import {
+  expandRecurringEvent,
+  occurrenceEventId,
+  recurrenceFromRow,
+  type RecurrenceFrequency,
+  type RecurrenceRule,
+} from './recurrence.js'
 
 export type CalendarEvent = {
   id: string
@@ -25,6 +32,9 @@ export type CalendarEvent = {
     frequency: ReminderFrequency
     custom: boolean
   }
+  recurrence?: RecurrenceRule | null
+  seriesStartAt?: string
+  seriesEndAt?: string | null
   google?: {
     calendar: {
       id: string
@@ -55,6 +65,8 @@ type SavedEventRow = {
   all_day_end_date: string | Date | null
   calendar_name: string
   location: string | null
+  recurrence: string | null
+  recurrence_until: string | Date | null
 }
 
 type NewSavedEvent = {
@@ -66,6 +78,8 @@ type NewSavedEvent = {
   allDayEndDate?: string | null
   calendar: string
   location?: string | null
+  recurrence?: RecurrenceFrequency | null
+  recurrenceUntil?: string | null
 }
 
 export class PlannerSessionConflictError extends Error {}
@@ -75,12 +89,26 @@ function dateOnly(value: string | Date | null) {
   return (typeof value === 'string' ? value : value.toISOString()).slice(0, 10)
 }
 
+const SAVED_EVENT_COLUMNS = `id, title, start_at, end_at, all_day, all_day_date,
+            all_day_end_date, calendar_name, location, recurrence, recurrence_until`
+
+function withSeriesFields(event: CalendarEvent, rule: RecurrenceRule | null, master: CalendarEvent) {
+  if (!rule) return { ...event, recurrence: null }
+  return {
+    ...event,
+    recurrence: rule,
+    seriesStartAt: master.startAt,
+    seriesEndAt: master.endAt,
+  }
+}
+
 function serialize(row: SavedEventRow): CalendarEvent {
   const startAt = new Date(row.start_at).toISOString()
   const endAt = row.end_at ? new Date(row.end_at).toISOString() : null
   const allDayDate = dateOnly(row.all_day_date)
   const allDayEndDate = dateOnly(row.all_day_end_date)
-  return {
+  const recurrence = recurrenceFromRow(row.recurrence, row.recurrence_until)
+  const event: CalendarEvent = {
     id: `saved:${row.id}`,
     title: row.title,
     startAt: row.all_day && allDayDate ? allDayDate : startAt,
@@ -92,7 +120,33 @@ function serialize(row: SavedEventRow): CalendarEvent {
     externalUrl: null,
     organizer: null,
     source: 'saved',
+    recurrence,
   }
+  return withSeriesFields(event, recurrence, event)
+}
+
+function serializeOccurrence(row: SavedEventRow, occurrenceKey?: string | null) {
+  const master = serialize(row)
+  if (!master.recurrence) return master
+  const firstKey = master.allDay ? master.startAt.slice(0, 10) : master.startAt
+  if (!occurrenceKey) {
+    return { ...master, id: occurrenceEventId(row.id, firstKey) }
+  }
+  const occStart = Date.parse(
+    master.allDay || !occurrenceKey.includes('T')
+      ? `${occurrenceKey.slice(0, 10)}T00:00:00.000Z`
+      : occurrenceKey,
+  )
+  if (Number.isNaN(occStart)) {
+    return { ...master, id: occurrenceEventId(row.id, firstKey) }
+  }
+  const match = expandRecurringEvent(
+    master,
+    master.recurrence,
+    new Date(occStart),
+    new Date(occStart + 24 * 60 * 60 * 1000),
+  ).find((event) => event.id === occurrenceEventId(row.id, occurrenceKey))
+  return match ?? { ...master, id: occurrenceEventId(row.id, firstKey) }
 }
 
 export async function listSavedEvents(
@@ -103,26 +157,45 @@ export async function listSavedEvents(
 ) {
   const sql = neon(databaseUrl)
   const rows = await sql.query(
-    `SELECT id, title, start_at, end_at, all_day, all_day_date,
-            all_day_end_date, calendar_name, location
+    `SELECT ${SAVED_EVENT_COLUMNS}
        FROM saved_events
       WHERE owner_id = $1
-        AND CASE
-              WHEN all_day THEN COALESCE(all_day_date::timestamptz, start_at)
-              ELSE start_at
-            END < $3
-        AND CASE
-              WHEN all_day THEN COALESCE(
-                all_day_end_date::timestamptz + INTERVAL '1 day',
-                all_day_date::timestamptz + INTERVAL '1 day',
-                start_at + INTERVAL '1 day'
-              )
-              ELSE COALESCE(end_at, start_at)
-            END >= $2
+        AND (
+          (
+            recurrence IS NULL
+            AND CASE
+                  WHEN all_day THEN COALESCE(all_day_date::timestamptz, start_at)
+                  ELSE start_at
+                END < $3
+            AND CASE
+                  WHEN all_day THEN COALESCE(
+                    all_day_end_date::timestamptz + INTERVAL '1 day',
+                    all_day_date::timestamptz + INTERVAL '1 day',
+                    start_at + INTERVAL '1 day'
+                  )
+                  ELSE COALESCE(end_at, start_at)
+                END >= $2
+          )
+          OR (
+            recurrence IS NOT NULL
+            AND CASE
+                  WHEN all_day THEN COALESCE(all_day_date::timestamptz, start_at)
+                  ELSE start_at
+                END < $3
+            AND (
+              recurrence_until IS NULL
+              OR recurrence_until >= ($2::timestamptz::date - 400)
+            )
+          )
+        )
       ORDER BY start_at`,
     [ownerId, timeMin.toISOString(), timeMax.toISOString()],
   ) as SavedEventRow[]
-  return rows.map(serialize)
+  return rows.flatMap((row) => {
+    const master = serialize(row)
+    return expandRecurringEvent(master, master.recurrence ?? null, timeMin, timeMax)
+      .map((event) => withSeriesFields(event, master.recurrence ?? null, master))
+  }).sort((left, right) => left.startAt.localeCompare(right.startAt))
 }
 
 export async function createSavedEvent(
@@ -135,10 +208,9 @@ export async function createSavedEvent(
   const rows = await sql.query(
     `INSERT INTO saved_events (
        id, owner_id, title, start_at, end_at, all_day, all_day_date,
-       all_day_end_date, calendar_name, location
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-     RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
-       calendar_name, location`,
+       all_day_end_date, calendar_name, location, recurrence, recurrence_until
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     RETURNING ${SAVED_EVENT_COLUMNS}`,
     [
       id,
       ownerId,
@@ -150,9 +222,11 @@ export async function createSavedEvent(
       event.allDayEndDate ?? null,
       event.calendar,
       event.location ?? null,
+      event.recurrence ?? null,
+      event.recurrenceUntil ?? null,
     ],
   ) as SavedEventRow[]
-  return serialize(rows[0])
+  return serializeOccurrence(rows[0])
 }
 
 export async function deleteSavedEvent(
@@ -170,8 +244,9 @@ export async function deleteSavedEvent(
   if (rows.length !== 1) return false
   await sql.query(
     `DELETE FROM event_notification_preferences
-      WHERE owner_id = $1 AND event_id = $2`,
-    [ownerId, `saved:${eventId}`],
+      WHERE owner_id = $1
+        AND (event_id = $2 OR event_id LIKE $3)`,
+    [ownerId, `saved:${eventId}`, `saved:${eventId}::%`],
   )
   return true
 }
@@ -181,6 +256,7 @@ export async function updateSavedEvent(
   ownerId: string,
   eventId: string,
   event: NewSavedEvent,
+  occurrenceKey?: string | null,
 ) {
   const sql = neon(databaseUrl)
   const rows = await sql.query(
@@ -193,10 +269,11 @@ export async function updateSavedEvent(
             all_day_end_date = $8,
             calendar_name = $9,
             location = $10,
+            recurrence = $11,
+            recurrence_until = $12,
             updated_at = NOW()
       WHERE owner_id = $1 AND id = $2
-      RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
-        calendar_name, location`,
+      RETURNING ${SAVED_EVENT_COLUMNS}`,
     [
       ownerId,
       eventId,
@@ -208,9 +285,11 @@ export async function updateSavedEvent(
       event.allDayEndDate ?? null,
       event.calendar,
       event.location ?? null,
+      event.recurrence ?? null,
+      event.recurrenceUntil ?? null,
     ],
   ) as SavedEventRow[]
-  return rows[0] ? serialize(rows[0]) : null
+  return rows[0] ? serializeOccurrence(rows[0], occurrenceKey) : null
 }
 
 export async function createSavedEvents(
@@ -225,8 +304,7 @@ export async function createSavedEvents(
   try {
     await client.query('BEGIN')
     const existing = await client.query(
-      `SELECT id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
-              calendar_name, location
+      `SELECT ${SAVED_EVENT_COLUMNS}
          FROM saved_events
         WHERE owner_id = $1 AND planner_request_id = $2
         ORDER BY planner_item_index`,
@@ -252,8 +330,7 @@ export async function createSavedEvents(
     )
     if (!plannerSession.rows.length) {
       const committed = await client.query(
-        `SELECT id, title, start_at, end_at, all_day, all_day_date,
-                all_day_end_date, calendar_name, location
+        `SELECT ${SAVED_EVENT_COLUMNS}
            FROM saved_events
           WHERE owner_id = $1 AND planner_request_id = $2
           ORDER BY planner_item_index`,
@@ -274,10 +351,9 @@ export async function createSavedEvents(
         `INSERT INTO saved_events (
            id, owner_id, title, start_at, end_at, all_day, all_day_date,
            all_day_end_date, calendar_name, location, planner_request_id,
-           planner_item_index
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-         RETURNING id, title, start_at, end_at, all_day, all_day_date, all_day_end_date,
-           calendar_name, location`,
+           planner_item_index, recurrence, recurrence_until
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+         RETURNING ${SAVED_EVENT_COLUMNS}`,
         [
           randomUUID(),
           ownerId,
@@ -291,6 +367,8 @@ export async function createSavedEvents(
           event.location ?? null,
           requestId,
           index,
+          event.recurrence ?? null,
+          event.recurrenceUntil ?? null,
         ],
       )
       created.push(serialize(rows.rows[0] as SavedEventRow))
