@@ -27,6 +27,7 @@ import {
   type EventRecurrenceFrequency,
   type EventReminder,
   type EventSources,
+  type IsoWeekday,
 } from './events'
 import {
   applyMovePreview,
@@ -48,7 +49,7 @@ import {
   type TimedOverlapLayout,
 } from './calendar-slot'
 import { eventOccursOnDay, mergeCalendarEvents, omitCalendarEvent, parseCalendarDate, savedEventSeriesId } from './calendar-range'
-import { recurrenceOptionLabel, recurrenceSummary, RECURRENCE_OPTIONS } from './event-recurrence'
+import { recurrenceOptionLabel, recurrenceSummary, RECURRENCE_OPTIONS, WEEKDAY_PICKS, WEEKDAY_PRESET, toggleWeekday, weekdayFromDateInput, localWeekdaysToUtc, utcWeekdaysToLocal, isoWeekdayLocal } from './event-recurrence'
 import { useTimelineInteraction } from './use-timeline-interaction'
 import {
   disconnectGoogleCalendar,
@@ -3093,7 +3094,17 @@ function eventEditValues(event: EventItem) {
     location: series.location ?? '',
     recurrence: (event.recurrence?.frequency ?? '') as EventRecurrenceFrequency | '',
     recurrenceUntil: event.recurrence?.until ?? '',
+    recurrenceWeekdays: localRecurrenceWeekdays(event, series.date),
   }
+}
+
+function localRecurrenceWeekdays(event: EventItem, start: Date): IsoWeekday[] {
+  if (event.recurrence?.frequency !== 'weekly') return []
+  const stored = event.recurrence.weekdays
+  if (stored?.length) {
+    return event.allDay ? stored : utcWeekdaysToLocal(start, stored)
+  }
+  return [isoWeekdayLocal(start)]
 }
 
 function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventInput {
@@ -3101,8 +3112,22 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
   const location = form.location.trim() || undefined
   const recurrence = form.recurrence || null
   const recurrenceUntil = recurrence && form.recurrenceUntil ? form.recurrenceUntil : null
+  if (recurrence && !recurrenceUntil) {
+    throw new Error('Choose when the repeating event should end')
+  }
   if (recurrenceUntil && recurrenceUntil < form.date) {
     throw new Error('Repeat end date must be on or after the start date')
+  }
+  const startForWeekdays = form.allDay
+    ? new Date(`${form.date}T12:00:00`)
+    : new Date(`${form.date}T${form.time || '09:00'}:00`)
+  const recurrenceWeekdays = recurrence === 'weekly'
+    ? (form.recurrenceWeekdays.length
+      ? (form.allDay ? form.recurrenceWeekdays : localWeekdaysToUtc(startForWeekdays, form.recurrenceWeekdays))
+      : null)
+    : null
+  if (recurrence === 'weekly' && !recurrenceWeekdays?.length) {
+    throw new Error('Select at least one day for a weekly repeat')
   }
   if (form.allDay) {
     if (form.endDate && form.endDate < form.date) {
@@ -3122,6 +3147,7 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
       allDayEndDate,
       recurrence,
       recurrenceUntil,
+      recurrenceWeekdays,
     }
   }
   const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
@@ -3146,6 +3172,7 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
     allDayEndDate: null,
     recurrence,
     recurrenceUntil,
+    recurrenceWeekdays,
   }
 }
 
@@ -3160,6 +3187,49 @@ function RecurrenceFields({
   setForm: (form: EventFormValues) => void
   variant?: 'modal' | 'sheet'
 }) {
+  const changeRecurrence = (recurrence: EventRecurrenceFrequency | '') => {
+    setForm({
+      ...form,
+      recurrence,
+      recurrenceUntil: recurrence ? form.recurrenceUntil : '',
+      recurrenceWeekdays: recurrence === 'weekly'
+        ? (form.recurrenceWeekdays.length ? form.recurrenceWeekdays : [weekdayFromDateInput(form.date)])
+        : [],
+    })
+  }
+  const weekdayPicks = form.recurrence === 'weekly' && (
+    <div className="weekday-repeat">
+      <span className="weekday-repeat-label">Repeat on</span>
+      <div className="weekday-picks" role="group" aria-label="Repeat on these days">
+        {WEEKDAY_PICKS.map((day) => {
+          const selected = form.recurrenceWeekdays.includes(day.value)
+          return (
+            <button
+              key={day.value}
+              type="button"
+              className={`weekday-pick ${selected ? 'on' : ''}`}
+              aria-pressed={selected}
+              aria-label={day.label}
+              onClick={() => setForm({
+                ...form,
+                recurrenceWeekdays: toggleWeekday(form.recurrenceWeekdays, day.value),
+              })}
+            >
+              {day.short}
+            </button>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        className="weekday-preset"
+        onClick={() => setForm({ ...form, recurrenceWeekdays: [...WEEKDAY_PRESET] })}
+      >
+        Mon–Fri
+      </button>
+    </div>
+  )
+
   if (variant === 'sheet') {
     return (
       <div className="sheet-card">
@@ -3174,30 +3244,28 @@ function RecurrenceFields({
                 className="sheet-date-input"
                 value={form.recurrence}
                 aria-label="Repeat"
-                onChange={(change) => setForm({
-                  ...form,
-                  recurrence: change.target.value as EventRecurrenceFrequency | '',
-                  recurrenceUntil: change.target.value ? form.recurrenceUntil : '',
-                })}
+                onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
               >
                 {RECURRENCE_OPTIONS.map((option) => (
                   <option key={option.value || 'never'} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </label>
+            {weekdayPicks}
             {form.recurrence !== '' && (
               <label className="sheet-value-row sheet-date-label">
                 <span>Ends</span>
                 <span className="sheet-value">
                   {form.recurrenceUntil
                     ? format(new Date(`${form.recurrenceUntil}T12:00:00`), 'MMM d, yyyy')
-                    : 'Never'}
+                    : 'Choose a date'}
                 </span>
                 <ChevronDown size={16} />
                 <input
                   type="date"
                   className="sheet-date-input"
                   min={form.date}
+                  required
                   value={form.recurrenceUntil}
                   aria-label="Repeat end date"
                   onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
@@ -3216,22 +3284,20 @@ function RecurrenceFields({
         <span>Repeat</span>
         <select
           value={form.recurrence}
-          onChange={(change) => setForm({
-            ...form,
-            recurrence: change.target.value as EventRecurrenceFrequency | '',
-            recurrenceUntil: change.target.value ? form.recurrenceUntil : '',
-          })}
+          onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
         >
           {RECURRENCE_OPTIONS.map((option) => (
             <option key={option.value || 'never'} value={option.value}>{option.label}</option>
           ))}
         </select>
       </label>
+      {weekdayPicks}
       {form.recurrence !== '' && (
         <label className="field">
-          <span>Ends on <small>optional</small></span>
+          <span>Ends on</span>
           <input
             type="date"
+            required
             min={form.date}
             value={form.recurrenceUntil}
             onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
@@ -3413,6 +3479,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
     location: '',
     recurrence: '',
     recurrenceUntil: '',
+    recurrenceWeekdays: [],
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)

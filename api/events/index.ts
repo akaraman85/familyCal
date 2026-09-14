@@ -35,6 +35,7 @@ import {
   isIsoDate as isIsoDateValue,
   isRecurrenceFrequency,
   parseSavedEventRef,
+  parseWeekdays,
 } from '../_lib/recurrence.js'
 import {
   errorMessage,
@@ -120,7 +121,7 @@ function isIsoDate(value: string | null) {
 
 function parseRecurrence(body: Record<string, unknown>, startDate: string) {
   if (body.recurrence === undefined || body.recurrence === null || body.recurrence === '') {
-    return { recurrence: null, recurrenceUntil: null }
+    return { recurrence: null, recurrenceUntil: null, recurrenceWeekdays: null }
   }
   if (!isRecurrenceFrequency(body.recurrence)) {
     throw new ValidationError('Repeat frequency is invalid')
@@ -128,12 +129,17 @@ function parseRecurrence(body: Record<string, unknown>, startDate: string) {
   const until = typeof body.recurrenceUntil === 'string' && body.recurrenceUntil
     ? body.recurrenceUntil
     : null
-  if (until && (!isIsoDate(until) || until < startDate)) {
-    throw new ValidationError('Repeat end date must be on or after the start date')
+  if (!until || !isIsoDate(until) || until < startDate) {
+    throw new ValidationError('Repeat end date is required and must be on or after the start date')
+  }
+  const weekdays = body.recurrence === 'weekly' ? parseWeekdays(body.recurrenceWeekdays) : null
+  if (body.recurrence === 'weekly' && !weekdays) {
+    throw new ValidationError('Select at least one day for a weekly repeat')
   }
   return {
     recurrence: body.recurrence,
     recurrenceUntil: until,
+    recurrenceWeekdays: weekdays,
   }
 }
 

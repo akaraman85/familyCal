@@ -654,6 +654,15 @@ body.assistant-resizing { cursor:ew-resize;user-select:none; }
 .field { display:flex;flex-direction:column;gap:7px;margin-bottom:15px; }.field > span { font-size:9px;font-weight:600; }.field small { color:var(--text-faint);font-weight:400; }
 .field input,.field select { height:41px;border:1px solid var(--line);border-radius:8px;padding:0 11px;font-size:11px;color:var(--ink);background:var(--panel); }
 .field-row { display:grid;grid-template-columns:1.4fr 1fr;gap:12px; }
+.weekday-repeat { display:flex;flex-direction:column;gap:8px;margin:0 0 15px; }
+.weekday-repeat-label { font-size:9px;font-weight:600; }
+.weekday-picks { display:flex;flex-wrap:wrap;gap:6px; }
+.weekday-pick { width:34px;height:34px;border:1px solid var(--line);border-radius:50%;background:var(--panel);color:var(--ink);font-size:11px;font-weight:700;cursor:pointer; }
+.weekday-pick.on { background:var(--orange);border-color:var(--orange);color:white; }
+.weekday-preset { align-self:flex-start;border:0;background:none;padding:0;color:var(--blue-ink);font-size:11px;font-weight:700;cursor:pointer; }
+.sheet-row-content .weekday-repeat { margin:0; }
+.sheet-row-content .weekday-repeat-label { font-size:13px;color:var(--text-dim); }
+.sheet-row-content .weekday-preset { font-size:13px;color:var(--mobile-accent); }
 .modal-tip { background:var(--tip-bg);color:var(--text-dim);border-radius:8px;padding:10px;display:flex;align-items:center;gap:8px;font-size:8px; }.modal-tip svg { color:var(--gold); }
 .modal-error { border:1px solid var(--error-border);background:var(--orange-soft);color:var(--error-text);border-radius:8px;padding:9px 11px;font-size:9px;margin-bottom:12px; }
 .modal-actions { display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--line);margin-top:20px;padding-top:17px; }.modal-actions button { border:1px solid var(--line);background:var(--panel);height:36px;border-radius:8px;padding:0 16px;font-size:10px;font-weight:600;cursor:pointer; }.modal-actions .save-event { background:var(--orange);color:white;border-color:var(--orange); }

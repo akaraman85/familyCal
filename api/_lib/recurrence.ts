@@ -2,18 +2,34 @@ import { eventOverlapsRange, eventTimeRange } from './event-range.js'
 
 export const RECURRENCE_FREQUENCIES = ['daily', 'weekly', 'monthly', 'yearly'] as const
 export type RecurrenceFrequency = typeof RECURRENCE_FREQUENCIES[number]
+export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 export type RecurrenceRule = {
   frequency: RecurrenceFrequency
   until: string | null
+  weekdays?: IsoWeekday[] | null
 }
 
 export const MAX_RECURRENCE_OCCURRENCES = 400
+export const WEEKDAY_VALUES: IsoWeekday[] = [1, 2, 3, 4, 5, 6, 7]
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
 export function isRecurrenceFrequency(value: unknown): value is RecurrenceFrequency {
   return typeof value === 'string' && (RECURRENCE_FREQUENCIES as readonly string[]).includes(value)
+}
+
+export function isoWeekdayUtc(date: Date): IsoWeekday {
+  const day = date.getUTCDay()
+  return (day === 0 ? 7 : day) as IsoWeekday
+}
+
+export function parseWeekdays(value: unknown): IsoWeekday[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const unique = [...new Set(
+    value.map((item) => typeof item === 'number' ? item : Number(item)),
+  )].filter((day) => WEEKDAY_VALUES.includes(day as IsoWeekday)).sort((left, right) => left - right)
+  return unique.length ? unique as IsoWeekday[] : null
 }
 
 export function parseSavedEventRef(id: string) {
@@ -59,6 +75,16 @@ function addUtcDays(date: Date, days: number) {
   const next = new Date(date.getTime())
   next.setUTCDate(next.getUTCDate() + days)
   return next
+}
+
+function nextWeeklyStart(start: Date, weekdays: Set<IsoWeekday>, from: Date) {
+  const daysBehind = Math.max(0, Math.floor((from.getTime() - start.getTime()) / DAY_MS))
+  let cursor = addUtcDays(start, daysBehind)
+  for (let step = 0; step < 7; step += 1) {
+    if (weekdays.has(isoWeekdayUtc(cursor))) return cursor
+    cursor = addUtcDays(cursor, 1)
+  }
+  return cursor
 }
 
 function addUtcMonths(date: Date, months: number) {
@@ -134,20 +160,15 @@ export function expandRecurringEvent<T extends ExpandableEvent>(
   const endOffsetMs = originalEnd !== null && !Number.isNaN(originalEnd)
     ? originalEnd - seriesStart.getTime()
     : null
-
-  let index = estimatedIndex(seriesStart, new Date(timeMin.getTime() - durationMs), rule.frequency)
-  while (index > 0) {
-    const previous = shiftOccurrenceStart(seriesStart, rule.frequency, index - 1)
-    if (previous.getTime() + durationMs < timeMin.getTime()) break
-    index -= 1
-  }
+  const weekdays = rule.frequency === 'weekly'
+    ? new Set(rule.weekdays?.length ? rule.weekdays : [isoWeekdayUtc(seriesStart)])
+    : null
 
   const expanded: Array<T & { recurrence: RecurrenceRule | null }> = []
-  for (let count = 0; count < MAX_RECURRENCE_OCCURRENCES; count += 1, index += 1) {
-    const occurrenceStart = shiftOccurrenceStart(seriesStart, rule.frequency, index)
-    if (occurrenceStart.getTime() >= timeMax.getTime()) break
+  const pushOccurrence = (occurrenceStart: Date) => {
     const startAt = event.allDay ? utcDateKey(occurrenceStart) : occurrenceStart.toISOString()
-    if (!onOrBeforeUntil(startAt, rule.until)) break
+    if (!onOrBeforeUntil(startAt, rule.until)) return false
+    if (occurrenceStart.getTime() >= timeMax.getTime()) return false
     const endAt = endOffsetMs === null
       ? null
       : event.allDay
@@ -161,11 +182,46 @@ export function expandRecurringEvent<T extends ExpandableEvent>(
       recurrence: rule,
     }
     if (eventOverlapsRange(occurrence, timeMin, timeMax)) expanded.push(occurrence)
+    return true
+  }
+
+  if (weekdays) {
+    let cursor = nextWeeklyStart(seriesStart, weekdays, new Date(timeMin.getTime() - durationMs))
+    if (cursor.getTime() < seriesStart.getTime()) cursor = seriesStart
+    for (let steps = 0; steps < MAX_RECURRENCE_OCCURRENCES * 7; steps += 1) {
+      if (cursor.getTime() >= timeMax.getTime()) break
+      const startAt = event.allDay ? utcDateKey(cursor) : cursor.toISOString()
+      if (!onOrBeforeUntil(startAt, rule.until)) break
+      if (weekdays.has(isoWeekdayUtc(cursor))) {
+        if (!pushOccurrence(cursor)) break
+        if (expanded.length >= MAX_RECURRENCE_OCCURRENCES) break
+      }
+      cursor = addUtcDays(cursor, 1)
+    }
+    return expanded
+  }
+
+  let index = estimatedIndex(seriesStart, new Date(timeMin.getTime() - durationMs), rule.frequency)
+  while (index > 0) {
+    const previous = shiftOccurrenceStart(seriesStart, rule.frequency, index - 1)
+    if (previous.getTime() + durationMs < timeMin.getTime()) break
+    index -= 1
+  }
+
+  for (let count = 0; count < MAX_RECURRENCE_OCCURRENCES; count += 1, index += 1) {
+    const occurrenceStart = shiftOccurrenceStart(seriesStart, rule.frequency, index)
+    const startAt = event.allDay ? utcDateKey(occurrenceStart) : occurrenceStart.toISOString()
+    if (!onOrBeforeUntil(startAt, rule.until)) break
+    if (!pushOccurrence(occurrenceStart)) break
   }
   return expanded
 }
 
-export function recurrenceFromRow(frequency: string | null, until: string | Date | null): RecurrenceRule | null {
+export function recurrenceFromRow(
+  frequency: string | null,
+  until: string | Date | null,
+  weekdays?: unknown,
+): RecurrenceRule | null {
   if (!isRecurrenceFrequency(frequency)) return null
   const untilValue = until
     ? (typeof until === 'string' ? until.slice(0, 10) : utcDateKey(until))
@@ -173,5 +229,6 @@ export function recurrenceFromRow(frequency: string | null, until: string | Date
   return {
     frequency,
     until: isIsoDate(untilValue) ? untilValue : null,
+    weekdays: frequency === 'weekly' ? parseWeekdays(weekdays) : null,
   }
 }

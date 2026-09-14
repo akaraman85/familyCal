@@ -28,6 +28,45 @@ assert.equal(weekly[1].id, occurrenceEventId('series-1', '2026-09-21T15:00:00.00
 assert.equal(weekly[1].endAt, '2026-09-21T16:00:00.000Z')
 assert.equal(weekly[1].recurrence?.frequency, 'weekly')
 
+const weekdays = expandRecurringEvent(
+  {
+    id: 'saved:school',
+    startAt: '2026-09-14T15:00:00.000Z',
+    endAt: '2026-09-14T16:00:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-21', weekdays: [1, 2, 3, 4, 5] },
+  new Date('2026-09-13T00:00:00.000Z'),
+  new Date('2026-09-22T00:00:00.000Z'),
+)
+assert.deepEqual(weekdays.map((event) => event.startAt), [
+  '2026-09-14T15:00:00.000Z',
+  '2026-09-15T15:00:00.000Z',
+  '2026-09-16T15:00:00.000Z',
+  '2026-09-17T15:00:00.000Z',
+  '2026-09-18T15:00:00.000Z',
+  '2026-09-21T15:00:00.000Z',
+])
+
+const skipWeekend = expandRecurringEvent(
+  {
+    id: 'saved:school',
+    startAt: '2026-09-14T15:00:00.000Z',
+    endAt: '2026-09-14T16:00:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-20', weekdays: [1, 2, 3, 4, 5] },
+  new Date('2026-09-13T00:00:00.000Z'),
+  new Date('2026-09-22T00:00:00.000Z'),
+)
+assert.deepEqual(skipWeekend.map((event) => event.startAt.slice(0, 10)), [
+  '2026-09-14',
+  '2026-09-15',
+  '2026-09-16',
+  '2026-09-17',
+  '2026-09-18',
+])
+
 const weekSlice = expandRecurringEvent(
   {
     id: 'saved:series-1',

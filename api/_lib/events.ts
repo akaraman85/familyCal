@@ -7,6 +7,7 @@ import {
   recurrenceFromRow,
   type RecurrenceFrequency,
   type RecurrenceRule,
+  type IsoWeekday,
 } from './recurrence.js'
 
 export type CalendarEvent = {
@@ -67,6 +68,7 @@ type SavedEventRow = {
   location: string | null
   recurrence: string | null
   recurrence_until: string | Date | null
+  recurrence_weekdays: number[] | null
 }
 
 type NewSavedEvent = {
@@ -80,6 +82,7 @@ type NewSavedEvent = {
   location?: string | null
   recurrence?: RecurrenceFrequency | null
   recurrenceUntil?: string | null
+  recurrenceWeekdays?: IsoWeekday[] | null
 }
 
 export class PlannerSessionConflictError extends Error {}
@@ -90,7 +93,8 @@ function dateOnly(value: string | Date | null) {
 }
 
 const SAVED_EVENT_COLUMNS = `id, title, start_at, end_at, all_day, all_day_date,
-            all_day_end_date, calendar_name, location, recurrence, recurrence_until`
+            all_day_end_date, calendar_name, location, recurrence, recurrence_until,
+            recurrence_weekdays`
 
 function withSeriesFields(event: CalendarEvent, rule: RecurrenceRule | null, master: CalendarEvent) {
   if (!rule) return { ...event, recurrence: null }
@@ -107,7 +111,11 @@ function serialize(row: SavedEventRow): CalendarEvent {
   const endAt = row.end_at ? new Date(row.end_at).toISOString() : null
   const allDayDate = dateOnly(row.all_day_date)
   const allDayEndDate = dateOnly(row.all_day_end_date)
-  const recurrence = recurrenceFromRow(row.recurrence, row.recurrence_until)
+  const recurrence = recurrenceFromRow(
+    row.recurrence,
+    row.recurrence_until,
+    row.recurrence_weekdays,
+  )
   const event: CalendarEvent = {
     id: `saved:${row.id}`,
     title: row.title,
@@ -208,8 +216,9 @@ export async function createSavedEvent(
   const rows = await sql.query(
     `INSERT INTO saved_events (
        id, owner_id, title, start_at, end_at, all_day, all_day_date,
-       all_day_end_date, calendar_name, location, recurrence, recurrence_until
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       all_day_end_date, calendar_name, location, recurrence, recurrence_until,
+       recurrence_weekdays
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      RETURNING ${SAVED_EVENT_COLUMNS}`,
     [
       id,
@@ -224,6 +233,7 @@ export async function createSavedEvent(
       event.location ?? null,
       event.recurrence ?? null,
       event.recurrenceUntil ?? null,
+      event.recurrenceWeekdays ?? null,
     ],
   ) as SavedEventRow[]
   return serializeOccurrence(rows[0])
@@ -271,6 +281,7 @@ export async function updateSavedEvent(
             location = $10,
             recurrence = $11,
             recurrence_until = $12,
+            recurrence_weekdays = $13,
             updated_at = NOW()
       WHERE owner_id = $1 AND id = $2
       RETURNING ${SAVED_EVENT_COLUMNS}`,
@@ -287,6 +298,7 @@ export async function updateSavedEvent(
       event.location ?? null,
       event.recurrence ?? null,
       event.recurrenceUntil ?? null,
+      event.recurrenceWeekdays ?? null,
     ],
   ) as SavedEventRow[]
   return rows[0] ? serializeOccurrence(rows[0], occurrenceKey) : null
@@ -351,8 +363,8 @@ export async function createSavedEvents(
         `INSERT INTO saved_events (
            id, owner_id, title, start_at, end_at, all_day, all_day_date,
            all_day_end_date, calendar_name, location, planner_request_id,
-           planner_item_index, recurrence, recurrence_until
-         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+           planner_item_index, recurrence, recurrence_until, recurrence_weekdays
+         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
          RETURNING ${SAVED_EVENT_COLUMNS}`,
         [
           randomUUID(),
@@ -369,6 +381,7 @@ export async function createSavedEvents(
           index,
           event.recurrence ?? null,
           event.recurrenceUntil ?? null,
+          event.recurrenceWeekdays ?? null,
         ],
       )
       created.push(serialize(rows.rows[0] as SavedEventRow))
