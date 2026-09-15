@@ -32,6 +32,12 @@ import {
   isReminderFrequency,
 } from '../_lib/reminder-options.js'
 import {
+  isIsoDate as isIsoDateValue,
+  isRecurrenceFrequency,
+  parseSavedEventRef,
+  parseWeekdays,
+} from '../_lib/recurrence.js'
+import {
   errorMessage,
   readJsonBody,
   requireMethod,
@@ -110,9 +116,31 @@ function optionalString(value: unknown, maxLength: number) {
 }
 
 function isIsoDate(value: string | null) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00Z`)
-  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
+  return isIsoDateValue(value)
+}
+
+function parseRecurrence(body: Record<string, unknown>, startDate: string) {
+  if (body.recurrence === undefined || body.recurrence === null || body.recurrence === '') {
+    return { recurrence: null, recurrenceUntil: null, recurrenceWeekdays: null }
+  }
+  if (!isRecurrenceFrequency(body.recurrence)) {
+    throw new ValidationError('Repeat frequency is invalid')
+  }
+  const until = typeof body.recurrenceUntil === 'string' && body.recurrenceUntil
+    ? body.recurrenceUntil
+    : null
+  if (!until || !isIsoDate(until) || until < startDate) {
+    throw new ValidationError('Repeat end date is required and must be on or after the start date')
+  }
+  const weekdays = body.recurrence === 'weekly' ? parseWeekdays(body.recurrenceWeekdays) : null
+  if (body.recurrence === 'weekly' && !weekdays) {
+    throw new ValidationError('Select at least one day for a weekly repeat')
+  }
+  return {
+    recurrence: body.recurrence,
+    recurrenceUntil: until,
+    recurrenceWeekdays: weekdays,
+  }
 }
 
 function parseEvent(body: Record<string, unknown>) {
@@ -150,6 +178,8 @@ function parseEvent(body: Record<string, unknown>) {
   ) {
     throw new ValidationError('All-day event date is invalid')
   }
+  const startDate = allDay && allDayDate ? allDayDate : startAt.toISOString().slice(0, 10)
+  const recurrence = parseRecurrence(body, startDate)
   return {
     title,
     startAt: startAt.toISOString(),
@@ -159,18 +189,19 @@ function parseEvent(body: Record<string, unknown>) {
     allDayEndDate: allDay ? allDayEndDate : null,
     calendar,
     location,
+    ...recurrence,
   }
 }
 
 function parseSavedEventId(id: unknown, action: 'updated' | 'deleted' = 'updated') {
-  if (typeof id !== 'string' || !id.startsWith('saved:')) {
+  if (typeof id !== 'string') {
     throw new ValidationError(`Only saved family events can be ${action}`)
   }
-  const eventId = id.slice('saved:'.length)
-  if (!eventId || eventId.length > 80) {
-    throw new ValidationError('Event is invalid')
+  const parsed = parseSavedEventRef(id)
+  if (!parsed?.eventId || parsed.eventId.length > 80) {
+    throw new ValidationError(`Only saved family events can be ${action}`)
   }
-  return eventId
+  return parsed
 }
 
 async function withAllowedCalendars<T extends { calendar: string }>(
@@ -342,7 +373,7 @@ async function deleteEvent(request: ApiRequest, response: ApiResponse) {
     if (!await deleteSavedEvent(
       env.databaseUrl,
       env.ownerId,
-      parseSavedEventId(body.id, 'deleted'),
+      parseSavedEventId(body.id, 'deleted').eventId,
     )) {
       sendJson(response, 404, { error: 'Event not found' })
       return
@@ -369,11 +400,13 @@ async function patchEvent(request: ApiRequest, response: ApiResponse) {
       throw new ValidationError('Event details are invalid')
     }
     const body = rawBody as Record<string, unknown>
+    const parsedId = parseSavedEventId(body.id)
     const updated = await updateSavedEvent(
       env.databaseUrl,
       env.ownerId,
-      parseSavedEventId(body.id),
+      parsedId.eventId,
       await withAllowedCalendar(env.databaseUrl, env.ownerId, parseEvent(body)),
+      parsedId.occurrenceKey,
     )
     if (!updated) {
       sendJson(response, 404, { error: 'Event not found' })

@@ -129,4 +129,11 @@ assert.deepEqual(
   ['saved:kept'],
 )
 
+const seriesStart = eventData('saved:series::2026-09-14T18:00:00.000Z', 'saved', '2026-09-14T18:00:00.000Z', '2026-09-14T19:00:00.000Z')
+const seriesNext = eventData('saved:series::2026-09-21T18:00:00.000Z', 'saved', '2026-09-21T18:00:00.000Z', '2026-09-21T19:00:00.000Z')
+assert.deepEqual(
+  omitCalendarEvent([seriesStart, seriesNext, remainingSaved], 'saved:series::2026-09-21T18:00:00.000Z').map((event) => event.id),
+  ['saved:kept'],
+)
+
 console.log('calendar-range tests passed')

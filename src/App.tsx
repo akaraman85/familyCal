@@ -23,8 +23,11 @@ import {
   updateCalendarEvent,
   type CalendarEventData,
   type CalendarEventWrite,
+  type EventRecurrence,
+  type EventRecurrenceFrequency,
   type EventReminder,
   type EventSources,
+  type IsoWeekday,
 } from './events'
 import {
   applyMovePreview,
@@ -45,7 +48,8 @@ import {
   type MovePreview,
   type TimedOverlapLayout,
 } from './calendar-slot'
-import { eventOccursOnDay, mergeCalendarEvents, omitCalendarEvent, parseCalendarDate } from './calendar-range'
+import { eventOccursOnDay, mergeCalendarEvents, omitCalendarEvent, parseCalendarDate, savedEventSeriesId } from './calendar-range'
+import { recurrenceOptionLabel, recurrenceSummary, RECURRENCE_OPTIONS, WEEKDAY_PICKS, WEEKDAY_PRESET, toggleWeekday, weekdayFromDateInput, localWeekdaysToUtc, utcWeekdaysToLocal, isoWeekdayLocal } from './event-recurrence'
 import { useTimelineInteraction } from './use-timeline-interaction'
 import {
   disconnectGoogleCalendar,
@@ -161,6 +165,9 @@ type EventItem = {
   source: 'saved' | 'google'
   visibility?: CalendarEventData['visibility']
   reminder?: EventReminder
+  recurrence?: EventRecurrence | null
+  seriesStartAt?: string
+  seriesEndAt?: string | null
   google?: CalendarEventData['google']
 }
 
@@ -314,6 +321,9 @@ function toEventItem(event: CalendarEventData, members: FamilyMember[]): EventIt
     source: event.source,
     visibility: event.visibility,
     reminder: event.reminder,
+    recurrence: event.recurrence ?? null,
+    seriesStartAt: event.seriesStartAt,
+    seriesEndAt: event.seriesEndAt,
     google: event.google,
   }
 }
@@ -1356,9 +1366,9 @@ function AuthenticatedApp({ user, onLogout }: {
           remove={!isGuest && selectedEvent.source === 'saved' ? deleteEvent : undefined}
           canRemind={!isGuest}
           onReminderSaved={(reminder) => {
-            const eventId = selectedEvent.id
+            const seriesId = savedEventSeriesId(selectedEvent.id)
             const patch = (events: CalendarEventData[]) => events.map((item) => (
-              item.id === eventId ? { ...item, reminder } : item
+              savedEventSeriesId(item.id) === seriesId ? { ...item, reminder } : item
             ))
             setRawEvents((current) => patch(current))
             for (const [key, cached] of eventCacheRef.current) {
@@ -1368,7 +1378,9 @@ function AuthenticatedApp({ user, onLogout }: {
               })
             }
             setSelectedEvent((current) => (
-              current && current.id === eventId ? { ...current, reminder } : current
+              current && savedEventSeriesId(current.id) === seriesId
+                ? { ...current, reminder }
+                : current
             ))
           }}
         />
@@ -1417,7 +1429,7 @@ function timedEventClassName(
 }
 
 function eventIsMovable(event: EventItem, readOnly: boolean) {
-  return !readOnly && event.source === 'saved'
+  return !readOnly && event.source === 'saved' && !event.recurrence
 }
 
 function EventDragHandle({
@@ -3050,30 +3062,73 @@ function timedEventEndsBeforeStart(form: {
   return Number.isNaN(startAt.getTime()) || Number.isNaN(endAt.getTime()) || endAt <= startAt
 }
 
+function eventForSeriesEdit(event: EventItem): EventItem {
+  if (!event.recurrence || !event.seriesStartAt) return event
+  return {
+    ...event,
+    date: event.allDay ? parseCalendarDate(event.seriesStartAt) : new Date(event.seriesStartAt),
+    endDate: event.seriesEndAt
+      ? (event.allDay ? parseCalendarDate(event.seriesEndAt) : new Date(event.seriesEndAt))
+      : undefined,
+  }
+}
+
 function eventEditValues(event: EventItem) {
+  const series = eventForSeriesEdit(event)
   let endDate = ''
-  if (event.allDay && event.endDate) {
-    const inclusive = new Date(event.endDate)
+  if (series.allDay && series.endDate) {
+    const inclusive = new Date(series.endDate)
     inclusive.setDate(inclusive.getDate() - 1)
-    if (!isSameDay(event.date, inclusive)) endDate = format(inclusive, 'yyyy-MM-dd')
-  } else if (!event.allDay && event.endDate && !isSameDay(event.date, event.endDate)) {
-    endDate = format(event.endDate, 'yyyy-MM-dd')
+    if (!isSameDay(series.date, inclusive)) endDate = format(inclusive, 'yyyy-MM-dd')
+  } else if (!series.allDay && series.endDate && !isSameDay(series.date, series.endDate)) {
+    endDate = format(series.endDate, 'yyyy-MM-dd')
   }
   return {
-    title: event.title,
-    calendar: event.calendar,
-    date: format(event.date, 'yyyy-MM-dd'),
-    time: event.allDay ? '09:00' : format(event.date, 'HH:mm'),
-    endTime: event.allDay || !event.endDate ? '' : format(event.endDate, 'HH:mm'),
+    title: series.title,
+    calendar: series.calendar,
+    date: format(series.date, 'yyyy-MM-dd'),
+    time: series.allDay ? '09:00' : format(series.date, 'HH:mm'),
+    endTime: series.allDay || !series.endDate ? '' : format(series.endDate, 'HH:mm'),
     endDate,
-    allDay: event.allDay,
-    location: event.location ?? '',
+    allDay: series.allDay,
+    location: series.location ?? '',
+    recurrence: (event.recurrence?.frequency ?? '') as EventRecurrenceFrequency | '',
+    recurrenceUntil: event.recurrence?.until ?? '',
+    recurrenceWeekdays: localRecurrenceWeekdays(event, series.date),
   }
+}
+
+function localRecurrenceWeekdays(event: EventItem, start: Date): IsoWeekday[] {
+  if (event.recurrence?.frequency !== 'weekly') return []
+  const stored = event.recurrence.weekdays
+  if (stored?.length) {
+    return event.allDay ? stored : utcWeekdaysToLocal(start, stored)
+  }
+  return [isoWeekdayLocal(start)]
 }
 
 function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventInput {
   const title = form.title.trim() || 'Untitled event'
   const location = form.location.trim() || undefined
+  const recurrence = form.recurrence || null
+  const recurrenceUntil = recurrence && form.recurrenceUntil ? form.recurrenceUntil : null
+  if (recurrence && !recurrenceUntil) {
+    throw new Error('Choose when the repeating event should end')
+  }
+  if (recurrenceUntil && recurrenceUntil < form.date) {
+    throw new Error('Repeat end date must be on or after the start date')
+  }
+  const startForWeekdays = form.allDay
+    ? new Date(`${form.date}T12:00:00`)
+    : new Date(`${form.date}T${form.time || '09:00'}:00`)
+  const recurrenceWeekdays = recurrence === 'weekly'
+    ? (form.recurrenceWeekdays.length
+      ? (form.allDay ? form.recurrenceWeekdays : localWeekdaysToUtc(startForWeekdays, form.recurrenceWeekdays))
+      : null)
+    : null
+  if (recurrence === 'weekly' && !recurrenceWeekdays?.length) {
+    throw new Error('Select at least one day for a weekly repeat')
+  }
   if (form.allDay) {
     if (form.endDate && form.endDate < form.date) {
       throw new Error('End date must be on or after the start date')
@@ -3090,6 +3145,9 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
       allDay: true,
       allDayDate: form.date,
       allDayEndDate,
+      recurrence,
+      recurrenceUntil,
+      recurrenceWeekdays,
     }
   }
   const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
@@ -3112,7 +3170,142 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
     allDay: false,
     allDayDate: null,
     allDayEndDate: null,
+    recurrence,
+    recurrenceUntil,
+    recurrenceWeekdays,
   }
+}
+
+type EventFormValues = ReturnType<typeof eventEditValues>
+
+function RecurrenceFields({
+  form,
+  setForm,
+  variant = 'modal',
+}: {
+  form: EventFormValues
+  setForm: (form: EventFormValues) => void
+  variant?: 'modal' | 'sheet'
+}) {
+  const changeRecurrence = (recurrence: EventRecurrenceFrequency | '') => {
+    setForm({
+      ...form,
+      recurrence,
+      recurrenceUntil: recurrence ? form.recurrenceUntil : '',
+      recurrenceWeekdays: recurrence === 'weekly'
+        ? (form.recurrenceWeekdays.length ? form.recurrenceWeekdays : [weekdayFromDateInput(form.date)])
+        : [],
+    })
+  }
+  const weekdayPicks = form.recurrence === 'weekly' && (
+    <div className="weekday-repeat">
+      <span className="weekday-repeat-label">Repeat on</span>
+      <div className="weekday-picks" role="group" aria-label="Repeat on these days">
+        {WEEKDAY_PICKS.map((day) => {
+          const selected = form.recurrenceWeekdays.includes(day.value)
+          return (
+            <button
+              key={day.value}
+              type="button"
+              className={`weekday-pick ${selected ? 'on' : ''}`}
+              aria-pressed={selected}
+              aria-label={day.label}
+              onClick={() => setForm({
+                ...form,
+                recurrenceWeekdays: toggleWeekday(form.recurrenceWeekdays, day.value),
+              })}
+            >
+              {day.short}
+            </button>
+          )
+        })}
+      </div>
+      <button
+        type="button"
+        className="weekday-preset"
+        onClick={() => setForm({ ...form, recurrenceWeekdays: [...WEEKDAY_PRESET] })}
+      >
+        Mon–Fri
+      </button>
+    </div>
+  )
+
+  if (variant === 'sheet') {
+    return (
+      <div className="sheet-card">
+        <div className="sheet-row">
+          <Repeat size={18} />
+          <div className="sheet-row-content">
+            <label className="sheet-value-row sheet-date-label">
+              <span>Repeat</span>
+              <span className="sheet-value">{recurrenceOptionLabel(form.recurrence)}</span>
+              <ChevronDown size={16} />
+              <select
+                className="sheet-date-input"
+                value={form.recurrence}
+                aria-label="Repeat"
+                onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
+              >
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <option key={option.value || 'never'} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </label>
+            {weekdayPicks}
+            {form.recurrence !== '' && (
+              <label className="sheet-value-row sheet-date-label">
+                <span>Ends</span>
+                <span className="sheet-value">
+                  {form.recurrenceUntil
+                    ? format(new Date(`${form.recurrenceUntil}T12:00:00`), 'MMM d, yyyy')
+                    : 'Choose a date'}
+                </span>
+                <ChevronDown size={16} />
+                <input
+                  type="date"
+                  className="sheet-date-input"
+                  min={form.date}
+                  required
+                  value={form.recurrenceUntil}
+                  aria-label="Repeat end date"
+                  onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
+                />
+              </label>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <>
+      <label className="field">
+        <span>Repeat</span>
+        <select
+          value={form.recurrence}
+          onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
+        >
+          {RECURRENCE_OPTIONS.map((option) => (
+            <option key={option.value || 'never'} value={option.value}>{option.label}</option>
+          ))}
+        </select>
+      </label>
+      {weekdayPicks}
+      {form.recurrence !== '' && (
+        <label className="field">
+          <span>Ends on</span>
+          <input
+            type="date"
+            required
+            min={form.date}
+            value={form.recurrenceUntil}
+            onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
+          />
+        </label>
+      )}
+    </>
+  )
 }
 
 function EventDetailModal({ event, close, save, remove, canRemind, onReminderSaved }: {
@@ -3169,7 +3362,10 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
 
   const deleteEvent = async () => {
     if (!remove || busy) return
-    if (!window.confirm(`Delete "${event.title}"? This cannot be undone.`)) return
+    const repeating = Boolean(event.recurrence)
+    if (!window.confirm(repeating
+      ? `Delete all repeating "${event.title}" events? This cannot be undone.`
+      : `Delete "${event.title}"? This cannot be undone.`)) return
     setDeleting(true)
     setError(null)
     try {
@@ -3188,7 +3384,7 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           <label className="field"><span>Event title</span><input ref={titleInputRef} required maxLength={200} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder="What’s happening?" /></label>
           <label className="event-edit-toggle"><span>All-day event</span><button type="button" role="switch" aria-checked={form.allDay} className={`toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i/></button></label>
           <div className="field-row">
-            <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })}/></label>
+            <label className="field"><span>{form.recurrence ? 'First date' : 'Date'}</span><input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })}/></label>
             {form.allDay
               ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
               : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(change) => setForm((current) => {
@@ -3208,9 +3404,11 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           </div>}
           <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>{calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}</select></label>
           <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
+          <RecurrenceFields form={form} setForm={setForm} />
+          {form.recurrence !== '' && <p className="event-readonly-note">Changes apply to every event in this repeating series.</p>}
           {canRemind && onReminderSaved && (
             <EventReminderEditor
-              eventId={event.id}
+              eventId={savedEventSeriesId(event.id)}
               reminder={event.reminder}
               allDay={form.allDay}
               onSaved={onReminderSaved}
@@ -3230,6 +3428,7 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           </div>
           <dl className="event-detail-list">
             {event.visibility !== 'busy' && <div><dt><CalendarDays size={16}/>Calendar</dt><dd>{event.calendar}{event.google && <span className={`calendar-type ${event.google.calendar.type}`}>{calendarTypeLabel(event.google.calendar.type)}</span>}</dd></div>}
+            {event.recurrence && <div><dt><Repeat size={16}/>Repeats</dt><dd>{recurrenceSummary(event.recurrence, eventForSeriesEdit(event).date)}</dd></div>}
             {event.location && <div><dt><MapPin size={16}/>Location</dt><dd>{event.location}</dd></div>}
             {organizer && <div><dt><Users size={16}/>Organizer</dt><dd>{organizer}{event.organizer?.self ? ' (this account)' : ''}</dd></div>}
             {accounts.length > 0 && <div><dt><Link2 size={16}/>Connected through</dt><dd className="event-account-list">{accounts.map((account) => <span key={account.id}>{account.email || account.displayName || 'Google account'} · {calendarTypeLabel(account.calendarType)}</span>)}</dd></div>}
@@ -3247,7 +3446,7 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           /></section>}
           {canRemind && onReminderSaved && (
             <EventReminderEditor
-              eventId={event.id}
+              eventId={savedEventSeriesId(event.id)}
               reminder={event.reminder}
               allDay={event.allDay}
               onSaved={onReminderSaved}
@@ -3269,7 +3468,7 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
 function EventModal({ draft, close, save }: { draft: EventDraft; close: () => void; save: (event: NewEventInput) => Promise<void> }) {
   const isMobile = useIsMobile()
   const calendars = useFamilyCalendars()
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<EventFormValues>({
     title: '',
     calendar: HOUSEHOLD_CALENDAR,
     date: draft.date,
@@ -3278,6 +3477,9 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
     endDate: draft.endDate,
     allDay: draft.allDay,
     location: '',
+    recurrence: '',
+    recurrenceUntil: '',
+    recurrenceWeekdays: [],
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -3380,16 +3582,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
                 </div>
               </div>
             </div>
-            <div className="sheet-card">
-              <div className="sheet-row">
-                <Repeat size={18} />
-                <button type="button" className="sheet-value-row">
-                  <span>Repeat</span>
-                  <span className="sheet-value">Never</span>
-                  <ChevronDown size={16} />
-                </button>
-              </div>
-            </div>
+            <RecurrenceFields form={form} setForm={setForm} variant="sheet" />
             <div className="sheet-card">
               <div className="sheet-row">
                 <Users size={18} />
@@ -3474,6 +3667,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
     </div>}
     <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(e) => setForm({ ...form, calendar: e.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
     <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Add a place" /></label>
+    <RecurrenceFields form={form} setForm={setForm} />
     <EventReminderFields
       value={reminder}
       allDay={form.allDay}
@@ -3481,7 +3675,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
       onChange={setReminder}
     />
     {error && <div className="modal-error" role="alert">{error}</div>}
-    <div className="modal-tip"><Sparkles size={16}/><span>Tip: you can also ask the AI planner to create repeating or multi-part events.</span></div>
+    <div className="modal-tip"><Sparkles size={16}/><span>Tip: the AI planner can still create several events at once from a schedule or screenshot.</span></div>
     <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>
   </form></div>
 }

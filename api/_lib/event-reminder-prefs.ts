@@ -2,6 +2,7 @@ import { neon } from '@neondatabase/serverless'
 import {
   isNotifyMinutes,
   isReminderFrequency,
+  eventReminderKey,
   type EventReminderPreference,
   type ResolvedEventReminder,
 } from './reminder-options.js'
@@ -57,6 +58,7 @@ export async function saveEventReminderPreference(
   reminder: EventReminderPreference,
 ) {
   const sql = neon(databaseUrl)
+  const eventId = eventReminderKey(reminder.eventId)
   const rows = await sql.query(
     `INSERT INTO event_notification_preferences (
        owner_id, event_id, enabled, notify_minutes, frequency
@@ -69,7 +71,7 @@ export async function saveEventReminderPreference(
      RETURNING event_id, enabled, notify_minutes, frequency`,
     [
       ownerId,
-      reminder.eventId,
+      eventId,
       reminder.enabled,
       reminder.notifyMinutes,
       reminder.frequency,
@@ -96,9 +98,11 @@ export async function deleteEventReminderPreference(
   eventId: string,
 ) {
   const sql = neon(databaseUrl)
+  const reminderId = eventReminderKey(eventId)
   await sql.query(
     `DELETE FROM event_notification_preferences
-      WHERE owner_id = $1 AND event_id = $2`,
-    [ownerId, eventId],
+      WHERE owner_id = $1
+        AND (event_id = $2 OR event_id LIKE $3)`,
+    [ownerId, reminderId, `${reminderId}::%`],
   )
 }

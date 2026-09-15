@@ -10,6 +10,15 @@ export type EventReminder = {
   custom: boolean
 }
 
+export type EventRecurrenceFrequency = 'daily' | 'weekly' | 'monthly' | 'yearly'
+export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
+
+export type EventRecurrence = {
+  frequency: EventRecurrenceFrequency
+  until: string | null
+  weekdays?: IsoWeekday[] | null
+}
+
 export type CalendarEventData = {
   id: string
   title: string
@@ -28,6 +37,9 @@ export type CalendarEventData = {
   source: 'saved' | 'google'
   visibility?: 'full' | 'busy'
   reminder?: EventReminder
+  recurrence?: EventRecurrence | null
+  seriesStartAt?: string
+  seriesEndAt?: string | null
   google?: {
     calendar: {
       id: string
@@ -98,6 +110,9 @@ export type CalendarEventWrite = {
     notifyMinutes: NotifyMinutes
     frequency: ReminderFrequency
   }
+  recurrence?: EventRecurrenceFrequency | null
+  recurrenceUntil?: string | null
+  recurrenceWeekdays?: IsoWeekday[] | null
 }
 
 export async function saveCalendarEvent(event: CalendarEventWrite) {
@@ -141,6 +156,9 @@ export async function saveCalendarEvents(events: Array<{
   allDay?: boolean
   allDayDate?: string | null
   allDayEndDate?: string | null
+  recurrence?: EventRecurrenceFrequency | null
+  recurrenceUntil?: string | null
+  recurrenceWeekdays?: IsoWeekday[] | null
 }>, requestId: string, proposalToken: string, sessionId: string, revision: number) {
   const response = await fetch('/api/events', {
     method: 'POST',
