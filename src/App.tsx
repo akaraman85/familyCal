@@ -3495,12 +3495,6 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
         ? <form className="event-edit-form" onSubmit={(submitEvent) => void submit(submitEvent)}>
           <div className="event-edit-scroll">
             <EventEditFields form={form} setForm={setForm} titleInputRef={titleInputRef} />
-            {form.recurrence !== '' && (
-              <p className="event-series-note">
-                <Repeat size={14} aria-hidden="true" />
-                Changes apply to every event in this repeating series.
-              </p>
-            )}
             {canRemind && onReminderSaved && (
               <EventReminderEditor
                 eventId={savedEventSeriesId(event.id)}
@@ -3511,6 +3505,12 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
             )}
             {error && <div className="modal-error" role="alert">{error}</div>}
           </div>
+          {form.recurrence !== '' && (
+            <p className="event-series-note">
+              <Repeat size={14} aria-hidden="true" />
+              Changes apply to every event in this repeating series.
+            </p>
+          )}
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
             <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={busy}>Cancel</button>
