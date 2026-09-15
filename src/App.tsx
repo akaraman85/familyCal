@@ -1,7 +1,8 @@
 import {
   useEffect, useMemo, useRef, useState,
-  type CSSProperties, type DragEvent as ReactDragEvent, type FormEvent,
+  type CSSProperties, type Dispatch, type DragEvent as ReactDragEvent, type FormEvent,
   type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
+  type RefObject, type SetStateAction,
 } from 'react'
 import DOMPurify from 'dompurify'
 import {
@@ -3184,7 +3185,7 @@ function RecurrenceFields({
   variant = 'modal',
 }: {
   form: EventFormValues
-  setForm: (form: EventFormValues) => void
+  setForm: Dispatch<SetStateAction<EventFormValues>>
   variant?: 'modal' | 'sheet'
 }) {
   const changeRecurrence = (recurrence: EventRecurrenceFrequency | '') => {
@@ -3279,32 +3280,144 @@ function RecurrenceFields({
   }
 
   return (
-    <>
-      <label className="field">
-        <span>Repeat</span>
-        <select
-          value={form.recurrence}
-          onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
-        >
-          {RECURRENCE_OPTIONS.map((option) => (
-            <option key={option.value || 'never'} value={option.value}>{option.label}</option>
-          ))}
-        </select>
-      </label>
-      {weekdayPicks}
-      {form.recurrence !== '' && (
+    <section className="event-edit-section">
+      <h3 className="event-edit-section-title">Repeat</h3>
+      <div className={`event-edit-grid ${form.recurrence ? '' : 'is-single'}`}>
         <label className="field">
-          <span>Ends on</span>
+          <span>Frequency</span>
+          <select
+            value={form.recurrence}
+            onChange={(change) => changeRecurrence(change.target.value as EventRecurrenceFrequency | '')}
+          >
+            {RECURRENCE_OPTIONS.map((option) => (
+              <option key={option.value || 'never'} value={option.value}>{option.label}</option>
+            ))}
+          </select>
+        </label>
+        {form.recurrence !== '' && (
+          <label className="field">
+            <span>Ends on</span>
+            <input
+              type="date"
+              required
+              min={form.date}
+              value={form.recurrenceUntil}
+              onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
+            />
+          </label>
+        )}
+      </div>
+      {weekdayPicks}
+    </section>
+  )
+}
+
+function EventEditFields({
+  form,
+  setForm,
+  titleInputRef,
+  autoFocus = false,
+}: {
+  form: EventFormValues
+  setForm: Dispatch<SetStateAction<EventFormValues>>
+  titleInputRef?: RefObject<HTMLInputElement | null>
+  autoFocus?: boolean
+}) {
+  const calendars = useFamilyCalendars(form.calendar)
+  const startLabel = form.recurrence ? 'First date' : 'Date'
+  return (
+    <div className="event-edit-fields">
+      <div className="event-edit-title-row">
+        <label className="field event-edit-title">
+          <span>Event title</span>
           <input
-            type="date"
+            ref={titleInputRef}
+            autoFocus={autoFocus}
             required
-            min={form.date}
-            value={form.recurrenceUntil}
-            onChange={(change) => setForm({ ...form, recurrenceUntil: change.target.value })}
+            maxLength={200}
+            value={form.title}
+            onChange={(change) => setForm({ ...form, title: change.target.value })}
+            placeholder="What’s happening?"
           />
         </label>
-      )}
-    </>
+        <label className="event-edit-toggle">
+          <span>All-day</span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={form.allDay}
+            className={`toggle ${form.allDay ? 'on' : ''}`}
+            onClick={() => setForm({ ...form, allDay: !form.allDay })}
+          >
+            <i />
+          </button>
+        </label>
+      </div>
+      <section className="event-edit-section">
+        <h3 className="event-edit-section-title">When</h3>
+        <div className={`event-edit-grid event-edit-when ${form.allDay ? 'is-all-day' : ''}`}>
+          <label className="field">
+            <span>{startLabel}</span>
+            <input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })} />
+          </label>
+          {form.allDay
+            ? (
+              <label className="field">
+                <span>End date <small>optional</small></span>
+                <input type="date" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} />
+              </label>
+            )
+            : (
+              <label className="field">
+                <span>Start time</span>
+                <input
+                  type="time"
+                  required
+                  value={form.time}
+                  onChange={(change) => setForm((current) => {
+                    const time = change.target.value
+                    return {
+                      ...current,
+                      time,
+                      endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
+                        ? defaultEndTimeAfter(time)
+                        : current.endTime,
+                    }
+                  })}
+                />
+              </label>
+            )}
+          {!form.allDay && (
+            <>
+              <label className="field">
+                <span>End date <small>optional</small></span>
+                <input type="date" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} />
+              </label>
+              <label className="field">
+                <span>End time <small>optional</small></span>
+                <input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })} />
+              </label>
+            </>
+          )}
+        </div>
+      </section>
+      <section className="event-edit-section">
+        <h3 className="event-edit-section-title">Details</h3>
+        <div className="event-edit-grid">
+          <label className="field">
+            <span>Calendar</span>
+            <select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>
+              {calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}
+            </select>
+          </label>
+          <label className="field">
+            <span>Location <small>optional</small></span>
+            <input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} />
+          </label>
+        </div>
+      </section>
+      <RecurrenceFields form={form} setForm={setForm} />
+    </div>
   )
 }
 
@@ -3330,7 +3443,6 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
     ALLOWED_TAGS: ['p', 'br', 'b', 'strong', 'i', 'em', 'ul', 'ol', 'li', 'a'],
     ALLOWED_ATTR: ['href'],
   }), [event.description])
-  const calendars = useFamilyCalendars(event.calendar)
   const canEdit = Boolean(save)
   const canDelete = Boolean(remove)
   const busy = saving || deleting
@@ -3377,44 +3489,28 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
   }
 
   return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !busy) close() }}>
-    <article ref={modalRef} className="event-detail-modal" role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
+    <article ref={modalRef} className={`event-detail-modal ${editing ? 'is-editing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
       <div className="modal-heading"><div><p className="eyebrow">{editing ? 'Edit event' : event.visibility === 'busy' ? 'Busy time' : event.source === 'google' ? 'Google Calendar event' : 'Saved family event'}</p><h2 id="event-detail-title">{editing ? form.title.trim() || event.title : event.title}</h2></div><button type="button" autoFocus={!editing} onClick={close} aria-label="Close event details" disabled={busy}><X size={20}/></button></div>
       {editing
-        ? <form onSubmit={(submitEvent) => void submit(submitEvent)}>
-          <label className="field"><span>Event title</span><input ref={titleInputRef} required maxLength={200} value={form.title} onChange={(change) => setForm({ ...form, title: change.target.value })} placeholder="What’s happening?" /></label>
-          <label className="event-edit-toggle"><span>All-day event</span><button type="button" role="switch" aria-checked={form.allDay} className={`toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i/></button></label>
-          <div className="field-row">
-            <label className="field"><span>{form.recurrence ? 'First date' : 'Date'}</span><input type="date" required value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })}/></label>
-            {form.allDay
-              ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
-              : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(change) => setForm((current) => {
-                const time = change.target.value
-                return {
-                  ...current,
-                  time,
-                  endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
-                    ? defaultEndTimeAfter(time)
-                    : current.endTime,
-                }
-              })}/></label>}
+        ? <form className="event-edit-form" onSubmit={(submitEvent) => void submit(submitEvent)}>
+          <div className="event-edit-scroll">
+            <EventEditFields form={form} setForm={setForm} titleInputRef={titleInputRef} />
+            {form.recurrence !== '' && (
+              <p className="event-series-note">
+                <Repeat size={14} aria-hidden="true" />
+                Changes apply to every event in this repeating series.
+              </p>
+            )}
+            {canRemind && onReminderSaved && (
+              <EventReminderEditor
+                eventId={savedEventSeriesId(event.id)}
+                reminder={event.reminder}
+                allDay={form.allDay}
+                onSaved={onReminderSaved}
+              />
+            )}
+            {error && <div className="modal-error" role="alert">{error}</div>}
           </div>
-          {!form.allDay && <div className="field-row">
-            <label className="field"><span>End date <small>optional</small></span><input type="date" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })}/></label>
-            <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })}/></label>
-          </div>}
-          <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(change) => setForm({ ...form, calendar: change.target.value })}>{calendars.map((calendar) => <option key={calendar}>{calendar}</option>)}</select></label>
-          <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(change) => setForm({ ...form, location: change.target.value })} placeholder="Add a place" maxLength={500} /></label>
-          <RecurrenceFields form={form} setForm={setForm} />
-          {form.recurrence !== '' && <p className="event-readonly-note">Changes apply to every event in this repeating series.</p>}
-          {canRemind && onReminderSaved && (
-            <EventReminderEditor
-              eventId={savedEventSeriesId(event.id)}
-              reminder={event.reminder}
-              allDay={form.allDay}
-              onSaved={onReminderSaved}
-            />
-          )}
-          {error && <div className="modal-error" role="alert">{error}</div>}
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
             <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={busy}>Cancel</button>
@@ -3642,40 +3738,22 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
     )
   }
 
-  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal" onSubmit={(e) => void submit(e)}>
+  return <div className="modal-scrim" onMouseDown={(e) => { if (e.target === e.currentTarget) close() }}><form className="event-modal event-edit-form" onSubmit={(e) => void submit(e)}>
     <div className="modal-heading"><div><p className="eyebrow">New event</p><h2>Add to your calendar</h2></div><button type="button" onClick={close}><X size={20}/></button></div>
-    <label className="field"><span>Event title</span><input autoFocus value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="What’s happening?" /></label>
-    <label className="event-edit-toggle"><span>All-day event</span><button type="button" role="switch" aria-checked={form.allDay} className={`toggle ${form.allDay ? 'on' : ''}`} onClick={() => setForm({ ...form, allDay: !form.allDay })}><i/></button></label>
-    <div className="field-row">
-      <label className="field"><span>Date</span><input type="date" required value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })}/></label>
-      {form.allDay
-        ? <label className="field"><span>End date <small>optional</small></span><input type="date" value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}/></label>
-        : <label className="field"><span>Start time</span><input type="time" required value={form.time} onChange={(e) => setForm((current) => {
-          const time = e.target.value
-          return {
-            ...current,
-            time,
-            endTime: !current.endTime || timedEventEndsBeforeStart({ ...current, time })
-              ? defaultEndTimeAfter(time)
-              : current.endTime,
-          }
-        })}/></label>}
+    <div className="event-edit-scroll">
+      <EventEditFields form={form} setForm={setForm} autoFocus />
+      <section className="event-edit-section">
+        <h3 className="event-edit-section-title">Notifications</h3>
+        <EventReminderFields
+          value={reminder}
+          allDay={form.allDay}
+          disabled={saving}
+          onChange={setReminder}
+        />
+      </section>
+      {error && <div className="modal-error" role="alert">{error}</div>}
+      <div className="modal-tip"><Sparkles size={16}/><span>Tip: the AI planner can still create several events at once from a schedule or screenshot.</span></div>
     </div>
-    {!form.allDay && <div className="field-row">
-      <label className="field"><span>End date <small>optional</small></span><input type="date" min={form.date} value={form.endDate} onChange={(e) => setForm({ ...form, endDate: e.target.value })}/></label>
-      <label className="field"><span>End time <small>optional</small></span><input type="time" value={form.endTime} onChange={(e) => setForm({ ...form, endTime: e.target.value })}/></label>
-    </div>}
-    <label className="field"><span>Calendar</span><select value={form.calendar} onChange={(e) => setForm({ ...form, calendar: e.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
-    <label className="field"><span>Location <small>optional</small></span><input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="Add a place" /></label>
-    <RecurrenceFields form={form} setForm={setForm} />
-    <EventReminderFields
-      value={reminder}
-      allDay={form.allDay}
-      disabled={saving}
-      onChange={setReminder}
-    />
-    {error && <div className="modal-error" role="alert">{error}</div>}
-    <div className="modal-tip"><Sparkles size={16}/><span>Tip: the AI planner can still create several events at once from a schedule or screenshot.</span></div>
     <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>
   </form></div>
 }
