@@ -145,6 +145,10 @@ import {
   EVENT_TEXT_SIZE_OPTIONS,
   useDisplaySettings,
 } from './display-settings'
+import {
+  persistSidebarCollapsed,
+  readSidebarCollapsed,
+} from './sidebar'
 
 type View = CalendarView
 type Page = AppPage
@@ -881,7 +885,16 @@ function AuthenticatedApp({ user, onLogout }: {
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(readSidebarCollapsed)
   const [fabOpen, setFabOpen] = useState(false)
+
+  const toggleSidebarCollapsed = () => {
+    setSidebarCollapsed((collapsed) => {
+      const next = !collapsed
+      persistSidebarCollapsed(next)
+      return next
+    })
+  }
   const weekStartsOn = weekStartDay(calendarSettings.weekStartsOn)
 
   const goToPage = (next: Page) => {
@@ -1183,12 +1196,23 @@ function AuthenticatedApp({ user, onLogout }: {
   const profileName = isGuest ? user.name : user.username
 
   return (
-    <div className="app-shell">
-      <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
+    <div className={`app-shell${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}>
+      <aside id="app-sidebar" className={`sidebar ${mobileNav ? 'open' : ''}`}>
         <div className="brand">
           <div className="brand-mark"><CalendarDays size={20} /></div>
-          <div><strong>Karaman</strong><span>Family calendar</span></div>
+          <div className="brand-copy"><strong>Karaman</strong><span>Family calendar</span></div>
           <button className="mobile-close" onClick={() => setMobileNav(false)}><X size={20} /></button>
+          <button
+            type="button"
+            className="sidebar-collapse"
+            onClick={toggleSidebarCollapsed}
+            aria-expanded={!sidebarCollapsed}
+            aria-controls="app-sidebar"
+            title={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+            aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+          >
+            {sidebarCollapsed ? <ChevronRight size={18} /> : <ChevronLeft size={18} />}
+          </button>
         </div>
 
         <nav>
@@ -1198,6 +1222,9 @@ function AuthenticatedApp({ user, onLogout }: {
               key={label}
               href={appPagePath(label)}
               className={page === label ? 'active' : ''}
+              title={label === 'Integrations' && integrationsAttention
+                ? 'Integrations (needs attention)'
+                : label}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
                 event.preventDefault()
@@ -1208,7 +1235,7 @@ function AuthenticatedApp({ user, onLogout }: {
                 : label}
             >
               <Icon size={18} />
-              <span>{label}</span>
+              <span className="nav-text">{label}</span>
               {label === 'Integrations' && integrationsAttention ? (
                 <span className="nav-warning" title="An integration needs attention">
                   <AlertTriangle size={14} aria-hidden="true" />
@@ -1218,8 +1245,8 @@ function AuthenticatedApp({ user, onLogout }: {
           ))}
           {!isGuest && <>
             <div className="nav-label second">Tools</div>
-            <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} onClick={() => { setChatOpen(true); setMobileNav(false) }}>
-              <WandSparkles size={18} /><span>AI planner</span><span className="new-pill">New</span>
+            <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} title="AI planner" onClick={() => { setChatOpen(true); setMobileNav(false) }}>
+              <WandSparkles size={18} /><span className="nav-text">AI planner</span><span className="new-pill">New</span>
             </button>
           </>}
         </nav>
@@ -1228,6 +1255,7 @@ function AuthenticatedApp({ user, onLogout }: {
           {!isGuest && <>
             <a
               href={appPagePath('Settings')}
+              title="Settings"
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
                 event.preventDefault()
@@ -1235,13 +1263,13 @@ function AuthenticatedApp({ user, onLogout }: {
               }}
               className={page === 'Settings' ? 'active' : ''}
             >
-              <Settings size={18} />Settings
+              <Settings size={18} /><span className="nav-text">Settings</span>
             </a>
-            <button><CircleHelp size={18} />Help & support</button>
+            <button title="Help & support"><CircleHelp size={18} /><span className="nav-text">Help & support</span></button>
           </>}
           <div className="profile">
             <div className="avatar">{profileName.slice(0, 2).toUpperCase()}</div>
-            <div>
+            <div className="profile-copy">
               <strong>{profileName}</strong>
               <span>{isGuest ? 'Guest · busy times only' : 'Authenticated session'}</span>
             </div>
