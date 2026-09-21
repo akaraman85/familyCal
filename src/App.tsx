@@ -121,7 +121,6 @@ import { IosInstallGuide, IosInstallHint } from './install-app'
 import { consumeSettingsTab, DEFAULT_NOTIFICATION_SETTINGS, loadNotificationStatus, remindersMatchDefault, syncPushSubscription } from './notifications'
 import { NotificationsSettings } from './notifications-settings'
 import { defaultReminderForm, EventReminderEditor, EventReminderFields } from './event-reminders'
-import { TopbarNotifications } from './topbar-notifications'
 import {
   CALENDAR_VIEWS,
   DEFAULT_CALENDAR_SETTINGS,
@@ -918,10 +917,10 @@ function AuthenticatedApp({ user, onLogout }: {
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
   }, [isGuest])
-  const showEventNotices = page === 'Calendar' || page === 'Agenda'
-  const eventSourceNotice = showEventNotices
-    ? googleSourceNotice(eventSources, events.some((event) => event.source === 'google'))
-    : null
+  const calendarNotice = eventsError || googleSourceNotice(
+    eventSources,
+    events.some((event) => event.source === 'google'),
+  )
   const integrationsAttention = useMemo(
     () => hasIntegrationAttention(familyMembers, eventSources),
     [familyMembers, eventSources],
@@ -1280,25 +1279,13 @@ function AuthenticatedApp({ user, onLogout }: {
       {mobileNav && <div className="nav-scrim" onClick={() => setMobileNav(false)} />}
 
       <main>
-        <div className="topbar-shell">
-          <header className="topbar">
-            <button className="mobile-menu" onClick={() => setMobileNav(true)}><Menu size={21} /></button>
-            <div className="top-actions">
-              {!isGuest && (
-                <TopbarNotifications
-                  showHints={page !== 'Settings'}
-                  eventsError={showEventNotices ? eventsError : null}
-                  eventSourceNotice={showEventNotices && !eventsError ? eventSourceNotice : null}
-                  googleReconnect={eventSources.google === 'reconnect'}
-                  onOpenSettings={() => goToPage('Settings')}
-                  onOpenIntegrations={() => goToPage('Integrations')}
-                />
-              )}
-              <ThemeMenu />
-              {!isGuest && <button className="add-btn" onClick={() => openCreate()}><Plus size={18} />Add event</button>}
-            </div>
+        {page !== 'Calendar' && (
+          <header className="mobile-nav-bar">
+            <button type="button" className="mobile-menu" onClick={() => setMobileNav(true)} aria-label="Open navigation">
+              <Menu size={21} />
+            </button>
           </header>
-        </div>
+        )}
 
         {page === 'Calendar' && (
           <CalendarPage
@@ -1310,7 +1297,7 @@ function AuthenticatedApp({ user, onLogout }: {
             dateTitle={dateTitle}
             moveDate={moveDate}
             loading={eventsLoading}
-            sources={eventSources}
+            notice={calendarNotice}
             members={isGuest ? [] : membersWithCalendarIntegrations(familyMembers)}
             weekStartsOn={calendarSettings.weekStartsOn}
             showWeekends={calendarSettings.showWeekends}
@@ -1318,6 +1305,7 @@ function AuthenticatedApp({ user, onLogout }: {
             createAtSlot={openCreate}
             moveEvent={moveSavedEvent}
             isMobile={isMobile}
+            onOpenNav={() => setMobileNav(true)}
             readOnly={isGuest}
           />
         )}
@@ -1325,6 +1313,7 @@ function AuthenticatedApp({ user, onLogout }: {
           <AgendaPage
             events={events}
             loading={eventsLoading}
+            notice={calendarNotice}
             googleDisconnected={eventSources.google === 'disconnected'}
             openModal={() => openCreate()}
             selectEvent={setSelectedEvent}
@@ -1522,13 +1511,14 @@ function slotPreviewLabel(startMinutes: number, endMinutes: number) {
   return `${format(start, 'h:mm a')} – ${format(end, 'h:mm a')}`
 }
 
-function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, sources, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile, readOnly = false }: {
+function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, dateTitle, moveDate, loading, notice, members, weekStartsOn, showWeekends, selectEvent, createAtSlot, moveEvent, isMobile, onOpenNav, readOnly = false }: {
   events: EventItem[]; view: View; setView: (v: View) => void; selectedDate: Date
   setSelectedDate: (d: Date) => void; dateTitle: string; moveDate: (n: number) => void
-  loading: boolean; sources: EventSources; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
+  loading: boolean; notice: string | null; members: FamilyMember[]; weekStartsOn: WeekStart; showWeekends: boolean; selectEvent: (event: EventItem) => void
   createAtSlot: (draft: EventDraft) => void
   moveEvent: (event: EventItem, start: Date, end: Date | null, allDay: boolean) => void
   isMobile: boolean
+  onOpenNav: () => void
   readOnly?: boolean
 }) {
   const [filter, setFilter] = useState(readCalendarMemberFilter)
@@ -1554,8 +1544,14 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
       <section className="calendar-card">
         <div className="mobile-calendar-header mobile-only">
           <div className="mobile-calendar-top">
-            <h2>{format(selectedDate, 'MMMM yyyy')}</h2>
+            <div className="mobile-calendar-title">
+              <button type="button" className="mobile-menu" onClick={onOpenNav} aria-label="Open navigation">
+                <Menu size={21} />
+              </button>
+              <h2>{format(selectedDate, 'MMMM yyyy')}</h2>
+            </div>
             <div className="mobile-calendar-actions">
+              {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating' : 'Loading'}</span>}
               {!readOnly && <MemberFilterMenu members={members} filter={filter} onChange={setFilter} />}
               <ViewDropdown view={view} setView={setView} />
             </div>
@@ -1568,6 +1564,7 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             <button className="square-btn" onClick={() => moveDate(-1)}><ChevronLeft size={18} /></button>
             <button className="square-btn" onClick={() => moveDate(1)}><ChevronRight size={18} /></button>
             <h2>{dateTitle}</h2>
+            {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
           </div>
           <div className="view-controls">
             {!readOnly && (
@@ -1580,42 +1577,12 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
             </div>
           </div>
         </div>
+        {notice && <div className="calendar-source-error" role="status">{notice}</div>}
         {view === 'Month' && <MonthView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={setSelectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} readOnly={readOnly} />}
         {view === 'Week' && <WeekView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} showWeekends={showWeekends} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
         {view === 'Day' && <DayView events={visibleEvents} selectedDate={selectedDate} selectEvent={selectEvent} createAtSlot={createAtSlot} moveEvent={moveEvent} readOnly={readOnly} />}
         {view === 'Year' && <YearView events={visibleEvents} selectedDate={selectedDate} weekStartsOn={weekStartsOn} onSelect={(d) => { setSelectedDate(d); setView('Month') }} />}
       </section>
-      <div className="calendar-footer">
-        <div className="calendar-legend">
-          {readOnly
-            ? <span><i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />Busy</span>
-            : <>
-              {members.map((member) => {
-                const hidden = filter.hiddenMemberIds.includes(member.id)
-                return (
-                  <button
-                    key={member.id}
-                    type="button"
-                    className={`legend-item ${hidden ? 'is-hidden' : ''}`}
-                    aria-pressed={!hidden}
-                    onClick={() => setFilter((current) => toggleMemberFilter(current, member.id))}
-                  >
-                    <i className={`dot ${member.color}`} />{member.name}
-                  </button>
-                )
-              })}
-              <button
-                type="button"
-                className={`legend-item ${filter.hideHousehold ? 'is-hidden' : ''}`}
-                aria-pressed={!filter.hideHousehold}
-                onClick={() => setFilter((current) => toggleHouseholdFilter(current))}
-              >
-                <i className={`dot ${HOUSEHOLD_EVENT_COLOR}`} />{HOUSEHOLD_CALENDAR}
-              </button>
-            </>}
-        </div>
-        {loading && <span className="calendar-loading"><LoaderCircle size={12}/>{events.length ? 'Updating events' : 'Loading events'}</span>}
-      </div>
     </div>
   )
 }
@@ -1943,9 +1910,10 @@ function YearView({ events, selectedDate, weekStartsOn, onSelect }: { events: Ev
   })}</div>
 }
 
-function AgendaPage({ events, loading, googleDisconnected, openModal, selectEvent, openCalendar, readOnly = false }: {
+function AgendaPage({ events, loading, notice, googleDisconnected, openModal, selectEvent, openCalendar, readOnly = false }: {
   events: EventItem[]
   loading: boolean
+  notice: string | null
   googleDisconnected: boolean
   openModal: () => void
   selectEvent: (event: EventItem) => void
@@ -1975,6 +1943,7 @@ function AgendaPage({ events, loading, googleDisconnected, openModal, selectEven
         </div>
         {!readOnly && <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>}
       </div>
+      {notice && <div className="calendar-source-error" role="status">{notice}</div>}
       {highlight && (
         <button
           type="button"
