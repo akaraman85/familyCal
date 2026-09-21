@@ -98,7 +98,7 @@
         <div class="brand" aria-hidden="true">K</div>
         <p class="eyebrow">Family Calendar</p>
         <h1>Privacy policy</h1>
-        <p class="updated">Last updated September 12, 2026</p>
+        <p class="updated">Last updated September 21, 2026</p>
         
       <section>
         <h2>Who this is for</h2>
@@ -107,7 +107,7 @@
 
       <section>
         <h2>Sign-in</h2>
-        <p>Calendars, family data, and Google connections require a household administrator login or a time-limited guest invite link. Those sessions are kept in an HTTP-only cookie for up to 12 hours, or until a guest invite expires or is revoked. This privacy policy is public and does not require that login.</p>
+        <p>Calendars, family data, and Google connections require a household administrator login or a time-limited guest invite link. Those sessions are kept in an HTTP-only cookie for up to 7 days, or until a guest invite expires or is revoked. This privacy policy is public and does not require that login.</p>
       </section>
 
       <section>
@@ -153,7 +153,7 @@
         <p>All traffic between your browser and this app uses HTTPS (TLS) in transit.</p>
         <p>Google OAuth access and refresh tokens are encrypted at rest with AES-256-GCM before storage in Postgres. The browser never receives those provider credentials.</p>
         <p>Web Push subscription keys, when enabled, are also encrypted at rest with AES-256-GCM.</p>
-        <p>Household and guest sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Guest access is also checked against the stored invite on each request so it can be revoked immediately. Calendar and integration APIs require a valid session.</p>
+        <p>Household and guest sessions use an HTTP-only, signed cookie with a 7-day lifetime. Guest access is also checked against the stored invite on each request so it can be revoked immediately. Calendar and integration APIs require a valid session.</p>
         <p>Google Calendar access is read-only. Disconnecting a Google account revokes the grant and deletes stored encrypted credentials and cached events for that account.</p>
       </section>
 
