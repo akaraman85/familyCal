@@ -6,6 +6,7 @@ import {
   Users,
 } from 'lucide-react'
 import { APP_DESCRIPTION, APP_PUBLIC_NAME, APP_SHORT_NAME, APP_SUPPORT_EMAIL } from './branding'
+import { GlareHover, MagnetCta, ShinyText, StarBorder } from './react-bits'
 import { guestInviteErrorFromSearch, GUEST_INVITE_ERROR_PARAM } from './routes'
 
 const FEATURE_STATS = [
@@ -59,7 +60,9 @@ export function PublicHomePage() {
           <a href="/terms">Terms</a>
           <a href={`mailto:${APP_SUPPORT_EMAIL}`}>Contact</a>
         </nav>
-        <a className="public-home-header-login" href="/login">Sign in</a>
+        <MagnetCta padding={28} magnetStrength={5}>
+          <a className="public-home-header-login" href="/login">Sign in</a>
+        </MagnetCta>
       </header>
 
       <main className="public-home-hero">
@@ -69,10 +72,10 @@ export function PublicHomePage() {
               This invite expired or was revoked. Ask the calendar owner for a new link.
             </div>
           )}
-          <p className="public-home-eyebrow">Private household calendar</p>
+          <ShinyText className="public-home-eyebrow" text="Private household calendar" />
           <h1>
             Family calendar
-            <span> dashboard</span>
+            <span className="gradient-word"> dashboard</span>
           </h1>
           <p className="public-home-lead">{APP_DESCRIPTION}</p>
           <p className="public-home-body">
@@ -80,13 +83,17 @@ export function PublicHomePage() {
             Sign in to access calendars, integrations, and saved events.
           </p>
           <div className="public-home-cta-row">
-            <a className="public-home-signin" href="/login">Sign in</a>
+            <MagnetCta padding={48} magnetStrength={5}>
+              <StarBorder className="star-border-cta" color="#f3c77f">
+                <a className="public-home-signin" href="/login">Sign in</a>
+              </StarBorder>
+            </MagnetCta>
             <a className="public-home-secondary-link" href="/login">I have an account</a>
           </div>
         </section>
 
         <aside className="public-home-visual">
-          <div className="public-home-visual-frame">
+          <GlareHover className="public-home-visual-frame" glareOpacity={0.42} glareSize={260}>
             <div className="public-home-calendar-preview" aria-hidden="true">
               <div className="public-home-calendar-toolbar">
                 <span>March 2026</span>
@@ -132,7 +139,7 @@ export function PublicHomePage() {
               {' '}
               <a href={`mailto:${APP_SUPPORT_EMAIL}`}>Contact support</a>
             </p>
-          </div>
+          </GlareHover>
         </aside>
       </main>
 
