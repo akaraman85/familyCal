@@ -12,6 +12,13 @@ import {
   Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
+  ClickSpark,
+  HoldButton,
+  RubberSegment,
+  SettingsSquishSwitch,
+  StatusMark,
+} from './react-bits'
+import {
   addDays, addMonths, addYears, eachDayOfInterval, endOfMonth, endOfWeek,
   format, isSameDay, isSameMonth, startOfDay, startOfMonth, startOfWeek,
   subMonths, subYears,
@@ -1572,8 +1579,20 @@ function CalendarPage({ events, view, setView, selectedDate, setSelectedDate, da
                 <MemberFilterMenu members={members} filter={filter} onChange={setFilter} />
               </div>
             )}
-            <div className="segmented desktop-toolbar">
-              {CALENDAR_VIEWS.map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item}</button>)}
+            <div className="segmented desktop-toolbar react-bits-segmented">
+              <RubberSegment
+                items={[...CALENDAR_VIEWS]}
+                value={view}
+                onChange={(next) => setView(next as View)}
+                size="sm"
+                radius={8}
+                inset={3}
+                trackColor="var(--inset)"
+                thumbColor="var(--panel)"
+                textColor="var(--segmented-text)"
+                activeTextColor="var(--ink)"
+                aria-label="Calendar view"
+              />
             </div>
           </div>
         </div>
@@ -1941,7 +1960,11 @@ function AgendaPage({ events, loading, notice, googleDisconnected, openModal, se
           <h1>Today and the week ahead</h1>
           <p>{readOnly ? 'Busy times only. Event names and details stay hidden.' : 'A list of what is happening now. Use Calendar when you want the date grid.'}</p>
         </div>
-        {!readOnly && <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>}
+        {!readOnly && (
+          <ClickSpark sparkColor="var(--orange)" sparkCount={10} sparkRadius={22} sparkSize={9} className="add-btn-spark">
+            <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>
+          </ClickSpark>
+        )}
       </div>
       {notice && <div className="calendar-source-error" role="status">{notice}</div>}
       {highlight && (
@@ -2200,15 +2223,13 @@ function IntegrationsPage({ onCalendarsChanged }: { onCalendarsChanged: () => vo
                       <i style={{ backgroundColor: calendar.color ?? undefined }}/>
                       <div><b>{calendar.name}</b><span className={`calendar-type ${calendar.type}`}>{calendar.type}</span></div>
                       <span>{calendar.accessRole}</span>
-                      <button
-                        type="button"
-                        role="switch"
-                        aria-checked={calendar.included}
-                        aria-label={`Include ${calendar.name} events`}
-                        className={`toggle ${calendar.included ? 'on' : ''}`}
+                      <SettingsSquishSwitch
+                        compact
+                        checked={calendar.included}
                         disabled={workingCalendar !== null}
-                        onClick={() => void setCalendarIncluded(calendar, !calendar.included)}
-                      ><i/></button>
+                        ariaLabel={`Include ${calendar.name} events`}
+                        onChange={(checked) => void setCalendarIncluded(calendar, checked)}
+                      />
                     </div>
                   })}
                 </div>}
@@ -2256,7 +2277,7 @@ function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
     }
   }
 
-  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><button className="add-btn" onClick={() => setEditingMember(null)}><Plus size={18}/>Add member</button></div>
+  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><ClickSpark sparkColor="var(--orange)" sparkCount={10} sparkRadius={22} sparkSize={9} className="add-btn-spark"><button className="add-btn" onClick={() => setEditingMember(null)}><Plus size={18}/>Add member</button></ClickSpark></div>
     {error && <div className="integration-error" role="alert">{error}</div>}
     {loading
       ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family members</div>
@@ -2429,9 +2450,9 @@ function SettingsPage({ onCalendarSettingsSaved }: {
           {calendar && <>
             <label><span><b>Default calendar view</b><small>The view you see when opening the app</small></span><select value={calendar.defaultView} onChange={(event) => { setCalendar({ ...calendar, defaultView: event.target.value as CalendarView }); setCalendarSaved(false) }}>{CALENDAR_VIEWS.map((view) => <option key={view} value={view}>{view}</option>)}</select></label>
             <label><span><b>Week starts on</b><small>Used across all calendar views</small></span><select value={calendar.weekStartsOn} onChange={(event) => { setCalendar({ ...calendar, weekStartsOn: event.target.value as WeekStart }); setCalendarSaved(false) }}><option value="monday">Monday</option><option value="sunday">Sunday</option></select></label>
-            <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><button type="button" role="switch" aria-checked={calendar.showWeekends} className={`toggle ${calendar.showWeekends ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, showWeekends: !calendar.showWeekends }); setCalendarSaved(false) }}><i/></button></label>
-            <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><button type="button" role="switch" aria-checked={calendar.dailyAgendaEmail} className={`toggle ${calendar.dailyAgendaEmail ? 'on' : ''}`} onClick={() => { setCalendar({ ...calendar, dailyAgendaEmail: !calendar.dailyAgendaEmail }); setCalendarSaved(false) }}><i/></button></label>
-            <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <span><Check size={14}/>Saved</span>}</div>
+            <label><span><b>Show weekends</b><small>Include Saturday and Sunday in week view</small></span><SettingsSquishSwitch checked={calendar.showWeekends} ariaLabel="Show weekends" onChange={(checked) => { setCalendar({ ...calendar, showWeekends: checked }); setCalendarSaved(false) }} /></label>
+            <label><span><b>Daily agenda email</b><small>Receive a summary each morning at 7:00 AM</small></span><SettingsSquishSwitch checked={calendar.dailyAgendaEmail} ariaLabel="Daily agenda email" onChange={(checked) => { setCalendar({ ...calendar, dailyAgendaEmail: checked }); setCalendarSaved(false) }} /></label>
+            <div className="settings-actions"><button type="button" className="save-event" disabled={savingCalendar} onClick={() => void saveCalendar()}>{savingCalendar ? 'Saving…' : 'Save calendar preferences'}</button>{calendarSaved && <StatusMark status="done" label="Saved" doneColor="var(--green)" size={16} fontSize={12} />}</div>
           </>}
           {calendarError && <div className="modal-error" role="alert">{calendarError}</div>}
           <IosInstallGuide />
@@ -2442,11 +2463,11 @@ function SettingsPage({ onCalendarSettingsSaved }: {
         <div className="gateway-status"><LockKeyhole size={17}/><span><b>Deployment-managed security</b><small>Vercel uses a short-lived OIDC token. No model credential is stored in this browser or database.</small></span></div>
         {!planner && !plannerError && <div className="integration-loading"><LoaderCircle size={16}/>Loading planner settings</div>}
         {planner && <>
-          <label><span><b>Enable AI Planner</b><small>Allow authenticated users to request event proposals</small></span><button type="button" className={`toggle ${planner.enabled ? 'on' : ''}`} onClick={() => setPlanner({ ...planner, enabled: !planner.enabled })}><i/></button></label>
+          <label><span><b>Enable AI Planner</b><small>Allow authenticated users to request event proposals</small></span><SettingsSquishSwitch checked={planner.enabled} ariaLabel="Enable AI Planner" onChange={(checked) => setPlanner({ ...planner, enabled: checked })} /></label>
           <label><span><b>Model profile</b><small>Choose the balance of speed, cost, and reasoning quality</small></span><select value={planner.modelProfile} onChange={(event) => setPlanner({ ...planner, modelProfile: event.target.value as PlannerSettings['modelProfile'] })}><option value="fast">Fast · GPT-5.6 Luna</option><option value="balanced">Balanced · GPT-5.6 Terra</option><option value="quality">Quality · GPT-5.6 Sol</option></select></label>
           <label><span><b>Household timezone</b><small>IANA timezone used to resolve phrases like “tomorrow at 7”</small></span><input value={planner.timezone} onChange={(event) => setPlanner({ ...planner, timezone: event.target.value })} placeholder="America/New_York"/></label>
           <label><span><b>Default calendar</b><small>Used when a request does not name a calendar. Only household and members with a connected calendar are available.</small></span><select value={planner.defaultCalendar} onChange={(event) => setPlanner({ ...planner, defaultCalendar: event.target.value })}>{calendars.map((name) => <option key={name}>{name}</option>)}</select></label>
-          <div className="settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <span><Check size={14}/>Saved</span>}</div>
+          <div className="settings-actions"><button className="save-event" disabled={savingPlanner || !planner.timezone.trim() || !planner.defaultCalendar.trim()} onClick={() => void savePlanner()}>{savingPlanner ? 'Saving…' : 'Save AI settings'}</button>{plannerSaved && <StatusMark status="done" label="Saved" doneColor="var(--green)" size={16} fontSize={12} />}</div>
         </>}
         {plannerError && <div className="modal-error" role="alert">{plannerError}</div>}
       </div>
@@ -3471,10 +3492,6 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
 
   const deleteEvent = async () => {
     if (!remove || busy) return
-    const repeating = Boolean(event.recurrence)
-    if (!window.confirm(repeating
-      ? `Delete all repeating "${event.title}" events? This cannot be undone.`
-      : `Delete "${event.title}"? This cannot be undone.`)) return
     setDeleting(true)
     setError(null)
     try {
@@ -3484,6 +3501,10 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
       setDeleting(false)
     }
   }
+
+  const deleteHoldLabel = event.recurrence
+    ? 'Hold to delete series'
+    : 'Hold to delete'
 
   return <div className="modal-scrim" onMouseDown={(mouseEvent) => { if (mouseEvent.target === mouseEvent.currentTarget && !busy) close() }}>
     <article ref={modalRef} className={`event-detail-modal ${editing ? 'is-editing' : ''}`} role="dialog" aria-modal="true" aria-labelledby="event-detail-title" aria-describedby={editing ? undefined : 'event-detail-summary'}>
@@ -3509,7 +3530,28 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
             </p>
           )}
           <div className="event-detail-actions">
-            {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
+            {canDelete && (
+              <HoldButton
+                className="delete-hold"
+                size="sm"
+                radius={8}
+                holdTime={1100}
+                resetAfter={0}
+                disabled={busy}
+                backgroundColor="var(--delete-bg)"
+                fillColor="var(--delete-text)"
+                textColor="var(--delete-text)"
+                fillTextColor="#fff"
+                glow={false}
+                waveAmplitude={4}
+                icon={<Trash2 size={14} />}
+                doneIcon={<Trash2 size={14} />}
+                doneLabel={deleting ? 'Deleting…' : 'Deleted'}
+                onHold={() => void deleteEvent()}
+              >
+                {deleting ? 'Deleting…' : deleteHoldLabel}
+              </HoldButton>
+            )}
             <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={busy}>Cancel</button>
             <button className="save-event" type="submit" disabled={busy}>{saving ? 'Saving…' : 'Save changes'}</button>
           </div>
@@ -3548,7 +3590,28 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           {!canEdit && event.visibility === 'busy' && <p className="event-readonly-note">This guest view shows only the time this calendar is busy.</p>}
           {!canEdit && event.visibility !== 'busy' && event.source === 'google' && <p className="event-readonly-note">Google Calendar events are read-only here. Reminder choices stay in Karaman and are not written back to Google.</p>}
           <div className="event-detail-actions">
-            {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
+            {canDelete && (
+              <HoldButton
+                className="delete-hold"
+                size="sm"
+                radius={8}
+                holdTime={1100}
+                resetAfter={0}
+                disabled={busy}
+                backgroundColor="var(--delete-bg)"
+                fillColor="var(--delete-text)"
+                textColor="var(--delete-text)"
+                fillTextColor="#fff"
+                glow={false}
+                waveAmplitude={4}
+                icon={<Trash2 size={14} />}
+                doneIcon={<Trash2 size={14} />}
+                doneLabel={deleting ? 'Deleting…' : 'Deleted'}
+                onHold={() => void deleteEvent()}
+              >
+                {deleting ? 'Deleting…' : deleteHoldLabel}
+              </HoldButton>
+            )}
             <button type="button" onClick={close} disabled={busy}>Close</button>
             {canEdit && <button type="button" className="edit-event" onClick={() => setEditing(true)} disabled={busy}><Pencil size={14}/>Edit</button>}
             {event.externalUrl && <a href={event.externalUrl} target="_blank" rel="noreferrer">Open in Google Calendar <ExternalLink size={14}/></a>}

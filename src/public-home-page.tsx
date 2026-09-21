@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { APP_DESCRIPTION, APP_PUBLIC_NAME, APP_SHORT_NAME, APP_SUPPORT_EMAIL } from './branding'
 import { guestInviteErrorFromSearch, GUEST_INVITE_ERROR_PARAM } from './routes'
+import { ClickSpark, Magnet } from './react-bits'
 
 const FEATURE_STATS = [
   { icon: CalendarRange, value: 'Google sync', label: 'Read-only calendar import' },
@@ -80,7 +81,11 @@ export function PublicHomePage() {
             Sign in to access calendars, integrations, and saved events.
           </p>
           <div className="public-home-cta-row">
-            <a className="public-home-signin" href="/login">Sign in</a>
+            <Magnet padding={48} magnetStrength={3.2} wrapperClassName="public-home-magnet">
+              <ClickSpark sparkColor="#fff" sparkCount={12} sparkRadius={28} sparkSize={10} className="public-home-spark">
+                <a className="public-home-signin" href="/login">Sign in</a>
+              </ClickSpark>
+            </Magnet>
             <a className="public-home-secondary-link" href="/login">I have an account</a>
           </div>
         </section>
