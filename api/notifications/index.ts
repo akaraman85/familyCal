@@ -7,6 +7,7 @@ import {
   listPushDevices,
   saveNotificationSettings,
   vapidConfig,
+  vapidConfigurationIssue,
 } from '../_lib/push.js'
 import {
   readJsonBody,
@@ -26,6 +27,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
   try {
     const env = appEnv()
     const vapid = vapidConfig()
+    const configurationIssue = vapidConfigurationIssue()
     if (request.method === 'GET') {
       const [settings, devices] = await Promise.all([
         getNotificationSettings(env.databaseUrl, env.ownerId),
@@ -34,6 +36,7 @@ export default async function handler(request: ApiRequest, response: ApiResponse
       sendJson(response, 200, {
         configured: Boolean(vapid),
         publicKey: vapid?.publicKey ?? null,
+        configurationIssue: configurationIssue === 'missing' ? null : configurationIssue,
         settings,
         devices,
       })
