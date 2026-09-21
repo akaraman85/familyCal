@@ -1,0 +1,71 @@
+.star-border {
+  display: inline-flex;
+  position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+  padding: 1px;
+  isolation: isolate;
+}
+
+.star-border-fill {
+  display: block;
+  width: 100%;
+}
+
+.star-border-round {
+  border-radius: 50%;
+}
+
+.star-border-glow {
+  position: absolute;
+  width: 300%;
+  height: 50%;
+  opacity: 0.7;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+  background: radial-gradient(circle, var(--star-color, #f3c77f), transparent 12%);
+  animation: star-border-travel linear infinite alternate;
+  animation-duration: var(--star-speed, 5.5s);
+}
+
+.star-border-glow-bottom {
+  bottom: -12px;
+  right: -250%;
+}
+
+.star-border-glow-top {
+  top: -12px;
+  left: -250%;
+  animation-direction: alternate-reverse;
+}
+
+.star-border-inner {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  min-width: 0;
+  width: 100%;
+}
+
+.star-border-inner > * {
+  width: 100%;
+}
+
+@keyframes star-border-travel {
+  from {
+    transform: translate(0, 0);
+    opacity: 1;
+  }
+  to {
+    transform: translate(-100%, 0);
+    opacity: 0.15;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .star-border-glow {
+    animation: none;
+    opacity: 0;
+  }
+}

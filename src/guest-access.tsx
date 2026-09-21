@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { addDays, format } from 'date-fns'
 import { Check, Copy, Link2, LoaderCircle, Mail, Plus, X } from 'lucide-react'
+import { GlareHover, MagnetCta } from './react-bits'
 import type { FamilyMember } from './family'
 import {
   createGuestAccess,
@@ -144,9 +145,11 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
           <h2>Guest access</h2>
           <p>Share a revocable link. Friends only see busy times — never event names, people, or places.</p>
         </div>
-        <button className="add-btn" type="button" onClick={() => setEditing(null)}>
-          <Plus size={18} />Invite friend
-        </button>
+        <MagnetCta>
+          <button className="add-btn" type="button" onClick={() => setEditing(null)}>
+            <Plus size={18} />Invite friend
+          </button>
+        </MagnetCta>
       </div>
       {error && <div className="integration-error" role="alert">{error}</div>}
       {inviteBanner && (
@@ -190,7 +193,7 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
             </div>
           )}
           {guests.map((guest) => (
-            <article className={`guest-card ${guest.status}`} key={guest.id}>
+            <GlareHover as="article" className={`guest-card ${guest.status}`} key={guest.id}>
               <div>
                 <h3>{guest.name}</h3>
                 <p>{guest.email || 'No email saved'}</p>
@@ -209,7 +212,7 @@ export function GuestAccessSection({ members }: { members: FamilyMember[] }) {
                   </>
                 )}
               </div>
-            </article>
+            </GlareHover>
           ))}
         </div>}
       {editing !== undefined && (
@@ -373,9 +376,11 @@ function GuestAccessModal({ guest, members, close, save }: {
         {error && <div className="modal-error" role="alert">{error}</div>}
         <div className="modal-actions">
           <button type="button" onClick={close} disabled={saving}>Cancel</button>
-          <button className="save-event" type="submit" disabled={saving}>
-            {saving ? 'Saving…' : guest ? 'Save changes' : 'Create link'}
-          </button>
+          <MagnetCta>
+            <button className="save-event" type="submit" disabled={saving}>
+              {saving ? 'Saving…' : guest ? 'Save changes' : 'Create link'}
+            </button>
+          </MagnetCta>
         </div>
       </form>
     </div>

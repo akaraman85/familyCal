@@ -148,6 +148,7 @@ import {
   persistSidebarCollapsed,
   readSidebarCollapsed,
 } from './sidebar'
+import { GlareHover, Magnet, MagnetCta, ShinyText, StarBorder } from './react-bits'
 
 type View = CalendarView
 type Page = AppPage
@@ -773,15 +774,15 @@ function GuestInviteScreen({ token, onAuthenticated }: {
   return <main className="login-page">
     <div className="login-theme"><ThemeMenu /></div>
     <div className="login-stack">
-      <div className="login-card">
+      <GlareHover className="login-card">
         <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
-        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
+        <ShinyText className="eyebrow" text={APP_PUBLIC_NAME} />
         <h1>{error ? 'Invite unavailable' : 'Opening calendar'}</h1>
         <p>{error || 'Checking this guest link…'}</p>
         {error
           ? <a className="login-submit" href="/">Back to {APP_PUBLIC_NAME}</a>
           : <div className="auth-loading"><LoaderCircle size={20}/><span>Signing you in</span></div>}
-      </div>
+      </GlareHover>
     </div>
   </main>
 }
@@ -811,9 +812,9 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
     <div className="login-theme"><ThemeMenu /></div>
     <div className="login-stack">
       <IosInstallHint />
-      <form className="login-card" onSubmit={submit}>
+      <GlareHover as="form" className="login-card" onSubmit={submit}>
         <div className="brand-mark login-mark"><CalendarDays size={22}/></div>
-        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
+        <ShinyText className="eyebrow" text={APP_PUBLIC_NAME} />
         <h1>Welcome back</h1>
         <p>Sign in to view calendars, integrations, and saved events.</p>
         <label className="field">
@@ -825,10 +826,14 @@ function LoginScreen({ error: initialError, onAuthenticated }: {
           <input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required/>
         </label>
         {error && <div className="login-error" role="alert">{error}</div>}
-        <button className="login-submit" type="submit" disabled={submitting}>
-          {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
-        </button>
-      </form>
+        <MagnetCta fill padding={48} magnetStrength={5}>
+          <StarBorder className="star-border-fill star-border-cta">
+            <button className="login-submit" type="submit" disabled={submitting}>
+              {submitting ? <><LoaderCircle size={16}/>Signing in…</> : <><LockKeyhole size={16}/>Sign in</>}
+            </button>
+          </StarBorder>
+        </MagnetCta>
+      </GlareHover>
       <p className="login-privacy">
         <a href="/">Back to {APP_PUBLIC_NAME}</a>
         <span aria-hidden="true"> · </span>
@@ -1245,7 +1250,7 @@ function AuthenticatedApp({ user, onLogout }: {
           {!isGuest && <>
             <div className="nav-label second">Tools</div>
             <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} title="AI planner" onClick={() => { setChatOpen(true); setMobileNav(false) }}>
-              <WandSparkles size={18} /><span className="nav-text">AI planner</span><span className="new-pill">New</span>
+              <WandSparkles size={18} /><span className="nav-text">AI planner</span><ShinyText className="new-pill" text="New" />
             </button>
           </>}
         </nav>
@@ -1374,7 +1379,13 @@ function AuthenticatedApp({ user, onLogout }: {
           {fabOpen ? <X size={22} /> : <Plus size={22} />}
         </button>
       </div>
-      {!isGuest && <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>}
+      {!isGuest && (
+        <Magnet wrapperClassName="magnet-chat-fab">
+          <StarBorder className="star-border-round" color="var(--forest-gold)">
+            <button className="chat-fab" onClick={() => setChatOpen(true)} aria-label="Open AI planner"><Sparkles size={20} /></button>
+          </StarBorder>
+        </Magnet>
+      )}
       {!isGuest && <AssistantPanel open={chatOpen} close={() => setChatOpen(false)} save={savePlannedEvents} />}
       {selectedEvent && (
         <EventDetailModal
@@ -1941,7 +1952,7 @@ function AgendaPage({ events, loading, notice, googleDisconnected, openModal, se
           <h1>Today and the week ahead</h1>
           <p>{readOnly ? 'Busy times only. Event names and details stay hidden.' : 'A list of what is happening now. Use Calendar when you want the date grid.'}</p>
         </div>
-        {!readOnly && <button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button>}
+        {!readOnly && <MagnetCta><button className="add-btn" onClick={openModal}><Plus size={18} />Add event</button></MagnetCta>}
       </div>
       {notice && <div className="calendar-source-error" role="status">{notice}</div>}
       {highlight && (
@@ -2256,7 +2267,7 @@ function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
     }
   }
 
-  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><button className="add-btn" onClick={() => setEditingMember(null)}><Plus size={18}/>Add member</button></div>
+  return <div className="page"><div className="page-heading"><div><p className="eyebrow">Your household</p><h1>Family members</h1><p>Each family member owns their calendar integrations and access.</p></div><MagnetCta><button className="add-btn" onClick={() => setEditingMember(null)}><Plus size={18}/>Add member</button></MagnetCta></div>
     {error && <div className="integration-error" role="alert">{error}</div>}
     {loading
       ? <div className="integration-loading"><LoaderCircle size={16}/>Loading family members</div>
@@ -2264,7 +2275,7 @@ function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
       {!members.length && <div className="family-empty"><Users size={25}/><b>No family members yet</b><span>Add the first person in your household, then connect their calendars.</span></div>}
       {members.map((member) => {
         const initials = member.name.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase()
-        return <div className="member-card" key={member.id}>
+        return <GlareHover className="member-card" key={member.id}>
           <div className={`member-avatar ${member.color}`}>{initials}</div>
           <h3>{member.name}</h3>
           <p>{member.email || 'Child profile'}</p>
@@ -2275,7 +2286,7 @@ function FamilyPage({ onMembersChanged }: { onMembersChanged?: () => void }) {
           </div>
           <div className="member-divider"/>
           <div className="member-meta"><span><i className={`dot ${member.color}`}/>{member.integrations.length} calendar integration{member.integrations.length === 1 ? '' : 's'}</span><div><button aria-label={`Edit ${member.name}`} onClick={() => setEditingMember(member)}>Edit</button><button aria-label={`Delete ${member.name}`} onClick={() => void remove(member)}>Delete</button></div></div>
-        </div>
+        </GlareHover>
       })}
       <button className="invite-card" onClick={() => setEditingMember(null)}><div><Plus size={23}/></div><b>Add family member</b><span>Create a person, then connect their calendar accounts</span></button>
     </div>}
@@ -2325,7 +2336,7 @@ function FamilyMemberModal({ member, close, save }: {
         <label className="field"><span>Color</span><select value={color} onChange={(event) => setColor(event.target.value)}><option value="blue">Blue</option><option value="coral">Coral</option><option value="green">Green</option><option value="gold">Gold</option></select></label>
       </div>
       {error && <div className="modal-error" role="alert">{error}</div>}
-      <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : member ? 'Save changes' : 'Add member'}</button></div>
+      <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><MagnetCta><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : member ? 'Save changes' : 'Add member'}</button></MagnetCta></div>
     </form>
   </div>
 }
@@ -2525,7 +2536,7 @@ function useDialogAccessibility(
       ? document.activeElement
       : null
     const background = [...document.querySelectorAll<HTMLElement>(
-      '.app-shell > .sidebar, .app-shell > main, .app-shell > .chat-fab',
+      '.app-shell > .sidebar, .app-shell > main, .app-shell > .chat-fab, .app-shell > .magnet-chat-fab',
     )]
     const previousOverflow = document.body.style.overflow
     background.forEach((element) => { element.inert = true })
@@ -3511,7 +3522,7 @@ function EventDetailModal({ event, close, save, remove, canRemind, onReminderSav
           <div className="event-detail-actions">
             {canDelete && <button type="button" className="delete-event" onClick={() => void deleteEvent()} disabled={busy}>{deleting ? 'Deleting…' : <><Trash2 size={14}/>Delete</>}</button>}
             <button type="button" onClick={() => { setForm(eventEditValues(event)); setEditing(false); setError(null) }} disabled={busy}>Cancel</button>
-            <button className="save-event" type="submit" disabled={busy}>{saving ? 'Saving…' : 'Save changes'}</button>
+            <MagnetCta><button className="save-event" type="submit" disabled={busy}>{saving ? 'Saving…' : 'Save changes'}</button></MagnetCta>
           </div>
         </form>
         : <>
@@ -3751,7 +3762,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
       {error && <div className="modal-error" role="alert">{error}</div>}
       <div className="modal-tip"><Sparkles size={16}/><span>Tip: the AI planner can still create several events at once from a schedule or screenshot.</span></div>
     </div>
-    <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></div>
+    <div className="modal-actions"><button type="button" onClick={close} disabled={saving}>Cancel</button><MagnetCta><button className="save-event" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Add event'}</button></MagnetCta></div>
   </form></div>
 }
 

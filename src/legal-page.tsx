@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { CalendarDays } from 'lucide-react'
 import type { LegalSection } from './legal'
 import { APP_PUBLIC_NAME } from './branding'
+import { GlareHover, ShinyText } from './react-bits'
 import { PRIVACY_SECTIONS, PRIVACY_UPDATED } from './privacy-content'
 import { TERMS_SECTIONS, TERMS_UPDATED } from './terms-content'
 
@@ -30,9 +31,9 @@ function LegalPage({
 
   return (
     <main className="privacy-page">
-      <article className="privacy-card">
+      <GlareHover as="article" className="privacy-card">
         <div className="brand-mark privacy-mark"><CalendarDays size={22} /></div>
-        <p className="eyebrow">{APP_PUBLIC_NAME}</p>
+        <ShinyText className="eyebrow" text={APP_PUBLIC_NAME} />
         <h1>{heading}</h1>
         <p className="privacy-updated">Last updated {updated}</p>
         {sections.map((section) => (
@@ -48,7 +49,7 @@ function LegalPage({
           <span> · </span>
           <a href={otherHref}>{otherLabel}</a>
         </p>
-      </article>
+      </GlareHover>
     </main>
   )
 }
