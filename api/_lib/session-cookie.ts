@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto'
 
 export const SESSION_COOKIE = 'familycal_session'
-export const SESSION_DURATION_SECONDS = 12 * 60 * 60
+export const SESSION_DURATION_SECONDS = 7 * 24 * 60 * 60
 
 export type AdminSessionPayload = {
   role?: 'admin'

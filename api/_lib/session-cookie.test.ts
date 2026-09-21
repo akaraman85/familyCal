@@ -4,9 +4,12 @@ import {
   parseSessionPayload,
   sessionPayloadFromCookieHeader,
   SESSION_COOKIE,
+  SESSION_DURATION_SECONDS,
   signature,
   trySessionSecret,
 } from './session-cookie.ts'
+
+assert.equal(SESSION_DURATION_SECONDS, 7 * 24 * 60 * 60)
 
 const previousSecret = process.env.AUTH_SESSION_SECRET
 const secret = Buffer.alloc(32, 7)

@@ -136,7 +136,7 @@ tradeoffs, rollback constraints, and alternatives considered.
 The app and every event/integration API require a server-validated session.
 For the requested temporary access, set `APP_USERNAME=alexK` and
 `APP_PASSWORD=cal`. The password is read only by the login function and is not
-included in the browser bundle. Sessions last 12 hours in an HMAC-signed,
+included in the browser bundle. Sessions last 7 days in an HMAC-signed,
 HTTP-only, SameSite cookie.
 
 Set `AUTH_SESSION_SECRET` to an independent `openssl rand -base64 32` value.

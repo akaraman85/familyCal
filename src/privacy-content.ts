@@ -2,7 +2,7 @@ import { LEGAL_CONTACT_EMAIL, type LegalSection, renderLegalHtml } from './legal
 import { APP_INTERNAL_NAME, APP_PUBLIC_NAME } from './branding'
 
 export const PRIVACY_CONTACT_EMAIL = LEGAL_CONTACT_EMAIL
-export const PRIVACY_UPDATED = 'September 12, 2026'
+export const PRIVACY_UPDATED = 'September 21, 2026'
 
 export type PrivacySection = LegalSection
 
@@ -16,7 +16,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
   {
     heading: 'Sign-in',
     paragraphs: [
-      'Calendars, family data, and Google connections require a household administrator login or a time-limited guest invite link. Those sessions are kept in an HTTP-only cookie for up to 12 hours, or until a guest invite expires or is revoked. This privacy policy is public and does not require that login.',
+      'Calendars, family data, and Google connections require a household administrator login or a time-limited guest invite link. Those sessions are kept in an HTTP-only cookie for up to 7 days, or until a guest invite expires or is revoked. This privacy policy is public and does not require that login.',
     ],
   },
   {
@@ -69,7 +69,7 @@ export const PRIVACY_SECTIONS: PrivacySection[] = [
       'All traffic between your browser and this app uses HTTPS (TLS) in transit.',
       'Google OAuth access and refresh tokens are encrypted at rest with AES-256-GCM before storage in Postgres. The browser never receives those provider credentials.',
       'Web Push subscription keys, when enabled, are also encrypted at rest with AES-256-GCM.',
-      'Household and guest sessions use an HTTP-only, signed cookie with a 12-hour lifetime. Guest access is also checked against the stored invite on each request so it can be revoked immediately. Calendar and integration APIs require a valid session.',
+      'Household and guest sessions use an HTTP-only, signed cookie with a 7-day lifetime. Guest access is also checked against the stored invite on each request so it can be revoked immediately. Calendar and integration APIs require a valid session.',
       'Google Calendar access is read-only. Disconnecting a Google account revokes the grant and deletes stored encrypted credentials and cached events for that account.',
     ],
   },
