@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Bell, Check, LoaderCircle, Share, X } from 'lucide-react'
+import { Bell, LoaderCircle, Share, X } from 'lucide-react'
 import { IosInstallGuide, isStandaloneApp } from './install-app'
 import {
   DEFAULT_NOTIFICATION_SETTINGS,
@@ -25,6 +25,7 @@ import {
   type NotifyMinutes,
   type ReminderFrequency,
 } from './notifications'
+import { BellToggle, SettingsSquishSwitch, StatusMark } from './react-bits'
 
 export function NotificationOptInHint({ onOpen }: { onOpen: () => void }) {
   const [visible, setVisible] = useState(false)
@@ -229,16 +230,21 @@ export function NotificationsSettings() {
                 : 'Allow notifications so reminders can appear even when Karaman is closed.'}
             </small>
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={subscribed}
-            className={`toggle ${subscribed ? 'on' : ''}`}
+          <BellToggle
+            pressed={subscribed}
             disabled={(!canEnable && !subscribed) || enabling}
-            onClick={() => void (subscribed ? disable() : enable())}
-          >
-            <i />
-          </button>
+            offLabel="Enable"
+            onLabel="On this device"
+            label="Event reminders on this device"
+            size="sm"
+            radius={18}
+            badge={false}
+            color="var(--ink)"
+            background="var(--inset)"
+            onColor="#fff"
+            onBackground="var(--orange)"
+            onChange={(next) => void (next ? enable() : disable())}
+          />
         </label>
         <div className="settings-actions">
           <button
@@ -250,10 +256,7 @@ export function NotificationsSettings() {
             {testing ? 'Sending…' : 'Send test notification'}
           </button>
           {tested && (
-            <span>
-              <Check size={14} />
-              Sent
-            </span>
+            <StatusMark status="done" label="Sent" doneColor="var(--green)" size={16} fontSize={12} />
           )}
         </div>
         {status && status.devices.length > 0 && (
@@ -272,21 +275,17 @@ export function NotificationsSettings() {
             <b>Remind before events</b>
             <small>Master switch for family and Google events. Individual events can still be silenced from the event details.</small>
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={settings.eventReminders}
-            className={`toggle ${settings.eventReminders ? 'on' : ''}`}
+          <SettingsSquishSwitch
+            checked={settings.eventReminders}
             disabled={loading || saving}
-            onClick={() => {
-              const next = { ...settings, eventReminders: !settings.eventReminders }
+            ariaLabel="Remind before events"
+            onChange={(checked) => {
+              const next = { ...settings, eventReminders: checked }
               setSettings(next)
               setSaved(false)
               void saveSettings(next)
             }}
-          >
-            <i />
-          </button>
+          />
         </label>
         <label>
           <span>
@@ -336,10 +335,7 @@ export function NotificationsSettings() {
         </label>
         {saved && (
           <div className="settings-actions">
-            <span>
-              <Check size={14} />
-              Saved
-            </span>
+            <StatusMark status="done" label="Saved" doneColor="var(--green)" size={16} fontSize={12} />
           </div>
         )}
       </div>
