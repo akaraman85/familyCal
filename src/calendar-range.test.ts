@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { eventOverlapsRange, eventTimeRange } from '../api/_lib/event-range.ts'
+import { expandRecurringEvent } from '../api/_lib/recurrence.ts'
 import {
   eventOccursOnDay,
   mergeCalendarEvents,
@@ -59,6 +60,37 @@ const savedSpan = {
 assert.equal(eventOccursOnDay(savedSpan, new Date(2026, 8, 7)), true)
 assert.equal(eventOccursOnDay(savedSpan, new Date(2026, 8, 9)), true)
 assert.equal(eventOccursOnDay(savedSpan, new Date(2026, 8, 10)), false)
+
+const endedLockUp = {
+  date: new Date(2026, 8, 20, 22, 0),
+  endDate: new Date(2026, 8, 20, 22, 30),
+  allDay: false,
+  source: 'saved' as const,
+}
+assert.equal(eventOccursOnDay(endedLockUp, new Date(2026, 8, 20)), true)
+assert.equal(eventOccursOnDay(endedLockUp, new Date(2026, 8, 22)), false)
+
+const lockUpSeries = expandRecurringEvent(
+  {
+    id: 'saved:lock-up',
+    startAt: '2026-09-15T05:00:00.000Z',
+    endAt: '2026-09-21T05:30:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-21', weekdays: [1, 2, 3, 4, 5, 6, 7] },
+  new Date('2026-09-14T00:00:00.000Z'),
+  new Date('2026-09-28T00:00:00.000Z'),
+)
+const tuesday = new Date(2026, 8, 22, 12)
+assert.equal(
+  lockUpSeries.filter((event) => eventOccursOnDay({
+    date: new Date(event.startAt),
+    endDate: event.endAt ? new Date(event.endAt) : undefined,
+    allDay: false,
+    source: 'saved',
+  }, tuesday)).length,
+  0,
+)
 
 assert.deepEqual(parseCalendarDate('2026-09-09'), new Date(2026, 8, 9))
 assert.deepEqual(parseCalendarDate('2026-09-09T00:00:00.000Z'), new Date(2026, 8, 9))

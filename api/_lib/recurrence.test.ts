@@ -114,6 +114,55 @@ assert.deepEqual(multiDay.map((event) => ({ startAt: event.startAt, endAt: event
   { startAt: '2026-09-28', endAt: '2026-09-30' },
 ])
 
+const lockUp = expandRecurringEvent(
+  {
+    id: 'saved:lock-up',
+    startAt: '2026-09-15T05:00:00.000Z',
+    endAt: '2026-09-21T05:30:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-21', weekdays: [1, 2, 3, 4, 5, 6, 7] },
+  new Date('2026-09-14T00:00:00.000Z'),
+  new Date('2026-09-28T00:00:00.000Z'),
+)
+assert.deepEqual(lockUp.map((event) => ({ startAt: event.startAt, endAt: event.endAt })), [
+  { startAt: '2026-09-15T05:00:00.000Z', endAt: '2026-09-15T05:30:00.000Z' },
+  { startAt: '2026-09-16T05:00:00.000Z', endAt: '2026-09-16T05:30:00.000Z' },
+  { startAt: '2026-09-17T05:00:00.000Z', endAt: '2026-09-17T05:30:00.000Z' },
+  { startAt: '2026-09-18T05:00:00.000Z', endAt: '2026-09-18T05:30:00.000Z' },
+  { startAt: '2026-09-19T05:00:00.000Z', endAt: '2026-09-19T05:30:00.000Z' },
+  { startAt: '2026-09-20T05:00:00.000Z', endAt: '2026-09-20T05:30:00.000Z' },
+  { startAt: '2026-09-21T05:00:00.000Z', endAt: '2026-09-21T05:30:00.000Z' },
+])
+const afterSeries = expandRecurringEvent(
+  {
+    id: 'saved:lock-up',
+    startAt: '2026-09-15T05:00:00.000Z',
+    endAt: '2026-09-21T05:30:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-21', weekdays: [1, 2, 3, 4, 5, 6, 7] },
+  new Date('2026-09-22T00:00:00.000Z'),
+  new Date('2026-09-23T00:00:00.000Z'),
+)
+assert.deepEqual(afterSeries, [])
+
+const overnight = expandRecurringEvent(
+  {
+    id: 'saved:night',
+    startAt: '2026-09-14T22:00:00.000Z',
+    endAt: '2026-09-21T02:00:00.000Z',
+    allDay: false,
+  },
+  { frequency: 'weekly', until: '2026-09-21' },
+  new Date('2026-09-14T00:00:00.000Z'),
+  new Date('2026-09-22T00:00:00.000Z'),
+)
+assert.deepEqual(overnight.map((event) => ({ startAt: event.startAt, endAt: event.endAt })), [
+  { startAt: '2026-09-14T22:00:00.000Z', endAt: '2026-09-15T02:00:00.000Z' },
+  { startAt: '2026-09-21T22:00:00.000Z', endAt: '2026-09-22T02:00:00.000Z' },
+])
+
 const january = new Date('2026-01-31T15:00:00.000Z')
 assert.equal(shiftOccurrenceStart(january, 'monthly', 1).toISOString(), '2026-02-28T15:00:00.000Z')
 assert.equal(shiftOccurrenceStart(january, 'monthly', 2).toISOString(), '2026-03-31T15:00:00.000Z')

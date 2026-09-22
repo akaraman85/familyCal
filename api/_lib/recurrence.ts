@@ -129,6 +129,27 @@ function onOrBeforeUntil(startAt: string, until: string | null) {
   return startAt.slice(0, 10) <= until
 }
 
+function utcClockMs(date: Date) {
+  return (
+    date.getUTCHours() * 3_600_000
+    + date.getUTCMinutes() * 60_000
+    + date.getUTCSeconds() * 1000
+    + date.getUTCMilliseconds()
+  )
+}
+
+function occurrenceEndOffsetMs(seriesStart: Date, originalEnd: number | null, allDay: boolean) {
+  if (originalEnd === null) return null
+  const raw = originalEnd - seriesStart.getTime()
+  if (raw < 0 || Number.isNaN(raw)) return null
+  if (allDay || raw < DAY_MS) return raw
+  // A timed series whose first end is a later date almost always stored the
+  // repeat-until date as the event end. Repeat the clock-time length instead
+  // so each occurrence is 10:00–10:30, not a multi-day block.
+  const clock = utcClockMs(new Date(originalEnd)) - utcClockMs(seriesStart)
+  return clock > 0 ? clock : clock + DAY_MS
+}
+
 type ExpandableEvent = {
   id: string
   startAt: string
@@ -152,14 +173,16 @@ export function expandRecurringEvent<T extends ExpandableEvent>(
 
   const range = eventTimeRange(event)
   if (Number.isNaN(range.start)) return []
-  const durationMs = Math.max(0, range.end - range.start)
   const seriesStart = new Date(range.start)
   const originalEnd = event.endAt
     ? (event.allDay ? Date.parse(`${event.endAt.slice(0, 10)}T00:00:00.000Z`) : Date.parse(event.endAt))
     : null
-  const endOffsetMs = originalEnd !== null && !Number.isNaN(originalEnd)
-    ? originalEnd - seriesStart.getTime()
-    : null
+  const endOffsetMs = occurrenceEndOffsetMs(
+    seriesStart,
+    originalEnd !== null && !Number.isNaN(originalEnd) ? originalEnd : null,
+    event.allDay,
+  )
+  const durationMs = Math.max(0, endOffsetMs ?? (range.end - range.start))
   const weekdays = rule.frequency === 'weekly'
     ? new Set(rule.weekdays?.length ? rule.weekdays : [isoWeekdayUtc(seriesStart)])
     : null

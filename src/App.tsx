@@ -3170,12 +3170,16 @@ function eventWriteFromForm(form: ReturnType<typeof eventEditValues>): NewEventI
     }
   }
   const startAt = new Date(`${form.date}T${form.time || '09:00'}:00`)
-  if (form.endDate && form.endDate < form.date) {
+  const timedEndDate = recurrence ? '' : form.endDate
+  if (timedEndDate && timedEndDate < form.date) {
     throw new Error('End date must be on or after the start date')
   }
-  const endAt = form.endTime
-    ? new Date(`${form.endDate || form.date}T${form.endTime}:00`)
+  let endAt = form.endTime
+    ? new Date(`${timedEndDate || form.date}T${form.endTime}:00`)
     : null
+  if (recurrence && endAt && endAt <= startAt) {
+    endAt = new Date(endAt.getTime() + 24 * 60 * 60 * 1000)
+  }
   if (Number.isNaN(startAt.getTime())) throw new Error('Event dates are invalid')
   if (endAt && (Number.isNaN(endAt.getTime()) || endAt <= startAt)) {
     throw new Error('End time must be after the start time')
@@ -3214,6 +3218,7 @@ function RecurrenceFields({
       recurrenceWeekdays: recurrence === 'weekly'
         ? (form.recurrenceWeekdays.length ? form.recurrenceWeekdays : [weekdayFromDateInput(form.date)])
         : [],
+      endDate: recurrence && !form.allDay ? '' : form.endDate,
     })
   }
   const weekdayPicks = form.recurrence === 'weekly' && (
@@ -3407,10 +3412,12 @@ function EventEditFields({
             )}
           {!form.allDay && (
             <>
-              <label className="field">
-                <span>End date <small>optional</small></span>
-                <input type="date" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} />
-              </label>
+              {form.recurrence === '' && (
+                <label className="field">
+                  <span>End date <small>optional</small></span>
+                  <input type="date" min={form.date} value={form.endDate} onChange={(change) => setForm({ ...form, endDate: change.target.value })} />
+                </label>
+              )}
               <label className="field">
                 <span>End time <small>optional</small></span>
                 <input type="time" value={form.endTime} onChange={(change) => setForm({ ...form, endTime: change.target.value })} />
@@ -3711,7 +3718,7 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
                     <ChevronDown size={16} />
                     <input type="date" className="sheet-date-input" value={form.date} onChange={(change) => setForm({ ...form, date: change.target.value })} aria-label="Event date" />
                   </label>
-                  {!form.allDay && (
+                  {!form.allDay && form.recurrence === '' && (
                     <label className="sheet-value-row sheet-date-label">
                       <span>End date</span>
                       <ChevronDown size={16} />
