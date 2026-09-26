@@ -77,6 +77,14 @@
       "destination": "/index.html"
     },
     {
+      "source": "/todos",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/todos/",
+      "destination": "/index.html"
+    },
+    {
       "source": "/integrations",
       "destination": "/index.html"
     },

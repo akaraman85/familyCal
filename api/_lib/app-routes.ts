@@ -27,6 +27,7 @@ export function isLegalDocumentPath(pathname: string) {
 export const APP_PAGE_PATHS = {
   Calendar: '/calendar',
   Agenda: '/agenda',
+  Todos: '/todos',
   Integrations: '/integrations',
   Family: '/family',
   Settings: '/settings',
@@ -51,7 +52,7 @@ export function isAppPath(pathname: string) {
 }
 
 export function isAdminOnlyAppPage(page: AppPage) {
-  return page === 'Integrations' || page === 'Family' || page === 'Settings'
+  return page === 'Todos' || page === 'Integrations' || page === 'Family' || page === 'Settings'
 }
 
 export function defaultAuthenticatedPath() {

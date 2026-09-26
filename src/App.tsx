@@ -8,7 +8,7 @@ import DOMPurify from 'dompurify'
 import {
   AlertTriangle, Bell, CalendarClock, CalendarDays, Check, ChevronDown, ChevronLeft, ChevronRight,
   CircleHelp, Clock3, Columns2, ExternalLink, Globe, GripVertical, ImagePlus, LayoutGrid,
-  Link2, ListFilter, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
+  Link2, ListFilter, ListTodo, LoaderCircle, LockKeyhole, LogOut, MapPin, Menu, MessageCircleMore,
   Monitor, Moon, Pencil, Plus, Repeat, Settings, Sparkles, Sun, Trash2, Users, Video, WandSparkles, X,
 } from 'lucide-react'
 import {
@@ -155,6 +155,8 @@ import {
   persistSidebarCollapsed,
   readSidebarCollapsed,
 } from './sidebar'
+import { updateTodo, type HouseholdTodo, type TodoCalendarEvent } from './todos'
+import { TodosPage } from './todos-page'
 
 type View = CalendarView
 type Page = AppPage
@@ -854,6 +856,10 @@ function pageFromLocation(isGuest: boolean): Page {
   return 'Calendar'
 }
 
+function navLabel(page: Page) {
+  return page === 'Todos' ? 'To-dos' : page
+}
+
 function AuthenticatedApp({ user, onLogout }: {
   user: SessionUser
   onLogout: () => Promise<void>
@@ -888,6 +894,7 @@ function AuthenticatedApp({ user, onLogout }: {
   const revalidateGoogleRef = useRef(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [eventDraft, setEventDraft] = useState<EventDraft | null>(null)
+  const [pendingTodoLink, setPendingTodoLink] = useState<string | null>(null)
   const [selectedEvent, setSelectedEvent] = useState<EventItem | null>(null)
   const [chatOpen, setChatOpen] = useState(false)
   const [mobileNav, setMobileNav] = useState(false)
@@ -1063,7 +1070,16 @@ function AuthenticatedApp({ user, onLogout }: {
   }, [events])
 
   const saveEvent = async (event: NewEventInput) => {
-    await saveCalendarEvent(event)
+    const result = await saveCalendarEvent(event)
+    if (pendingTodoLink) {
+      try {
+        await updateTodo(pendingTodoLink, { calendarEventId: result.event.id })
+      } catch (linkError) {
+        await deleteCalendarEvent(result.event.id).catch(() => undefined)
+        throw linkError
+      }
+      setPendingTodoLink(null)
+    }
     setModalOpen(false)
     setEventDraft(null)
     refreshEvents()
@@ -1071,6 +1087,7 @@ function AuthenticatedApp({ user, onLogout }: {
 
   const openCreate = (draft?: EventDraft) => {
     if (isGuest) return
+    setPendingTodoLink(null)
     setSelectedEvent(null)
     const next = draft ?? draftForDate(selectedDate)
     setEventDraft(next)
@@ -1079,9 +1096,42 @@ function AuthenticatedApp({ user, onLogout }: {
     setModalOpen(true)
   }
 
+  const addTodoToCalendar = (todo: HouseholdTodo, calendar: string) => {
+    if (isGuest) return
+    const date = todo.dueOn ? parseCalendarDate(todo.dueOn) : new Date()
+    openCreate({
+      ...draftForDate(date, true),
+      title: todo.title,
+      calendar,
+    })
+    setPendingTodoLink(todo.id)
+  }
+
+  const openTodoEvent = (event: TodoCalendarEvent) => {
+    const live = events.find((item) => savedEventSeriesId(item.id) === savedEventSeriesId(event.id))
+    if (live) {
+      setSelectedEvent(live)
+      return
+    }
+    setSelectedEvent(toEventItem({
+      id: event.id,
+      title: event.title,
+      startAt: event.startAt,
+      endAt: event.endAt,
+      allDay: event.allDay,
+      calendar: event.calendar,
+      location: null,
+      description: null,
+      externalUrl: null,
+      organizer: null,
+      source: 'saved',
+    }, familyMembers))
+  }
+
   const closeCreate = () => {
     setModalOpen(false)
     setEventDraft(null)
+    setPendingTodoLink(null)
   }
 
   const updateEvent = async (id: string, event: NewEventInput) => {
@@ -1193,9 +1243,10 @@ function AuthenticatedApp({ user, onLogout }: {
       { icon: CalendarDays, label: 'Calendar' },
       { icon: CalendarClock, label: 'Agenda' },
     ]
-    : [
+  : [
       { icon: CalendarDays, label: 'Calendar' },
       { icon: CalendarClock, label: 'Agenda' },
+      { icon: ListTodo, label: 'Todos' },
       { icon: Link2, label: 'Integrations' },
       { icon: Users, label: 'Family' },
     ]
@@ -1230,7 +1281,7 @@ function AuthenticatedApp({ user, onLogout }: {
               className={page === label ? 'active' : ''}
               title={label === 'Integrations' && integrationsAttention
                 ? 'Integrations (needs attention)'
-                : label}
+                : navLabel(label)}
               onClick={(event) => {
                 if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
                 event.preventDefault()
@@ -1238,10 +1289,10 @@ function AuthenticatedApp({ user, onLogout }: {
               }}
               aria-label={label === 'Integrations' && integrationsAttention
                 ? 'Integrations (needs attention)'
-                : label}
+                : navLabel(label)}
             >
               <Icon size={18} />
-              <span className="nav-text">{label}</span>
+              <span className="nav-text">{navLabel(label)}</span>
               {label === 'Integrations' && integrationsAttention ? (
                 <span className="nav-warning" title="An integration needs attention">
                   <AlertTriangle size={14} aria-hidden="true" />
@@ -1330,6 +1381,15 @@ function AuthenticatedApp({ user, onLogout }: {
               goToPage('Calendar')
             }}
             readOnly={isGuest}
+          />
+        )}
+        {!isGuest && page === 'Todos' && (
+          <TodosPage
+            members={familyMembers}
+            calendarEpoch={eventRefresh}
+            onAddToCalendar={addTodoToCalendar}
+            onOpenEvent={openTodoEvent}
+            onCalendarChanged={() => refreshEvents()}
           />
         )}
         {!isGuest && page === 'Integrations' && (
@@ -3632,8 +3692,8 @@ function EventModal({ draft, close, save }: { draft: EventDraft; close: () => vo
   const isMobile = useIsMobile()
   const calendars = useFamilyCalendars()
   const [form, setForm] = useState<EventFormValues>({
-    title: '',
-    calendar: HOUSEHOLD_CALENDAR,
+    title: draft.title ?? '',
+    calendar: draft.calendar ?? HOUSEHOLD_CALENDAR,
     date: draft.date,
     time: draft.time,
     endTime: draft.endTime || defaultEndTimeAfter(draft.time),
