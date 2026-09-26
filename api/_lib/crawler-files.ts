@@ -29,6 +29,7 @@ export function renderRobots(appUrl: string) {
     'Disallow: /login',
     'Disallow: /calendar',
     'Disallow: /agenda',
+    'Disallow: /todos',
     'Disallow: /integrations',
     'Disallow: /family',
     'Disallow: /settings',
