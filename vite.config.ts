@@ -33,7 +33,7 @@ function applyAuthRedirect(
 ) {
   const host = request.headers.host || 'localhost'
   const url = new URL(request.url ?? '/', `http://${host}`)
-  if (isViteInternalPath(url.pathname)) return false
+  if (isViteInternalPath(url.pathname) || url.pathname.startsWith('/api/')) return false
   const secret = trySessionSecret()
   const payload = secret ? sessionPayloadFromCookieHeader(request.headers.cookie, secret) : null
   const decision = navigationDecision(url.pathname, {

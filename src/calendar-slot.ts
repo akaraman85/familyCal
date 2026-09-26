@@ -29,6 +29,8 @@ export type EventDraft = {
   endTime: string
   endDate: string
   allDay: boolean
+  title?: string
+  calendar?: string
 }
 
 export type GridEvent = {

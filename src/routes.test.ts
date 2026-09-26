@@ -45,11 +45,15 @@ assert.equal(looksLikeStaticAsset('/sw.js'), true)
 assert.equal(looksLikeStaticAsset('/unknown'), false)
 assert.equal(appPageFromPath('/calendar/'), 'Calendar')
 assert.equal(appPageFromPath('/agenda'), 'Agenda')
+assert.equal(appPageFromPath('/todos'), 'Todos')
 assert.equal(appPageFromPath('/integrations'), 'Integrations')
 assert.equal(appPagePath('Family'), '/family')
+assert.equal(appPagePath('Todos'), '/todos')
 assert.equal(isAppPath('/settings'), true)
+assert.equal(isAppPath('/todos'), true)
 assert.equal(isAppPath('/'), false)
 assert.equal(isAdminOnlyAppPage('Settings'), true)
+assert.equal(isAdminOnlyAppPage('Todos'), true)
 assert.equal(isAdminOnlyAppPage('Calendar'), false)
 assert.equal(authenticatedLocation('?integration=google-calendar&status=connected'), '/integrations?integration=google-calendar&status=connected')
 assert.equal(authenticatedLocation('?integration=google-calendar', true), '/calendar')
@@ -63,10 +67,16 @@ assert.deepEqual(
 )
 assert.equal(navigationDecision('/calendar', { hasSession: true }), 'continue')
 assert.deepEqual(navigationDecision('/calendar'), { redirect: '/login' })
+assert.deepEqual(navigationDecision('/todos'), { redirect: '/login' })
 assert.deepEqual(
   navigationDecision('/integrations', { hasSession: true, isGuest: true }),
   { redirect: '/calendar' },
 )
+assert.deepEqual(
+  navigationDecision('/todos', { hasSession: true, isGuest: true }),
+  { redirect: '/calendar' },
+)
+assert.equal(navigationDecision('/todos', { hasSession: true }), 'continue')
 assert.equal(navigationDecision('/guest/token123'), 'continue')
 assert.equal(navigationDecision('/privacy'), 'continue')
 assert.equal(navigationDecision('/terms.html'), 'continue')
