@@ -79,7 +79,7 @@ const repeatingDue = dueReminders([timed], new Date('2026-09-12T15:46:00.000Z'),
 })
 assert.deepEqual(
   repeatingDue.map((item) => item.fireAt.toISOString()),
-  ['2026-09-12T15:30:00.000Z', '2026-09-12T15:45:00.000Z'],
+  ['2026-09-12T15:45:00.000Z'],
 )
 assert.ok(repeatingDue.every((item) => item.fireKey !== 'once'))
 
@@ -90,7 +90,15 @@ const skippedOff = dueReminders([timed], now, {
 })
 assert.equal(skippedOff.length, 0)
 
-const started = dueReminders([timed], new Date('2026-09-12T16:10:00.000Z'), {
+const startedRecently = dueReminders([timed], new Date('2026-09-12T16:50:00.000Z'), {
+  timezone,
+  lookbackMs: 2 * 60 * 60 * 1000,
+  scheduleFor: () => ({ notifyMinutes: 0, frequency: 'once' }),
+})
+assert.equal(startedRecently.length, 1)
+assert.equal(startedRecently[0]?.fireAt.toISOString(), '2026-09-12T16:00:00.000Z')
+
+const started = dueReminders([timed], new Date('2026-09-12T17:15:00.000Z'), {
   timezone,
   lookbackMs: 2 * 60 * 60 * 1000,
   scheduleFor: () => ({ notifyMinutes: 0, frequency: 'once' }),

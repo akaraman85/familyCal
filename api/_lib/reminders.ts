@@ -2,6 +2,7 @@ import type { CalendarEvent } from './events.js'
 import {
   ALL_DAY_REMINDER_HOUR,
   FREQUENCY_INTERVAL_MINUTES,
+  REMINDER_STARTED_GRACE_MS,
   type NotifyMinutes,
   type ReminderFrequency,
 } from './reminder-options.js'
@@ -116,20 +117,25 @@ export function dueReminders(
     if (!schedule) continue
     if (!event.allDay) {
       const start = new Date(event.startAt)
-      if (!Number.isNaN(start.getTime()) && start.getTime() < now.getTime() - 5 * 60_000) {
+      if (
+        !Number.isNaN(start.getTime())
+        && start.getTime() < now.getTime() - REMINDER_STARTED_GRACE_MS
+      ) {
         continue
       }
     }
     const eventStartAt = reminderOccurrenceKey(event)
     const repeating = FREQUENCY_INTERVAL_MINUTES[schedule.frequency] != null
-    for (const fireAt of dueFireTimes(event, options.timezone, schedule, now, options.lookbackMs)) {
-      due.push({
-        event,
-        fireAt,
-        eventStartAt,
-        fireKey: repeating ? fireAt.toISOString() : 'once',
-      })
-    }
+    const fires = dueFireTimes(event, options.timezone, schedule, now, options.lookbackMs)
+    // Hourly dispatch would otherwise burst every missed 15/30-minute slot.
+    const fireAt = fires.at(-1)
+    if (!fireAt) continue
+    due.push({
+      event,
+      fireAt,
+      eventStartAt,
+      fireKey: repeating ? fireAt.toISOString() : 'once',
+    })
   }
   return due.sort((left, right) => left.fireAt.getTime() - right.fireAt.getTime())
 }
