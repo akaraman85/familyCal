@@ -1,4 +1,41 @@
+import type { AppPage } from './routes'
+
 export const SIDEBAR_COLLAPSED_STORAGE_KEY = 'karaman-sidebar-collapsed'
+
+export type SidebarNavSectionId = 'views' | 'workspace' | 'tools'
+export type SidebarNavPage = Exclude<AppPage, 'Settings'>
+
+export type SidebarNavSection = {
+  id: SidebarNavSectionId
+  label: string | null
+  pages: SidebarNavPage[]
+  includeAiPlanner?: boolean
+}
+
+export function sidebarNavSections(isGuest: boolean): SidebarNavSection[] {
+  const views: SidebarNavSection = {
+    id: 'views',
+    label: null,
+    pages: ['Calendar', 'Agenda'],
+  }
+
+  if (isGuest) return [views]
+
+  return [
+    views,
+    {
+      id: 'workspace',
+      label: 'Workspace',
+      pages: ['Integrations', 'Family'],
+    },
+    {
+      id: 'tools',
+      label: 'Tools',
+      pages: ['Todos'],
+      includeAiPlanner: true,
+    },
+  ]
+}
 
 export function readSidebarCollapsed(
   storage?: Pick<Storage, 'getItem'>,
