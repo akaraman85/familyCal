@@ -22,6 +22,11 @@ export const DEFAULT_NOTIFY_MINUTES: NotifyMinutes = 30
 export const DEFAULT_REMINDER_FREQUENCY: ReminderFrequency = 'once'
 export const ALL_DAY_REMINDER_HOUR = 8
 export const MAX_EVENT_REMINDER_ID_LENGTH = 400
+/** Matches vercel.json crons[0].schedule so Postgres can scale to zero between runs. */
+export const REMINDER_DISPATCH_SCHEDULE = '0 * * * *'
+export const REMINDER_DISPATCH_INTERVAL_MS = 60 * 60 * 1000
+/** Keep timed events eligible for one hourly tick plus Vercel cron jitter. */
+export const REMINDER_STARTED_GRACE_MS = REMINDER_DISPATCH_INTERVAL_MS + 10 * 60 * 1000
 
 export function isNotifyMinutes(value: unknown): value is NotifyMinutes {
   return typeof value === 'number' && (NOTIFY_MINUTES as readonly number[]).includes(value)
@@ -65,9 +70,10 @@ export function reminderFrequencyLabel(frequency: ReminderFrequency) {
 }
 
 export function reminderFrequencyHint(allDay = false) {
+  const cadence = 'The server checks once an hour, so shorter repeats still send at most hourly.'
   return allDay
-    ? 'Repeating reminders continue through the last morning of the event.'
-    : 'Repeating reminders continue until the event starts.'
+    ? `Repeating reminders continue through the last morning of the event. ${cadence}`
+    : `Repeating reminders continue until the event starts. ${cadence}`
 }
 
 export type ReminderDefaults = {

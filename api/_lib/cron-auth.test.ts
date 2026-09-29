@@ -69,7 +69,7 @@ test('rejects missing or mismatched bearer tokens', () => {
     isAuthorizedCronRequest(nodeRequest({
       authorization: 'Bearer other-secret',
       'user-agent': 'vercel-cron/1.0',
-      'x-vercel-cron-schedule': '*/5 * * * *',
+      'x-vercel-cron-schedule': '0 * * * *',
     })),
     false,
   )
@@ -80,21 +80,21 @@ test('authorizes Vercel Cron platform headers when the bearer is absent', () => 
   assert.equal(
     isVercelCronRequest(nodeRequest({
       'user-agent': 'vercel-cron/1.0',
-      'x-vercel-cron-schedule': '*/5 * * * *',
+      'x-vercel-cron-schedule': '0 * * * *',
     })),
     true,
   )
   assert.equal(
     isAuthorizedCronRequest(nodeRequest({
       'user-agent': 'vercel-cron/1.0',
-      'x-vercel-cron-schedule': '*/5 * * * *',
+      'x-vercel-cron-schedule': '0 * * * *',
     })),
     true,
   )
   assert.equal(
     isAuthorizedCronRequest(nodeRequest({
       'user-agent': 'Mozilla/5.0',
-      'x-vercel-cron-schedule': '*/5 * * * *',
+      'x-vercel-cron-schedule': '0 * * * *',
     })),
     false,
   )
@@ -106,7 +106,7 @@ test('authorizes Vercel Cron when CRON_SECRET is not configured', () => {
   assert.equal(
     isAuthorizedCronRequest(nodeRequest({
       'user-agent': 'vercel-cron/1.0',
-      'x-vercel-cron-schedule': '*/5 * * * *',
+      'x-vercel-cron-schedule': '0 * * * *',
     })),
     true,
   )
