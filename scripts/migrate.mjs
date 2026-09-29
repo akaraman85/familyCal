@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { readdir, readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { Pool } from '@neondatabase/serverless'
+import { neon } from '@neondatabase/serverless'
+import { sqlStatements } from './sql-statements.mjs'
 
 const databaseUrl = process.env.DATABASE_URL
 if (!databaseUrl) {
@@ -14,22 +14,14 @@ if (databaseUrl === '[SENSITIVE]') {
 }
 
 const migrationsUrl = new URL('../db/migrations/', import.meta.url)
-const migrationDirectory = fileURLToPath(migrationsUrl)
-const migrationFiles = (await readdir(migrationDirectory))
+const migrationFiles = (await readdir(migrationsUrl))
   .filter((file) => file.endsWith('.sql'))
   .sort()
-const pool = new Pool({ connectionString: databaseUrl, max: 1 })
-const client = await pool.connect()
+
+const sql = neon(databaseUrl, { fullResults: true })
 
 try {
-  await client.query('BEGIN')
-  await client.query(
-    `SELECT pg_advisory_xact_lock(
-       hashtext(current_database()),
-       hashtext('karaman-calendar-migrations')
-     )`,
-  )
-  await client.query(
+  await sql.query(
     `CREATE TABLE IF NOT EXISTS schema_migrations (
        filename TEXT PRIMARY KEY,
        checksum TEXT NOT NULL,
@@ -37,13 +29,14 @@ try {
      )`,
   )
 
-  const appliedResult = await client.query(
+  const appliedResult = await sql.query(
     'SELECT filename, checksum FROM schema_migrations',
   )
   const applied = new Map(
     appliedResult.rows.map((row) => [row.filename, row.checksum]),
   )
 
+  const pending = []
   for (const file of migrationFiles) {
     const migration = await readFile(new URL(file, migrationsUrl), 'utf8')
     const checksum = createHash('sha256').update(migration).digest('hex')
@@ -57,20 +50,32 @@ try {
       console.log(`Already applied ${file}`)
       continue
     }
-
-    await client.query(migration)
-    await client.query(
-      'INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)',
-      [file, checksum],
-    )
-    console.log(`Applied ${file}`)
+    pending.push({ file, migration, checksum })
   }
 
-  await client.query('COMMIT')
+  if (pending.length > 0) {
+    await sql.transaction((txn) => [
+      txn.query(
+        `SELECT pg_advisory_xact_lock(
+           hashtext(current_database()),
+           hashtext('karaman-calendar-migrations')
+         )`,
+      ),
+      ...pending.flatMap(({ file, migration, checksum }) => [
+        ...sqlStatements(migration).map((statement) => txn.query(statement)),
+        txn.query(
+          'INSERT INTO schema_migrations (filename, checksum) VALUES ($1, $2)',
+          [file, checksum],
+        ),
+      ]),
+    ])
+
+    for (const { file } of pending) console.log(`Applied ${file}`)
+  }
 } catch (error) {
-  await client.query('ROLLBACK').catch(() => undefined)
-  throw error
-} finally {
-  client.release()
-  await pool.end()
+  const detail = error instanceof Error ? error.message : String(error)
+  throw new Error(
+    `Database migration failed over Neon HTTP. ${detail}`,
+    { cause: error },
+  )
 }
