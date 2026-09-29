@@ -3,6 +3,7 @@ import {
   persistSidebarCollapsed,
   readSidebarCollapsed,
   SIDEBAR_COLLAPSED_STORAGE_KEY,
+  sidebarNavSections,
 } from './sidebar.ts'
 
 const memory = new Map<string, string>()
@@ -33,5 +34,14 @@ assert.equal(readSidebarCollapsed({
     throw new Error('blocked')
   },
 }), false)
+
+assert.deepEqual(sidebarNavSections(true), [
+  { id: 'views', label: null, pages: ['Calendar', 'Agenda'] },
+])
+assert.deepEqual(sidebarNavSections(false), [
+  { id: 'views', label: null, pages: ['Calendar', 'Agenda'] },
+  { id: 'workspace', label: 'Workspace', pages: ['Integrations', 'Family'] },
+  { id: 'tools', label: 'Tools', pages: ['Todos'], includeAiPlanner: true },
+])
 
 console.log('sidebar tests passed')

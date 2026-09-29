@@ -1,7 +1,8 @@
 import {
-  useEffect, useMemo, useRef, useState,
+  Fragment, useEffect, useMemo, useRef, useState,
   type CSSProperties, type Dispatch, type DragEvent as ReactDragEvent, type FormEvent,
-  type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent,
+  type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type RefObject, type SetStateAction,
 } from 'react'
 import DOMPurify from 'dompurify'
@@ -154,6 +155,7 @@ import {
 import {
   persistSidebarCollapsed,
   readSidebarCollapsed,
+  sidebarNavSections,
 } from './sidebar'
 import { updateTodo, type HouseholdTodo, type TodoCalendarEvent } from './todos'
 import { TodosPage } from './todos-page'
@@ -860,6 +862,18 @@ function navLabel(page: Page) {
   return page === 'Todos' ? 'To-dos' : page
 }
 
+const SIDEBAR_NAV_ICONS: Record<Exclude<Page, 'Settings'>, typeof CalendarDays> = {
+  Calendar: CalendarDays,
+  Agenda: CalendarClock,
+  Todos: ListTodo,
+  Integrations: Link2,
+  Family: Users,
+}
+
+function isModifiedNavClick(event: ReactMouseEvent<HTMLAnchorElement>) {
+  return event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0
+}
+
 function AuthenticatedApp({ user, onLogout }: {
   user: SessionUser
   onLogout: () => Promise<void>
@@ -1238,18 +1252,6 @@ function AuthenticatedApp({ user, onLogout }: {
         ? `${format(startOfWeek(selectedDate, { weekStartsOn }), 'MMM d')} – ${format(endOfWeek(selectedDate, { weekStartsOn }), 'MMM d, yyyy')}`
         : format(selectedDate, 'MMMM yyyy')
 
-  const navItems: { icon: typeof CalendarDays; label: Page }[] = isGuest
-    ? [
-      { icon: CalendarDays, label: 'Calendar' },
-      { icon: CalendarClock, label: 'Agenda' },
-    ]
-  : [
-      { icon: CalendarDays, label: 'Calendar' },
-      { icon: CalendarClock, label: 'Agenda' },
-      { icon: ListTodo, label: 'Todos' },
-      { icon: Link2, label: 'Integrations' },
-      { icon: Users, label: 'Family' },
-    ]
   const profileName = isGuest ? user.name : user.username
 
   return (
@@ -1273,39 +1275,47 @@ function AuthenticatedApp({ user, onLogout }: {
         </div>
 
         <nav>
-          <div className="nav-label">Workspace</div>
-          {navItems.map(({ icon: Icon, label }) => (
-            <a
-              key={label}
-              href={appPagePath(label)}
-              className={page === label ? 'active' : ''}
-              title={label === 'Integrations' && integrationsAttention
-                ? 'Integrations (needs attention)'
-                : navLabel(label)}
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
-                event.preventDefault()
-                goToPage(label)
-              }}
-              aria-label={label === 'Integrations' && integrationsAttention
-                ? 'Integrations (needs attention)'
-                : navLabel(label)}
-            >
-              <Icon size={18} />
-              <span className="nav-text">{navLabel(label)}</span>
-              {label === 'Integrations' && integrationsAttention ? (
-                <span className="nav-warning" title="An integration needs attention">
-                  <AlertTriangle size={14} aria-hidden="true" />
-                </span>
+          {sidebarNavSections(isGuest).map((section) => (
+            <Fragment key={section.id}>
+              {section.label ? <div className="nav-label">{section.label}</div> : null}
+              {section.pages.map((label) => {
+                const Icon = SIDEBAR_NAV_ICONS[label]
+                const attention = label === 'Integrations' && integrationsAttention
+                const itemLabel = attention ? 'Integrations (needs attention)' : navLabel(label)
+                return (
+                  <a
+                    key={label}
+                    href={appPagePath(label)}
+                    className={page === label ? 'active' : ''}
+                    title={itemLabel}
+                    onClick={(event) => {
+                      if (isModifiedNavClick(event)) return
+                      event.preventDefault()
+                      goToPage(label)
+                    }}
+                    aria-label={itemLabel}
+                  >
+                    <Icon size={18} />
+                    <span className="nav-text">{navLabel(label)}</span>
+                    {attention ? (
+                      <span className="nav-warning" title="An integration needs attention">
+                        <AlertTriangle size={14} aria-hidden="true" />
+                      </span>
+                    ) : null}
+                  </a>
+                )
+              })}
+              {section.includeAiPlanner ? (
+                <button
+                  className={chatOpen ? 'active assistant-nav' : 'assistant-nav'}
+                  title="AI planner"
+                  onClick={() => { setChatOpen(true); setMobileNav(false) }}
+                >
+                  <WandSparkles size={18} /><span className="nav-text">AI planner</span>
+                </button>
               ) : null}
-            </a>
+            </Fragment>
           ))}
-          {!isGuest && <>
-            <div className="nav-label second">Tools</div>
-            <button className={chatOpen ? 'active assistant-nav' : 'assistant-nav'} title="AI planner" onClick={() => { setChatOpen(true); setMobileNav(false) }}>
-              <WandSparkles size={18} /><span className="nav-text">AI planner</span><span className="new-pill">New</span>
-            </button>
-          </>}
         </nav>
 
         <div className="sidebar-bottom">
@@ -1313,11 +1323,11 @@ function AuthenticatedApp({ user, onLogout }: {
             <a
               href={appPagePath('Settings')}
               title="Settings"
-              onClick={(event) => {
-                if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return
-                event.preventDefault()
-                goToPage('Settings')
-              }}
+                    onClick={(event) => {
+                      if (isModifiedNavClick(event)) return
+                      event.preventDefault()
+                      goToPage('Settings')
+                    }}
               className={page === 'Settings' ? 'active' : ''}
             >
               <Settings size={18} /><span className="nav-text">Settings</span>
